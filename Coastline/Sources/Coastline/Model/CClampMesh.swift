@@ -3,13 +3,13 @@ import Metal
 import simd
 import Viewport
 
-/// A 3" screw C-clamp (the two in the CR-1 Universal Clamp kit): cast-iron C frame, zinc screw
+/// A 3" screw C-clamp (the two in the Universal Clamp kit): cast-iron C frame, zinc screw
 /// with a swivel pad and a T-handle. It reaches over the table's back edge: the pad presses the
 /// stock's top, the fixed jaw sits under the table plate; `spineZ` is the frame's inside, just
 /// behind the table's back edge. Model coordinates (X up). Matches SideClamps.solids.
 enum CClampMesh {
     static func meshes(device: MTLDevice, id: String, clampPoint c: SIMD3<Double>, tableUnderX: Double, spineZ: Double) -> [SceneMesh] {
-        let iron = SIMD4<Float>(0.035, 0.035, 0.04, 1), zinc = SIMD4<Float>(0.62, 0.64, 0.66, 1)
+        let iron = SIMD4<Float>(0.035, 0.035, 0.04, 1), zinc = SceneColor.surface(0.64)
         let w = 4.5         // half thickness across (Y)
         let top = c.x + 30, armT = 8.0
         var out: [SceneMesh] = []

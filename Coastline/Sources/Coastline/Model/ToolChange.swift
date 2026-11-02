@@ -3,15 +3,15 @@ import Foundation
 import simd
 
 /// A tool change in playback, as it happens at the machine: where one program's tool differs
-/// from the last (the edge finder to the first cutter too), playback stops, the CR-1 goes to
-/// the tool-change position (Coast Runner's moves: spindle back, over, table down, spindle out),
+/// from the last (the edge finder to the first cutter too), playback stops, the machine goes to
+/// the tool-change position (the maker's moves: spindle back, over, table down, spindle out),
 /// and a panel asks you to change the tool. "Tool Changed" puts the new tool in and the machine
 /// goes back to the next cut.
-/// Where this job's tools are changed (machine Y and Z; X is Coast Runner's, the table down).
+/// Where this job's tools are changed (machine Y and Z; X is the maker's, the table down).
 struct ToolChangeSpot: Equatable {
     var y: Double
     var z: Double
-    /// Why it isn't Coast Runner's position, if it isn't.
+    /// Why it isn't the maker's position, if it isn't.
     var note: String?
 }
 
@@ -185,9 +185,9 @@ extension AppModel {
             .allSatisfy { headClear(at: q + $0, tool: tool, bed: bed) }
     }
 
-    /// Where to change tools in this job: the table down as Coast Runner does (X), and the
+    /// Where to change tools in this job: the table down as the machine does (X), and the
     /// spindle brought forward (−Z, out of the machine towards you) so the collet nut is in
-    /// reach: to Coast Runner's Z if it can, at the Y nearest theirs where it keeps
+    /// reach: to the maker's Z if it can, at the Y nearest theirs where it keeps
     /// `toolChangeRoom` clear in every clamping of the job with its longest tool. (Z −1 is
     /// fully back inside the machine: the moves pass through it to travel, never stop there.)
     /// One spot for the whole job (the guided job's tool_change_position too).
@@ -207,8 +207,8 @@ extension AppModel {
             layoutScene()
             switchingView = false
         }
-        // Candidate Ys, nearest Coast Runner's first, 4 mm apart, a little inside the travel.
-        // (Stepped from Coast Runner's Y, so a spot a hair from it is Coast Runner's.)
+        // Candidate Ys, nearest the maker's first, 4 mm apart, a little inside the travel.
+        // (Stepped from the maker's Y, so a spot a hair from it is the maker's.)
         var ys: [Double] = [tc.y]
         for k in 1...60 {
             for y in [tc.y + 4 * Double(k), tc.y - 4 * Double(k)] where y >= env.y.lowerBound + 4 && y <= env.y.upperBound - 4 { ys.append(y) }
@@ -247,10 +247,10 @@ extension AppModel {
         var spot = ToolChangeSpot(y: best?.y ?? tc.y, z: best?.z ?? tc.z)
         var notes: [String] = []
         if abs(spot.y - tc.y) >= 2 {
-            notes.append("It stops at Y\(Length.mm(spot.y)) instead of Coast Runner's Y\(Length.mm(tc.y)): there the spindle would be right beside the clamps or the stock, with no room for your hands and the wrenches.")
+            notes.append("It stops at Y\(Length.mm(spot.y)) instead of the maker's Y\(Length.mm(tc.y)): there the spindle would be right beside the clamps or the stock, with no room for your hands and the wrenches.")
         }
         if let b = best, b.z > tc.z + 1e-9 {
-            notes.append("The spindle comes forward to Z\(Length.mm(b.z)), \(Length.mm(b.z - tc.z)) mm less than Coast Runner's Z\(Length.mm(tc.z)): further forward it would \(b.room ? "come within \(Length.mm(Self.toolChangeRoom)) mm of" : "touch") what's on the table. The collet nut is still in front of the machine, in reach.")
+            notes.append("The spindle comes forward to Z\(Length.mm(b.z)), \(Length.mm(b.z - tc.z)) mm less than the maker's Z\(Length.mm(tc.z)): further forward it would \(b.room ? "come within \(Length.mm(Self.toolChangeRoom)) mm of" : "touch") what's on the table. The collet nut is still in front of the machine, in reach.")
         }
         if let b = best, !b.room {
             notes.append("There's less than \(Length.mm(Self.toolChangeRoom)) mm around the spindle here: mind your fingers and the wrenches on the clamps.")
@@ -264,7 +264,7 @@ extension AppModel {
     }
 
     /// The clamp kit to the left so the tools are changed on the right: with two clamps along a
-    /// long bar, the right-hand clamp sits right where Coast Runner's tool-change position is.
+    /// long bar, the right-hand clamp sits right where the maker's tool-change position is.
     /// The smallest shift left (5 mm steps) that leaves that position `toolChangeRoom` clear in
     /// every clamping in the kit, with the whole bar still inside the Y travel. Toolpaths are
     /// relative to the stock, so they don't change; only where the kit is bolted does. Found
@@ -311,10 +311,10 @@ extension AppModel {
         }
     }
 
-    /// From p to the job's tool-change spot, the way the CR-1 can go without touching the
+    /// From p to the job's tool-change spot, the way the machine can go without touching the
     /// clamps, parallels or stock: the spindle all the way back first, then over and the table
     /// down (in whichever order keeps clear), then the spindle out to the spot. `note`: why the
-    /// spot isn't Coast Runner's, and anything it couldn't keep to.
+    /// spot isn't the maker's, and anything it couldn't keep to.
     func toolChangePath(from p: SIMD3<Double>, tool: Tool?) -> (path: [SIMD3<Double>], note: String?) {
         let env = machine.machineEnvelope, tc = machine.toolChangePose
         let spot = toolChangeSpot()

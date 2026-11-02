@@ -12,7 +12,7 @@ extension AppModel {
         return steps.first
     }
 
-    /// The playhead is in edge finding with the Fisher edge finder: at the machine that's all by
+    /// The playhead is in edge finding with the edge finder: at the machine that's all by
     /// hand (jogging until the finder kicks, storing each edge), the animation only shows it.
     var manualEdgeFindingNow: Bool {
         guard showsMachiningResults, !timeline.entries.isEmpty else { return false }
@@ -102,19 +102,19 @@ extension AppModel {
             out.append(p.clampAngles.contains(where: { $0 != 0 })
                        ? "It reaches past the bed's back edge: turn the C-clamps about 45° each way, pads on the bar near its sides about \(Length.mm(behind.rounded())) mm back from the face, frames beside the bar."
                        : "Two C-clamps over the table's back edge, pads about \(Length.mm(behind.rounded())) mm back from the face, frames touching the bed's edge.")
-            out.append("**Edge finding is by hand** here: jog the spinning Fisher edge finder to each edge in CRWrite's Manual Operations until it kicks, and store it. The animation only shows the order.")
+            out.append("**Edge finding is by hand** here: jog the spinning edge finder to each edge in Machine Control until it kicks, and store it. The animation only shows the order.")
             return out
         case .program where (step.program ?? 0) >= 2000 && step.side >= 0 && !setup.onBed && AppSettings.shared.clampKitProbing == .electrical:
             return [
                 "**Automatic:** the clamp kit is insulated, so the cutter itself finds the edges: it turns slowly backwards and creeps in until it touches (G38.2), then backs off.",
                 "Plug the probe wire into the LED board and fix it to the clamp first.",
-                "Lower and upper edge (X), left and right edge (Y): CRWrite stores the centre as X0 Y0, then probes the face for Z0.",
+                "Lower and upper edge (X), left and right edge (Y): the sender stores the centre as X0 Y0, then probes the face for Z0.",
             ]
         case .program where (step.program ?? 0) >= 2000:
             return [
-                "**By hand, at the machine:** this animation only shows the order. CRWrite can't feel the stock here, so you jog.",
+                "**By hand, at the machine:** this animation only shows the order. The sender can't feel the stock here, so you jog.",
                 "Edge finder in the collet, spinning at \(Int(machine.probeSpindleRPM)) RPM.",
-                "In Manual Operations, jog to the lower and upper edge (X), then the left and right edge (Y), until the finder kicks each time, and store it: CRWrite takes the centre as X0 Y0.",
+                "In Machine Control, jog to the lower and upper edge (X), then the left and right edge (Y), until the finder kicks each time, and store it: the sender takes the centre as X0 Y0.",
                 "Then each tool is touched off on the face with a sheet of paper (Z0) before it cuts.",
             ]
         case .program:
@@ -132,7 +132,7 @@ extension AppModel {
                     "No clamp kit: one acetal stop across both T-slots, the riser plate behind it.",
                     "Stock flat on the riser, one end against the stop, its face \(Length.mm(st.protrusion)) mm past the stop's front.",
                     "Two 3\" C-clamps behind the cut\(turned ? ", turned about their screws so the frames pass beside the bar" : ""): fixed jaw under the table, frame behind its back edge.",
-                    "**Edge finding is by hand** (the bed isn't insulated): jog the spinning Fisher edge finder to each edge in CRWrite's Manual Operations until it kicks, and store it. The animation only shows the order.",
+                    "**Edge finding is by hand** (the bed isn't insulated): jog the spinning edge finder to each edge in Machine Control until it kicks, and store it. The animation only shows the order.",
                 ]
             }
             guard let stock, let p = clampPlacement(stockSize: setup.stockSize(stock)) else { return [] }

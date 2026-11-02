@@ -1,6 +1,6 @@
 import simd
 import CoastlineCore
-import CRCore
+import MillCore
 import Foundation
 
 private func mockConnection(_ mock: MockGRBL) throws -> MillConnection {
@@ -22,13 +22,13 @@ let guidedTests: [TestCase] = [
         try expect(!a.split(separator: "\n").contains { !$0.hasPrefix("(") && ($0.contains("M3") || $0.hasPrefix("S")) })
         try expect(a.contains("G1 Z9 F100") && a.contains("Z13") && a.contains("G53 G0 G90 Z-1."), a)
     },
-    TestCase(name: "guidedProjectReadsBackInCRWritesParser") {
+    TestCase(name: "guidedProjectReadsBackInThePackageParser") {
         let al = MaterialLibrary.material(id: "al-6061")!
         let tool = Tool(name: "1/4\" flat end mill", kind: .flatEndMill, diameter: 6.35, shankDiameter: 6.35, flutes: 3,
                         fluteLength: 12.7, stickout: 28.575, overallLength: 50.8)
         let stock = StockItem(materialID: "al-6061", sizeX: 150, sizeY: 80, sizeZ: 20)
         let data = FeedsEngine.compute(tool: tool, material: al, kind: .facing)
-        let program = FacingProgram.make(width: 80, length: 150, depth: 0.25, tool: tool, data: data, machine: .cr1, title: "Test #1")
+        let program = FacingProgram.make(width: 80, length: 150, depth: 0.25, tool: tool, data: data, machine: .standard, title: "Test #1")
         let input = GuidedJobBuilder.Input(
             partName: "Pendant", material: al, stock: stock, stockSize: SIMD3(80, 150, 20), setupName: "OP1",
             programs: [.init(tool: tool, gcode: program, operationNames: ["Facing"], minutes: 7)],
@@ -38,7 +38,7 @@ let guidedTests: [TestCase] = [
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("coastline-\(UUID()).crproj")
         defer { try? FileManager.default.removeItem(at: url) }
         try GuidedJobBuilder.write(input, to: url)
-        let project = try CRProject.open(url: url)
+        let project = try JobPackage.open(url: url)
         try project.verify()  // every referenced G-code and image exists
         try expectEqual(project.jobs.map(\.title), ["Square the Stock", "OP1 · Pendant"])
         let job = project.jobs[1]
@@ -61,7 +61,7 @@ let guidedTests: [TestCase] = [
         let airG = try project.gcodeLines(for: job.steps[air + 1]).joined(separator: "\n")
         let r = v.validate(airG, context: ctx)
         try expect(r.passed && r.minZ > 9, "air cut stays above the work: \(r.issues.map(\.message)) minZ \(r.minZ)")
-        // CRWrite's navigator can walk the job.
+        // The sender's navigator can walk the job.
         let nav = GuidedNavigator(steps: job.steps)
         try expectEqual(nav.steps.count, job.steps.count)
     },
@@ -91,7 +91,7 @@ let feasibilityTests: [TestCase] = [
                         fluteLength: 12.7, stickout: 28.575, overallLength: 50.8)
         let stock = StockItem(materialID: "al-6061", sizeX: 150, sizeY: 80, sizeZ: 20)
         let data = FeedsEngine.compute(tool: tool, material: al, kind: .facing)
-        let program = FacingProgram.make(width: 20, length: 150, depth: 0.25, tool: tool, data: data, machine: .cr1, title: "Test #1")
+        let program = FacingProgram.make(width: 20, length: 150, depth: 0.25, tool: tool, data: data, machine: .standard, title: "Test #1")
         var input = GuidedJobBuilder.Input(
             partName: "Plaque", material: al, stock: stock, stockSize: SIMD3(20, 150, 80), setupName: "OP1",
             programs: [.init(tool: tool, gcode: program, operationNames: ["Facing"], minutes: 7)],
@@ -100,7 +100,7 @@ let feasibilityTests: [TestCase] = [
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("coastline-\(UUID()).crproj")
         defer { try? FileManager.default.removeItem(at: url) }
         try GuidedJobBuilder.write(input, to: url)
-        let project = try CRProject.open(url: url)
+        let project = try JobPackage.open(url: url)
         try project.verify()
         let mount = try unwrap(project.jobs.last?.steps.first { $0.title == "Mount the Stock" })
         let text = mount.markdown
@@ -126,14 +126,14 @@ let feasibilityTests: [TestCase] = [
         // No frame: nothing.
         try expect(ReferenceBores.place(stock: SIMD3(80, 110, 20), partMin: SIMD2(-35, -50.8), partMax: SIMD2(35, 50.8),
                                         clear: 15, toolDiameter: 6.35, maxDepth: 26) == nil)
-        // Every line fits GRBL's 79 characters; the M-codes parse in CRWrite.
+        // Every line fits GRBL's 79 characters; the M-codes parse in the sender.
         for g in [ReferenceBores.boreProgram(plan, bore: 0, toolDiameter: 6.35, electrical: true), ReferenceBores.zeroProgram(plan),
                   ReferenceBores.topProgram(z: -0.25), ReferenceBores.edgeProgram(axis: "X", toward: 1, store: 2)] {
             for line in g.split(separator: "\n") { try expect(line.count <= 79, "too long: \(line)") }
             _ = GCodeProgram(source: g.components(separatedBy: "\n"))
         }
     },
-    TestCase(name: "referenceBoresSetSideBZeroInCRWrite") {
+    TestCase(name: "referenceBoresSetSideBZero") {
         // Side B's bores probed 0.4 mm right and 0.7 mm low of where the rough zero put them:
         // the zero program moves G54 by exactly that, after its checks pass.
         let plan = ReferenceBores.Plan(centresA: [SIMD2(-7, -74), SIMD2(-7, 74)], depthA: 19, thickness: 20)
@@ -169,7 +169,7 @@ let feasibilityTests: [TestCase] = [
         try expect(!(try unwrap(ThreadSpec.named("M4"))).canBeCut(by: m3mill), "but not M4 (its pitch)")
         try expect(!(try unwrap(ThreadSpec.named("M2.5"))).canBeCut(by: m3mill), "nor M2.5 (too big)")
     },
-    TestCase(name: "surfaceProbingFollowsTheFaceInCRWrite") {
+    TestCase(name: "surfaceProbingFollowsTheFace") {
         // A flat engraving 0.15 deep on a face 0.5 below Z0 (faced), in two passes.
         let cuts = [SIMD3(0, -3, -0.575), SIMD3(0, 3, -0.575), SIMD3(0, -3, -0.65), SIMD3(1.5, 3, -0.65), SIMD3(-1.5, 0, -0.65),
                     SIMD3(1.5, -3, -0.65), SIMD3(0, 3, -0.65)]
@@ -184,7 +184,7 @@ let feasibilityTests: [TestCase] = [
         for line in (probe + follow.text).split(separator: "\n") { try expect(line.count <= 79, "too long: \(line)") }
         try expectEqual(follow.moved.count, engrave.split(separator: "\n", omittingEmptySubsequences: false).count)
         try expect(follow.text.contains("M112") && follow.text.contains("M113") && follow.text.contains("Z-0.15"), follow.text)
-        // In CRWrite (mock mill): Z0 touched off at machine −20; the face is really 0.3 lower than
+        // In the sender (mock mill): Z0 touched off at machine −20; the face is really 0.3 lower than
         // the CAD says (machine −20.8 instead of −20.5). The cut goes 0.15 below what was probed.
         let mock = MockGRBL()
         mock.setOffset(54, Point3(x: -40, y: -120, z: -20))
@@ -235,14 +235,14 @@ let feasibilityTests: [TestCase] = [
         try expectEqual(op.title, "Texture · Sunburst (soleil)")
     },
     TestCase(name: "toolChangeStopsShortWhereTheJobsClampsAre") {
-        // Coast Runner's position, unless the job's clamps are in the way: then the spindle's
+        // The maker's position, unless the job's clamps are in the way: then the spindle's
         // last move out stops where it keeps clear.
-        let plain = GuidedJobBuilder.helperFiles(machine: .cr1)["Code/tool_change_position.nc"]!
+        let plain = GuidedJobBuilder.helperFiles(machine: .standard)["Code/tool_change_position.nc"]!
         try expect(plain.contains("G53 G0 Z-60"), plain)
-        let short = GuidedJobBuilder.helperFiles(machine: .cr1, toolChangeZ: -28)["Code/tool_change_position.nc"]!
+        let short = GuidedJobBuilder.helperFiles(machine: .standard, toolChangeZ: -28)["Code/tool_change_position.nc"]!
         try expect(short.contains("G53 G0 Z-28") && !short.contains("Z-60") && short.contains("G53 G0 Z-1"), short)
-        // And along Y, where Coast Runner's Y would be right beside a clamp.
-        let moved = GuidedJobBuilder.helperFiles(machine: .cr1, toolChangeZ: nil, toolChangeY: -110)["Code/tool_change_position.nc"]!
+        // And along Y, where the maker's Y would be right beside a clamp.
+        let moved = GuidedJobBuilder.helperFiles(machine: .standard, toolChangeZ: nil, toolChangeY: -110)["Code/tool_change_position.nc"]!
         try expect(moved.contains("G53 G0 Y-110") && !moved.contains("Y-58") && moved.contains("G53 G0 Z-60"), moved)
     },
 ]

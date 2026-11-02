@@ -83,12 +83,12 @@ extension AppModel {
                 guard row % stride == 0 && col % stride == 0 else { continue }
                 let c: SIMD4<UInt8>
                 if d < -tol {
-                    c = SIMD4(235, 60, 50, 255)
+                    c = SceneColor.danger  // gouged: cut into the part
                 } else if d <= tol {
-                    c = SIMD4(70, 200, 110, 255)
+                    c = SceneColor.line(215)  // within tolerance
                 } else {
                     let t = min((d - tol) / 0.3, 1)
-                    c = SIMD4(UInt8(90 * (1 - t) + 20 * t), UInt8(170 * (1 - t) + 70 * t), 255, 255)
+                    c = SceneColor.line(UInt8(150 * (1 - t) + 70 * t))  // material left: darker the more
                 }
                 let x = Float(hm.origin.x + Double(col) * hm.cell), y = Float(hm.origin.y + Double(row) * hm.cell)
                 let z = current.heights[i] + 0.01

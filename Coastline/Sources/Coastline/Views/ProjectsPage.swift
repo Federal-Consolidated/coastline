@@ -24,7 +24,7 @@ struct ProjectsPage: View {
         HSplitView {
             List(selection: $selection) {
                 Section("Getting Started") {
-                    ProjectRow(title: "First Cut on the CR-1", detail: firstCutProgress, icon: NSImage(systemSymbolName: "checklist", accessibilityDescription: nil))
+                    ProjectRow(title: "First Cut on the Machine", detail: firstCutProgress, icon: NSImage(systemSymbolName: "checklist", accessibilityDescription: nil))
                         .tag(ProjectsItem.firstCut)
                 }
                 Section("Recent Projects") {
@@ -194,7 +194,7 @@ private struct JournalRow: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Image(systemName: entry.outcome == .good ? "checkmark.seal.fill" : entry.outcome == .scrapped ? "xmark.seal.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(entry.outcome == .good ? .green : entry.outcome == .scrapped ? .red : .orange)
+                    .foregroundStyle(entry.outcome == .good ? Theme.ok : entry.outcome == .scrapped ? Theme.danger : Theme.warning)
                     .accessibilityLabel(entry.outcome.title)
                 Text(entry.partName).font(.headline)
                 if entry.copies > 1 { Text("×\(entry.copies)").foregroundStyle(.secondary) }

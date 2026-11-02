@@ -91,7 +91,7 @@ extension AppModel {
             let edges = both ? "lower, upper, left and right edge" : "one X edge (the other is out of reach: X0 from it and the stock's height), left and right edge"
             let detail = probe
                 ? "Electrical probing with the first tool (wire on the clamp, G38.2): \(edges) → X0 Y0 at the face's centre; each tool touches down on the face (Z0)"
-                : "Fisher edge finder: \(edges) → X0 Y0 at the face's centre; then touch off each tool on the face (Z0)"
+                : "edge finder: \(edges) → X0 Y0 at the face's centre; then touch off each tool on the face (Z0)"
             add(.program, "e\(side).\(stage)", probe ? "Probe the stock" : "Edge-find", detail,
                 probe ? "bolt.horizontal" : "scope", side: side, stage: stage, program: Self.edgeFindProgram(side: side, stage: stage))
         }
@@ -527,9 +527,9 @@ struct JobStrip: View {
         .padding(.horizontal, compact ? 5 : 8).padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: outer - inset)
-                .fill(active ? Theme.accent.opacity(0.85) : (manual ? Color.orange.opacity(0.16) : Color.secondary.opacity(0.12)))
+                .fill(active ? Theme.accent.opacity(0.85) : (manual ? Color.primary.opacity(0.06) : Color.secondary.opacity(0.12)))
         )
-        .overlay(RoundedRectangle(cornerRadius: outer - inset).strokeBorder(manual ? Color.orange.opacity(0.35) : .clear, lineWidth: 0.8))
+        .overlay(RoundedRectangle(cornerRadius: outer - inset).strokeBorder(manual ? Color.secondary.opacity(0.6) : .clear, style: StrokeStyle(lineWidth: 0.8, dash: [3, 2])))
         .foregroundStyle(active ? .white : .primary)
     }
 }

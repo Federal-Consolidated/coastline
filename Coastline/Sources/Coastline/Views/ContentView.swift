@@ -2,7 +2,8 @@ import CoastlineCore
 import SwiftUI
 
 enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
-    case workspace, projects, stock, tools, fixtures, measuring, accessories, shopping, materials, machine
+    // New cases go at the end: ⌘1…⌘9 follow this order.
+    case workspace, projects, stock, tools, fixtures, measuring, accessories, shopping, materials, machine, control, jobs
     var id: Self { self }
 
     var title: String {
@@ -16,7 +17,9 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
         case .measuring: "Measuring Tools"
         case .accessories: "Accessories"
         case .materials: "Materials"
-        case .machine: "Coast Runner CR-1"
+        case .machine: "Machine"
+        case .control: "Machine Control"
+        case .jobs: "Jobs"
         }
     }
 
@@ -32,6 +35,8 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
         case .accessories: "circle.circle"
         case .materials: "square.stack.3d.up"
         case .machine: "gearshape.2"
+        case .control: "cable.connector"
+        case .jobs: "list.bullet.clipboard"
         }
     }
 }
@@ -44,9 +49,16 @@ struct ContentView: View {
         @Bindable var app = app
         NavigationSplitView {
             List(selection: Binding<SidebarItem?>(get: { app.page }, set: { if let p = $0 { app.page = p } })) {
+                Section("Machine") {
+                    Label(SidebarItem.control.title, systemImage: SidebarItem.control.symbol)
+                        .badge(Text(app.mill.isOpen ? app.mill.stateWord : "Off"))
+                        .tag(SidebarItem.control)
+                    row(.machine, count: app.journal.maintenanceStatus.filter(\.due).count)
+                }
                 Section("Project") {
                     row(.workspace)
                     row(.projects)
+                    row(.jobs, count: app.jobs.entries.count)
                 }
                 Section("Inventory") {
                     row(.stock, count: inventory.inventory.stock.reduce(0) { $0 + $1.quantity })
@@ -57,7 +69,6 @@ struct ContentView: View {
                     row(.shopping, count: ToolLife.shoppingList(inventory.inventory, material: MaterialLibrary.material(id: "al-6061") ?? MaterialLibrary.all[0]).count)
                 }
                 Section("Library") { row(.materials, count: MaterialLibrary.all.count) }
-                Section("Machine") { row(.machine, count: app.journal.maintenanceStatus.filter(\.due).count) }
             }
             .scrollContentBackground(.hidden)
             .background(Theme.windowBackground.opacity(0.75))
@@ -76,15 +87,34 @@ struct ContentView: View {
                 case .accessories: AccessoriesPage()
                 case .materials: MaterialsPage()
                 case .machine: MachineView(machine: app.machine)
+                case .control: ControlPage()
+                case .jobs: JobsPage()
                 }
             }
             .toolbar {
+                MillToolbar(app: app)
                 ToolbarItem(placement: .primaryAction) {
                     Button("Inspector", systemImage: "sidebar.right") { app.showInspector.toggle() }
                         .help("Show or hide the inspector (⌥⌘I)")
                         .keyboardShortcut("i", modifiers: [.command, .option])
                 }
             }
+        }
+        .sheet(isPresented: Bindable(app.mill).showHomeConfirm) {
+            HomeConfirmSheet { app.mill.home() }
+                .environment(app).tint(Theme.accent)
+        }
+        .sheet(item: Bindable(app.mill).programToConfirm) { program in
+            RunConfirmSheet(program: program) { app.mill.run(program) }
+                .environment(app).tint(Theme.accent)
+        }
+        .sheet(item: Bindable(app.mill).goTo) { request in
+            GoToSheet(request: request)
+                .environment(app).tint(Theme.accent)
+        }
+        .sheet(isPresented: Bindable(app.mill).showSpindleConfirm) {
+            SpindleConfirmSheet(rpm: app.mill.spindleRPM) { app.mill.spindleOn() }
+                .environment(app).tint(Theme.accent)
         }
         .overlay(alignment: .bottom) {
             if let error = inventory.lastError {
@@ -110,12 +140,12 @@ struct MaintenanceSection: View {
             ForEach(app.journal.maintenanceStatus, id: \.task.id) { d in
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: d.due ? "exclamationmark.circle.fill" : "checkmark.circle")
-                        .foregroundStyle(d.due ? .orange : .green)
+                        .foregroundStyle(d.due ? Theme.warning : Theme.ok)
                         .accessibilityLabel(d.due ? "Due" : "Not due")
                     VStack(alignment: .leading, spacing: 2) {
                         Text(d.task.title).font(.callout.weight(.semibold))
                         Text(d.task.detail).font(.caption).foregroundStyle(.secondary)
-                        Text(d.why).font(.caption).foregroundStyle(d.due ? .orange : .secondary)
+                        Text(d.why).font(.caption).foregroundStyle(d.due ? Theme.warning : .secondary)
                     }
                     Spacer()
                     Button("Mark as Done") { app.journal.markDone(d.task.id) }.controlSize(.small)
@@ -139,7 +169,7 @@ struct MachineView: View {
                     Image(systemName: "gearshape.2.fill").font(.system(size: 34)).foregroundStyle(Theme.accent)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(machine.name).font(.title2.weight(.semibold))
-                        Text("3-axis desktop mill · grbl 1.1g (Coast Runner fork)").foregroundStyle(.secondary)
+                        Text("3-axis desktop mill · grbl 1.1g (machine fork)").foregroundStyle(.secondary)
                     }
                 }
                 .padding(.vertical, 4)
@@ -162,20 +192,20 @@ struct MachineView: View {
                 LabeledContent("Tool changes", value: "Manual: guided steps, no tool table")
             }
             Section("Probing & workholding") {
-                LabeledContent("Edge finder", value: "Fisher A250, \(Length.mm(machine.edgeFinderTipDiameter)) mm tip")
+                LabeledContent("Edge finder", value: "0.2\" edge finder, \(Length.mm(machine.edgeFinderTipDiameter)) mm tip")
                 LabeledContent("Conductive probing", value: "\(Int(machine.probeFeed)) mm/min, M4 S\(Int(machine.probeSpindleRPM))")
                 LabeledContent("Table", value: "\(machine.tSlotCount) T-slots")
                 LabeledContent("T-slot nut", value: machine.tSlotNut)
             }
             MaintenanceSection()
             Section {
-                Label("Never use compressed air on the CR-1: vacuum and wipe only. Vacuum at every tool or orientation change.",
+                Label("Never use compressed air on the machine: vacuum and wipe only. Vacuum at every tool or orientation change.",
                       systemImage: "wind.snow")
                 Label("Run $L (auto-level) after the enclosure or spindle has been removed.", systemImage: "level")
             } header: {
                 Text("Care")
             } footer: {
-                Text("Values come from the CR-1 firmware defaults, the Operator Manual v0.9 and Coast Runner's Fusion post.")
+                Text("Values come from the machine firmware defaults, the Operator Manual v0.9 and the maker's Fusion post.")
             }
         }
         .formStyle(.grouped)

@@ -192,7 +192,7 @@ extension AppModel {
             return StageStatus(state: .done, why: "Toolpaths ready and safety-checked.")
         case .review:
             guard !programs.isEmpty else { return StageStatus(state: .later, why: "After the toolpaths.") }
-            return StageStatus(state: .todo, why: "Next: walk through the steps (Tour), then export the guided job for CRWrite.")
+            return StageStatus(state: .todo, why: "Next: walk through the steps (Tour), then export the guided job for the sender.")
         }
     }
 

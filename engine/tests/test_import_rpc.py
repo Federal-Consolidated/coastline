@@ -16,7 +16,7 @@ def test_step_import_is_exact_and_in_mm():
     assert part.exact and part.face_count > 10
     lo, hi = part.bounds
     size = sorted(h - l for l, h in zip(lo, hi))
-    # The CR-1 universal clamp is roughly 19 x 59 x 81 mm.
+    # The universal clamp is roughly 19 x 59 x 81 mm.
     assert size == pytest.approx([19.1, 59.1, 80.6], abs=0.5)
     assert part.mesh.indices.max() < len(part.mesh.vertices)
 

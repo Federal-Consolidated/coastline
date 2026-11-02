@@ -57,9 +57,9 @@ struct UndercutLegend: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            RoundedRectangle(cornerRadius: 3).fill(Color(red: 0.9, green: 0.12, blue: 0.08)).frame(width: 14, height: 14).padding(.top, 2)
+            RoundedRectangle(cornerRadius: 3).fill(Color(white: 0.97)).frame(width: 14, height: 14).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Red: faces turned away from the spindle").font(.caption.weight(.semibold))
+                Text("White: faces turned away from the spindle").font(.caption.weight(.semibold))
                 Text(model.twoSided
                      ? "The tool can't reach them from this side; side B (the part turned over) cuts them."
                      : "The tool can't reach them from this side: they stay uncut unless the job is done from both sides.")
@@ -71,7 +71,7 @@ struct UndercutLegend: View {
                     .frame(width: 22, height: 22).contentShape(Rectangle())
             }
                 .buttonStyle(.plain)
-                .help("Hide the red (Display options ▸ Back Faces in Red shows it again)")
+                .help("Hide the highlight (Display options ▸ Highlight Back Faces shows it again)")
         }
         .padding(10)
         .frame(maxWidth: 340, alignment: .leading)
@@ -79,15 +79,15 @@ struct UndercutLegend: View {
     }
 }
 
-/// What the magenta on the simulated stock means.
+/// What the red on the simulated stock means (a piece that can be thrown out).
 struct LooseLegend: View {
     let count: Int
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            RoundedRectangle(cornerRadius: 3).fill(Color(red: 0.95, green: 0.15, blue: 0.75)).frame(width: 14, height: 14).padding(.top, 2)
+            RoundedRectangle(cornerRadius: 3).fill(Theme.danger).frame(width: 14, height: 14).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Magenta: \(count == 1 ? "a piece" : "\(count) pieces") cut loose here").font(.caption.weight(.semibold))
+                Text("Red: \(count == 1 ? "a piece" : "\(count) pieces") cut loose here").font(.caption.weight(.semibold))
                 Text("Nothing joins \(count == 1 ? "it" : "them") to the clamped stock any more. On the machine \(count == 1 ? "it falls" : "they fall") out or the tool throws \(count == 1 ? "it" : "them"): stop and take \(count == 1 ? "it" : "them") out, or keep holding tabs.")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

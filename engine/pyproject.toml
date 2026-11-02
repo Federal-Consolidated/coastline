@@ -1,7 +1,7 @@
 [project]
 name = "coastline-engine"
 version = "0.1.0"
-description = "Geometry and CAM engine for Coastline (CR-1 planner)"
+description = "Geometry and CAM engine for Coastline"
 requires-python = ">=3.11,<3.12"
 dependencies = [
   "cadquery-ocp>=7.7",

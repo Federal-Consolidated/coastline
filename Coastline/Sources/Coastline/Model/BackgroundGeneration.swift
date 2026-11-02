@@ -61,7 +61,7 @@ final class GenerationRun {
 
 extension AppModel {
     /// A program whose moves had to be pulled into the part to stay within the travel fails.
-    static let outOfReach = "Out of the CR-1's reach:"
+    static let outOfReach = "Out of the machine's reach:"
 
     /// How many engine processes generate at once (the main one and workers).
     static var generationWorkers: Int {
@@ -228,7 +228,7 @@ extension AppModel {
                 run.bridged += skipped
             }
         }
-        // Within the CR-1's X travel (the bar's top edge can sit right at it): a move past it is
+        // Within the machine's X travel (the bar's top edge can sit right at it): a move past it is
         // brought back to the limit; an arc that would end past it becomes a straight line.
         if let xr = run.kitXRange {
             // Brought back toward the part, a cut could reach into it: where the tool, held at
@@ -279,7 +279,7 @@ extension AppModel {
                 clipped[i].moves = out
             }
             if into > 0, !clipped.isEmpty {
-                clipped[0].warnings.append(Self.outOfReach + " \(into) cutting move\(into == 1 ? "" : "s") of this ⌀\(Length.mm(p.tool.diameter)) mm tool would have to stop up to \(Length.mm(worst)) mm short at the CR-1's X travel, inside the part's outline. Lower the bar in the kit (Clamp kit: bottom shoulders or parallels) so the part's edge plus the tool's radius is within reach.")
+                clipped[0].warnings.append(Self.outOfReach + " \(into) cutting move\(into == 1 ? "" : "s") of this ⌀\(Length.mm(p.tool.diameter)) mm tool would have to stop up to \(Length.mm(worst)) mm short at the machine's X travel, inside the part's outline. Lower the bar in the kit (Clamp kit: bottom shoulders or parallels) so the part's edge plus the tool's radius is within reach.")
             }
         }
         return clipped

@@ -29,13 +29,13 @@ extension AppModel {
             lo = o + SIMD3(-size.x / 2, -size.y / 2, 0)
             hi = o + SIMD3(size.x / 2, size.y / 2, t)
         }
-        let tint = SIMD4<Float>(0.10, 0.62, 0.66, 0.30)
+        let tint = SceneColor.surface(0.95, alpha: 0.30)
         if let m = SceneMesh.box(device: renderer.device, id: "cutface", min: SIMD3<Float>(lo), max: SIMD3<Float>(hi), color: tint) {
             m.material = SurfaceMaterial(metallic: 0, roughness: 0.6, edges: 0)
             scene.setMesh(m)
         }
         if let e = SceneLines(device: renderer.device, id: "cutface.edges",
-                              segments: LineSegment.box(min: SIMD3<Float>(lo), max: SIMD3<Float>(hi), color: SIMD4(40, 200, 210, 255))) {
+                              segments: LineSegment.box(min: SIMD3<Float>(lo), max: SIMD3<Float>(hi), color: SceneColor.highlight)) {
             scene.setLines(e)
         }
     }

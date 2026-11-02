@@ -1,6 +1,7 @@
 import CoastlineCore
 import Foundation
 import simd
+import Viewport
 
 /// A fixture on the bed that can be picked and moved (stage 3, R3).
 enum BedObject: Hashable {
@@ -257,9 +258,9 @@ extension AppModel {
         }
     }
 
-    /// Fixture colours: red where it collides, amber when picked, else its own.
+    /// Fixture colours: red where it collides, bright when picked, else its own.
     func applyBedHighlight() {
-        let tint = SIMD4<Float>(0.98, 0.72, 0.10, 1), red = SIMD4<Float>(0.95, 0.12, 0.10, 1)
+        let tint = SceneColor.surface(0.95), red = SceneColor.dangerSurface
         let prefix: String? = switch bedSelection.flatMap({ pickValid($0) ? $0 : nil }) {
         case .stop: "fixture.brick.0."
         case .clamp(let i): "fixture.cclamp.\(i)."
@@ -276,7 +277,7 @@ extension AppModel {
             } else if m.id.split(separator: ".").count == 4, let j = m.id.split(separator: ".").last.flatMap({ Int($0) }), j < kitParts.count {
                 base = Self.kitAppearance(kitParts[j]).color
             } else {
-                base = SIMD4(0.30, 0.31, 0.33, 1)  // riser, parallels
+                base = SceneColor.dark  // riser, parallels
             }
             m.color = SIMD4(base.x, base.y, base.z, m.color.w)
         }

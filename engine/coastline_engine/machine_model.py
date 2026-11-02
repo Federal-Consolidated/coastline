@@ -1,19 +1,22 @@
-"""The CR-1 machine model for the viewport, built from Coast Runner's assembly STEP.
+"""The machine model for the viewport, built from the maker's assembly STEP.
 
-The STEP (COAST RUNNER CR-1 MECHANICALS V1.3) is organised by motion group, and its world
+The STEP (the machine's mechanical assembly) is organised by motion group, and its world
 axes are the machine axes:
     +x  machine X, physically **up** (the table is a horizontal plate moving vertically)
     +y  machine Y, the gantry, to the operator's right
     +z  machine Z, the spindle axis; the tool points toward -z (plunge = Z-)
-So the CR-1 is a horizontal-spindle mill: the stock stands on the table and the spindle comes
+So the machine is a horizontal-spindle mill: the stock stands on the table and the spindle comes
 at it sideways.
 
 Top-level subassemblies → motion groups:
-    "Subassembly X - Table"            → x   (moves with X)
-    "Subassembly YZ - Translator"      → y   (moves with Y)
-    "Subassembly Z"                    → z   (moves with Y and Z)
-    everything else                    → static
-Every part is kept (fasteners included). The result is cached on disk.
+    "X Table"          → x   (moves with X)
+    "Y Carriage"       → y   (moves with Y)
+    "Z Spindle Head"   → z   (moves with Y and Z)
+    "Frame"            → static
+    "Enclosure"        → static, the shell (hidden in the open views)
+The STEP is already simplified for the viewport (outside this repository): small hardware
+dropped, screws as plain cylinders, boards as boxes, generic names. Every part in it is kept.
+The result is cached on disk.
 """
 
 from __future__ import annotations
@@ -40,11 +43,12 @@ from OCP.collections import Sequence_TDF_Label
 from .cad_import import Mesh, tessellate
 
 GROUPS = {
-    "Subassembly X - Table": "x",
-    "Subassembly YZ - Translator": "y",
-    "Subassembly Z": "z",
+    "X Table": "x",
+    "Y Carriage": "y",
+    "Z Spindle Head": "z",
 }
-ENCLOSURE_WORDS = ("outer enclosure", "rear cover", "chip guard - x top", "iec connector")
+# The "Enclosure" assembly and everything in it is the shell.
+ENCLOSURE_WORDS = ("enclosure",)
 # Nothing is dropped: The complete machine is kept (fasteners included).
 SKIP_WORDS: tuple[str, ...] = ()
 
@@ -97,12 +101,12 @@ def load_machine(step_path: str | Path, cache_dir: str | Path | None = None) -> 
     step_path = Path(step_path)
     cache = None
     if cache_dir:
-        key = hashlib.sha1(f"{step_path.stat().st_size}-{step_path.stat().st_mtime_ns}-v5".encode()).hexdigest()[:12]
+        key = hashlib.sha1(f"{step_path.stat().st_size}-{step_path.stat().st_mtime_ns}-v6".encode()).hexdigest()[:12]
         cache = Path(cache_dir) / f"machine-{key}.npz"
         if cache.exists():
             return _read_cache(cache)
 
-    doc = TDocStd_Document(TCollection_ExtendedString("cr1"))
+    doc = TDocStd_Document(TCollection_ExtendedString("machine"))
     reader = STEPCAFControl_Reader()
     reader.SetNameMode(True)
     reader.ReadFile(str(step_path))
@@ -121,9 +125,7 @@ def load_machine(step_path: str | Path, cache_dir: str | Path | None = None) -> 
             low = name.lower()
             loc = location.Multiplied(st.GetLocation_s(c))
             g = GROUPS.get(name, group)
-            # "Subassembly XY - Stationary with Outer Enclosure" holds the frame too; only its
-            # "Outer Enclosure" child is the enclosure.
-            enclosure = path_enclosure or (not low.startswith("subassembly xy") and any(w in low for w in ENCLOSURE_WORDS))
+            enclosure = path_enclosure or any(w in low for w in ENCLOSURE_WORDS)
             sub = Sequence_TDF_Label()
             st.GetComponents_s(ref, sub)
             if len(sub):
@@ -226,10 +228,12 @@ def _read_cache(path: Path) -> list[MachinePart]:
                         Mesh(data[f"v{i}"], data[f"n{i}"], data[f"t{i}"])) for i, m in enumerate(meta)]
 
 
-# Reference geometry measured from the assembly (STEP world = machine axes, mm).
-# Collet nut face (tool-holder end), on the spindle axis: ER11A nut spans z -20…-5 around
-# (x≈0.5, y≈-82). The table's top face is x = -31.12 (raycast on the mesh, 2026-10-07).
-SPINDLE_NOSE = (0.5, -82.0, -20.0)
+# Reference geometry measured from the assembly (STEP world = machine axes, mm). The simplified
+# STEP is translated so its table (X Unibody) sits where the earlier assembly's did, so the
+# table top and the T-slots kept their values (checked by raycast on the new model, 2026-11-02).
+# Collet nut face (tool-holder end), on the spindle axis: the ER11 nut spans z 5.3…20.3 around
+# (x 58.45, y -137.74).
+SPINDLE_NOSE = (58.45, -137.74, 5.3)
 TABLE_TOP_X = -31.12  # measured on the mesh (the bed top, between the T-slots)
 # T-slot centres in the table (model Z), measured from the X Unibody section: 6.1 mm openings,
 # 40 mm apart, the front one 11 mm from the table's spindle-side edge (z -2.4). Matches the
@@ -237,12 +241,13 @@ TABLE_TOP_X = -31.12  # measured on the mesh (the bed top, between the T-slots)
 TSLOT_Z = (-53.5, -13.4)
 # The machine position (X, Y, Z) the assembly is modelled at, calibrated by moving it
 # (machine_travel.py): each axis slides until a part first touches another (0.5 mm voxels), and
-# the firmware travel is centred in that mechanical range.
-#   X: table free 30.5 mm up (flange bearings reach the stepper mounts) / 58.0 down (shaft
-#      supports): 88.5 mm for 85.5 of travel → −57.0. The X home switch tab triggers ~29 mm up.
-#   Y: translator free 91.0 right (LM16UU reaches the motor bracket) / 151.5 left (spindle mount
-#      reaches the electronics cover): 242.5 for 241.0 → −90.75.
-#   Z: spindle free 81.0 out / 4.5 in (it's modelled almost fully plunged): 85.5 for 78.0 → −77.75.
-# So the spindle axis sits at world y = machine Y + 8.75. ±1 mm until checked on the real
-# machine (docs/FIRST_CUT.md).
-MODEL_POSE = (-57.0, -90.75, -77.75)
+# the firmware travel is centred in that mechanical range (2026-11-02, the simplified model):
+#   X: table free 87.0 mm up (a flange bearing reaches the left stepper mount) / 3.0 down (a
+#      frame screw): 90.0 mm for 85.5 of travel → −1.25.
+#   Y: carriage free 147.0 right (an LM16UU reaches the motor-end side frame) / 96.0 left (the
+#      carriage chip guard reaches the electronics cover): 243.0 for 241.0 → −146.5.
+#   Z: spindle head free 54.5 out / 25.5 in (the head body reaches the carriage at both ends):
+#      80.0 for 78.0 → −54.0.
+# So the spindle axis sits at world y = machine Y + 8.76 (8.75 on the earlier model). ±1 mm
+# until checked on the real machine (docs/FIRST_CUT.md).
+MODEL_POSE = (-1.25, -146.5, -54.0)

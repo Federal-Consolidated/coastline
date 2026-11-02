@@ -42,6 +42,7 @@ struct CoastlineApp: App {
                     Task { await model.openProject(url); model.page = .workspace }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    model.mill.shutdown()
                     inventory.saveNow()
                 }
         }
@@ -55,6 +56,11 @@ struct CoastlineApp: App {
                         Button(ex.title) { model.page = .workspace; Task { await model.openExample(ex, inventory: inventory) } }
                     }
                 }
+                Divider()
+                Button("Add Job…") { model.page = .jobs; model.jobs.chooseJobFolder() }
+                Button("New Job from G-code…") { model.page = .jobs; model.jobs.showNewJob = true }
+                Button("Import .dd Job…") { model.page = .jobs; model.jobs.chooseDDFile() }
+                Divider()
                 Menu("Open Recent") {
                     ForEach(AppModel.recentProjects, id: \.self) { url in
                         Button(url.deletingPathExtension().lastPathComponent) { Task { await model.openProject(url) } }
@@ -88,6 +94,7 @@ struct CoastlineApp: App {
             }
             // Toolpaths (⌘G, ⌘.), Playback (Space, arrows, ⌘[ ⌘]) and View ▸ Measure (M).
             CoastlineCommands(model: model, inventory: inventory)
+            MachineCommands(model: model)
         }
 
         Settings {
@@ -98,7 +105,7 @@ struct CoastlineApp: App {
     }
 }
 
-/// Scripted runs for checks without screen access (like CRWrite's DebugAutomation), e.g.
+/// Scripted runs for checks without screen access (like the sender's DebugAutomation), e.g.
 /// `COASTLINE_SCRIPT="page tools; wait 1; wsnap /tmp/tools.png; quit"`.
 /// - `snap` renders the 3D viewport off screen (Metal).
 /// - `wsnap` captures the whole window through the window server, Liquid Glass included.
@@ -118,6 +125,10 @@ enum Automation {
             case "section": model.sectionOn = arg != "off"
             case "zoom": model.renderer.camera.zoom(by: Float(arg) ?? 1)
             case "page": if let p = SidebarItem(rawValue: arg) { model.page = p }
+            case "mill": millCommand(model.mill, arg)  // Simulated Mill only: "mill sim", "mill home", "mill jog y -10"
+            case "jobselect": model.jobs.selection = model.jobs.entries.first { $0.job.id == arg }?.folder  // "jobselect my-job": by job id
+            case "jobpreview": await jobPreviewCommand(model, arg)  // "jobpreview mill-well": the selected job's program
+            case "jobstart", "jobsim", "jobnext", "jobback", "jobrun", "jobair", "jobstatus": await jobCommand(model, parts[0])
             case "coupon": await couponCommand(model, inventory, arg)  // "coupon pom": the first-cut coupon in POM
             case "addthread":  // "addthread M3 [depth]": a thread milling operation, as the menu adds it
                 var op = Operation(kind: .thread)
@@ -548,7 +559,7 @@ enum Automation {
                 let plan = model.toolChangePath(from: model.machinePosition, tool: model.currentTool)
                 print("tcpath " + plan.path.map { "(\(Int($0.x)),\(Int($0.y)),\(Int($0.z)))\(model.headClear(at: $0, tool: model.currentTool) ? "" : "!")" }.joined(separator: " → ") + " note \(plan.note ?? "-")")
                 let tc = model.machine.toolChangePose
-                print("tcpath coast runner pose clear \(model.headClear(at: tc, tool: model.currentTool)) kit shift \(model.kitShiftY)")
+                print("tcpath machine pose clear \(model.headClear(at: tc, tool: model.currentTool)) kit shift \(model.kitShiftY)")
             case "toolchange":  // "toolchange" prints it, "toolchange ok" confirms it
                 if arg == "ok" { model.confirmToolChange() }
                 print("toolchange \(model.toolChangeStop.map { "\($0.phase) from \($0.from?.name ?? "-") to \($0.to.name)" } ?? "none") playing \(model.isPlaying) machine \(model.machinePosition) tool \(model.currentTool?.name ?? "-") playhead \(Int(model.playhead))")

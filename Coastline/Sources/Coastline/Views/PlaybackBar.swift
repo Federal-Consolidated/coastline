@@ -34,10 +34,10 @@ struct PlaybackBar: View {
                 }
                 if model.showDeviation, let d = model.deviationStats {
                     HStack(spacing: 14) {
-                        Label("\(Int((d.within * 100).rounded())) % within ±\(Int(d.tolerance * 1000)) µm", systemImage: "circle.fill").foregroundStyle(.green)
-                        Label("most left \(Length.mm(d.maxLeft)) mm", systemImage: "circle.fill").foregroundStyle(.blue)
+                        Label("\(Int((d.within * 100).rounded())) % within ±\(Int(d.tolerance * 1000)) µm", systemImage: "circle.fill").foregroundStyle(Theme.ok)
+                        Label("most left \(Length.mm(d.maxLeft)) mm", systemImage: "circle.fill").foregroundStyle(Color(white: 0.55))
                         Label(d.maxGouge > d.tolerance ? "gouge \(Length.mm(d.maxGouge)) mm" : "no gouges", systemImage: "circle.fill")
-                            .foregroundStyle(d.maxGouge > d.tolerance ? .red : .secondary)
+                            .foregroundStyle(d.maxGouge > d.tolerance ? Theme.danger : .secondary)
                         Spacer()
                         Text("at the playhead · simulation cell ≈ \(Length.mm(model.heightmap?.cell ?? 0)) mm").foregroundStyle(.secondary)
                     }
@@ -132,7 +132,7 @@ struct PlaybackBar: View {
                         .frame(width: 210, alignment: .leading)
                         .foregroundStyle(problem == nil ? Color.secondary : Theme.danger)
                 }
-                .help(problem.map { "Machine coordinates (what CRWrite's DRO would show). \($0)." } ?? "Machine coordinates (what CRWrite's DRO would show)")
+                .help(problem.map { "Machine coordinates (what Machine Control's position display would show). \($0)." } ?? "Machine coordinates (what Machine Control's position display would show)")
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Machine coordinates")
                 .accessibilityValue(String(format: "X %.3f, Y %.3f, Z %.3f millimetres", q.x, q.y, q.z) + (problem.map { ". \($0)" } ?? ""))
@@ -214,7 +214,7 @@ struct ChapterTimeline: View {
         return ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 4)
                 .fill(active ? Theme.accent : Color.secondary.opacity(byHand ? 0.22 : 0.4))
-                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(byHand ? Color.orange.opacity(0.6) : .clear, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
+                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(byHand ? Color.secondary.opacity(0.7) : .clear, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
             if active, let progress, !byHand {
                 Circle().fill(.white).shadow(radius: 2).frame(width: 14, height: 14)
                     .offset(x: CGFloat(progress) * max(width - 14, 0))
@@ -338,7 +338,7 @@ struct TimelineLegend: View {
                     Divider()
                     Text("The steps above").font(.headline)
                     legend(Theme.accent.opacity(0.85), nil, "Where you are now (the playhead's step)")
-                    legend(Color.orange.opacity(0.16), Color.orange.opacity(0.5), "By hand: clamping, turning the stock, sawing")
+                    legend(Color.primary.opacity(0.06), Color.secondary.opacity(0.6), "By hand: clamping, turning the stock, sawing")
                     legend(Color.secondary.opacity(0.12), nil, "On the machine: a program (its time below the name) or edge finding")
                     Divider()
                     Text("The bar").font(.headline)
@@ -421,9 +421,9 @@ struct ColourKey: View {
                 swatch(PathColor.plunge, "down")
                 swatch(PathColor.rapid, "rapid", dashed: true)
             case .feed:
-                gradient([SIMD4(40, 170, 255, 255), SIMD4(255, 50, 40, 255)], "slow → fast")
+                gradient([SceneColor.line(90), SceneColor.line(245)], "slow → fast")
             case .depth:
-                gradient([SIMD4(170, 230, 255, 255), SIMD4(30, 110, 255, 255)], "high → deep")
+                gradient([SceneColor.line(235), SceneColor.line(90)], "high → deep")
             case .operation, .tool:
                 Text(mode == .tool ? "one colour per tool" : "one colour per operation").foregroundStyle(.secondary)
             }

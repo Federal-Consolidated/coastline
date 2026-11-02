@@ -17,16 +17,43 @@ public struct LineSegment: Sendable {
     }
 }
 
-/// Colours for toolpath move types (sRGB 0–255). Rapids carry alpha 254 = dashed.
+/// Colours for toolpath move types (sRGB 0–255), monotone: the move type shows as brightness,
+/// rapids also as dashes (alpha 254). Only the axis marker keeps its red/green/blue.
 public enum PathColor {
-    public static let rapid = SIMD4<UInt8>(235, 64, 52, 254)
-    public static let cut = SIMD4<UInt8>(46, 160, 255, 255)
-    public static let lead = SIMD4<UInt8>(255, 196, 0, 255)
-    public static let plunge = SIMD4<UInt8>(255, 120, 200, 255)
-    public static let envelope = SIMD4<UInt8>(150, 150, 160, 255)
+    public static let rapid = SIMD4<UInt8>(150, 150, 150, 254)
+    public static let cut = SIMD4<UInt8>(238, 238, 238, 255)
+    public static let lead = SIMD4<UInt8>(190, 190, 190, 255)
+    public static let plunge = SIMD4<UInt8>(115, 115, 115, 255)
+    public static let envelope = SIMD4<UInt8>(140, 140, 140, 255)
     public static let axisX = SIMD4<UInt8>(230, 70, 70, 255)
     public static let axisY = SIMD4<UInt8>(80, 200, 90, 255)
     public static let axisZ = SIMD4<UInt8>(70, 120, 240, 255)
+}
+
+/// The 3D view's palette: black, white and grays, with red and yellow kept for what the
+/// operator must not miss (collisions, gouges, pieces cut loose; cautions).
+public enum SceneColor {
+    /// A line gray (0 black … 255 white).
+    public static func line(_ v: UInt8, alpha: UInt8 = 255) -> SIMD4<UInt8> { SIMD4(v, v, v, alpha) }
+    /// A surface gray (0…1, linear), with opacity.
+    public static func surface(_ v: Float, alpha: Float = 1) -> SIMD4<Float> { SIMD4(v, v, v, alpha) }
+
+    /// Box and stock edges.
+    public static let edge = line(205)
+    /// Something to look at (the final stock, measure points, engraving text, tabs).
+    public static let highlight = line(250)
+    public static let danger = SIMD4<UInt8>(255, 40, 35, 255)
+    public static let caution = SIMD4<UInt8>(255, 214, 10, 255)
+
+    /// The part (machined metal gray).
+    public static let part = surface(0.56)
+    /// Risers, parallels, fixtures.
+    public static let dark = surface(0.30)
+    public static let dangerSurface = SIMD4<Float>(0.92, 0.10, 0.07, 1)
+    public static let cautionSurface = SIMD4<Float>(0.98, 0.78, 0.10, 1)
+
+    /// A colour's brightness (Rec. 709), to show a coloured model in grays.
+    public static func luminance(_ c: SIMD3<Float>) -> Float { 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z }
 }
 
 /// A triangle mesh in the scene (part, stock, fixture, machine).

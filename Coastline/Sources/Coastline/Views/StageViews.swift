@@ -77,10 +77,10 @@ struct StageBar: View {
     private func fill(_ s: StageStatus.State, current: Bool) -> Color {
         // Deep fills so the white glyphs read clearly (WCAG ≥ 4.5:1).
         switch s {
-        case .done: Color(red: 0.11, green: 0.50, blue: 0.24)
-        case .attention: Color(red: 0.72, green: 0.38, blue: 0.0)
+        case .done: Color(white: 0.36)
+        case .attention: Color(red: 0.62, green: 0.48, blue: 0.0)  // dark yellow: white text stays readable
         case .todo: Theme.accent.opacity(current ? 1 : 0.75)
-        case .blocked: Color(red: 0.75, green: 0.16, blue: 0.14)
+        case .blocked: Color(red: 0.75, green: 0.16, blue: 0.14)  // red: the job can't go on
         case .notNeeded: Color.secondary.opacity(0.18)
         case .later: current ? Theme.accent : Color.secondary.opacity(0.18)
         }
@@ -301,7 +301,7 @@ struct PrepStepsSection: View {
 
 /// Path D's shoulders, adjustable: how the kit grips them (with or without its soft jaws),
 /// how tall they are, how much comes off their bottom so the bar sits lower, and whether the
-/// part is then within the CR-1's reach.
+/// part is then within the machine's reach.
 struct ShoulderSection: View {
     @Environment(AppModel.self) private var model
 
@@ -353,7 +353,7 @@ struct ShoulderSection: View {
                 if let r = model.reachExcess {
                     if r.above > 0 {
                         HStack {
-                            Label("The part's top is \(Length.mm(r.above)) mm beyond the CR-1's travel.", systemImage: "exclamationmark.triangle")
+                            Label("The part's top is \(Length.mm(r.above)) mm beyond the machine's travel.", systemImage: "exclamationmark.triangle")
                                 .foregroundStyle(Theme.warning)
                             Spacer()
                             Button("Lower It Enough") { model.shouldersAuto = false; model.lowerForReach() }
@@ -363,8 +363,8 @@ struct ShoulderSection: View {
                         Label("The part's bottom is \(Length.mm(r.below)) mm beyond the travel: lower the middle less.", systemImage: "exclamationmark.triangle")
                             .foregroundStyle(Theme.warning)
                     } else {
-                        Label("The whole part is within the CR-1's reach (\(Length.mm(-r.above)) mm to spare at the top).", systemImage: "checkmark.circle")
-                            .foregroundStyle(.green)
+                        Label("The whole part is within the machine's reach (\(Length.mm(-r.above)) mm to spare at the top).", systemImage: "checkmark.circle")
+                            .foregroundStyle(Theme.ok)
                     }
                 }
                 Button("See the Cuts on the Bed (Stock Prep)", systemImage: "eye") { model.enter(.prep) }
@@ -452,7 +452,7 @@ struct BedFixturesSection: View {
                 }
                 let issues = model.bedIssues
                 if issues.isEmpty {
-                    Label("The clamps hold the bar and stay clear of the cutter.", systemImage: "checkmark.circle").foregroundStyle(.green)
+                    Label("The clamps hold the bar and stay clear of the cutter.", systemImage: "checkmark.circle").foregroundStyle(Theme.ok)
                 } else {
                     ForEach(Array(issues.enumerated()), id: \.offset) { _, i in
                         Label(i.message, systemImage: "exclamationmark.triangle").foregroundStyle(Theme.warning)

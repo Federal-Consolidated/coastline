@@ -23,15 +23,15 @@ let materialTests: [TestCase] = [
         let steel = MaterialLibrary.material(id: "steel-1018")!
         try expectEqual(al.chipLoadFactor, 1.0)
         try expect(steel.chipLoadFactor < 0.5 && steel.difficulty >= .careful)
-        // A 1/4" tool in 6061 wants far more than 8000 RPM, which is why the CR-1 runs it at its cap.
-        try expect(al.idealRPM(toolDiameter: 6.35) > MachineProfile.cr1.spindleRPM.upperBound)
+        // A 1/4" tool in 6061 wants far more than 8000 RPM, which is why the machine runs it at its cap.
+        try expect(al.idealRPM(toolDiameter: 6.35) > MachineProfile.standard.spindleRPM.upperBound)
         try expect(MaterialLibrary.material(id: "ti-gr5")!.difficulty == .experimental)
     },
 ]
 
 let inventoryTests: [TestCase] = [
     TestCase(name: "fusionAluminiumLibraryImportsInMillimetres") {
-        let r = try FusionToolImport.load(libraries.appendingPathComponent("CR-tools-for-Aluminum.tools"))
+        let r = try ToolLibraryImport.load(libraries.appendingPathComponent("tools-aluminium.tools"))
         try expectEqual(r.tools.count, 9)
         try expect(r.skipped.isEmpty, "\(r.skipped)")
         let t2 = try unwrap(r.tools.first { $0.partNumber == "48031" })
@@ -50,7 +50,7 @@ let inventoryTests: [TestCase] = [
         try expectEqual(r.tools.first { $0.partNumber == "03017" }?.coating, .tiN)  // "TiN coated"
     },
     TestCase(name: "fusionSteelLibraryImports") {
-        let r = try FusionToolImport.load(libraries.appendingPathComponent("CR-tools-for-Steel.tools"))
+        let r = try ToolLibraryImport.load(libraries.appendingPathComponent("tools-steel.tools"))
         try expectEqual(r.tools.count, 8)
         let bull = try unwrap(r.tools.first { $0.kind == .bullNoseEndMill })
         try expect(abs(bull.cornerRadius - 0.254) < 1e-9)
@@ -58,13 +58,13 @@ let inventoryTests: [TestCase] = [
     },
     TestCase(name: "coatingIsMatchedOnWholeWordsOnly") {
         let json = #"{"data":[{"type":"flat end mill","unit":"millimeters","description":"Cutting tool","geometry":{"DC":3,"SFDM":3,"NOF":2,"LCF":8,"LB":15,"OAL":38}}]}"#
-        let r = try FusionToolImport.parse(Data(json.utf8), sourceName: "t")
+        let r = try ToolLibraryImport.parse(Data(json.utf8), sourceName: "t")
         try expectEqual(r.tools.first?.coating, Tool.Coating.none)
     },
     TestCase(name: "starterInventoryAndJSONRoundTrip") {
         let inv = Inventory.starter(toolLibraries: [
-            libraries.appendingPathComponent("CR-tools-for-Aluminum.tools"),
-            libraries.appendingPathComponent("CR-tools-for-Steel.tools"),
+            libraries.appendingPathComponent("tools-aluminium.tools"),
+            libraries.appendingPathComponent("tools-steel.tools"),
         ])
         try expectEqual(inv.tools.count, 17)
         try expectEqual(inv.colletSizes.sorted(), [3.175, 6.35])

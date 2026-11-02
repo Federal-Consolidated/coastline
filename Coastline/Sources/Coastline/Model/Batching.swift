@@ -57,7 +57,7 @@ extension AppModel {
         for (k, dy) in offsets.enumerated().dropFirst() {
             let id = "part.copy.\(k)"
             if scene.mesh(id) == nil, let m = SceneMesh(device: renderer.device, id: id, positions: data.positions, normals: data.normals,
-                                                        indices: data.indices, color: SIMD4(0.55, 0.57, 0.6, 1)) {
+                                                        indices: data.indices, color: SceneColor.part) {
                 scene.setMesh(m)
             }
             guard let m = scene.mesh(id) else { continue }
@@ -91,7 +91,7 @@ extension AppModel {
         guard !texts.isEmpty else { return }
         let o = workOrigin(stockSize: size)
         let z = -setupFor(side: viewSide).topAllowance + 0.05
-        let purple = SIMD4<UInt8>(175, 80, 255, 255)
+        let purple = SceneColor.highlight
         var segs: [LineSegment] = []
         for e in texts {
             for dy in copyOffsets(for: setup) {

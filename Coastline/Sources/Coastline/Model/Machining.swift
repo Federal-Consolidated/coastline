@@ -4,7 +4,7 @@ import simd
 import Viewport
 
 /// One G-code program: consecutive operations that use the same tool (a tool change between
-/// programs is a guided step in CRWrite).
+/// programs is a guided step in the sender).
 struct ToolProgram: Identifiable {
     var id: String { "\(index)" }
     var index: Int
@@ -42,7 +42,7 @@ extension AppModel {
         case .cut: PathColor.cut
         case .plunge: PathColor.plunge
         case .ramp, .lead: PathColor.lead
-        case .link: SIMD4(150, 160, 175, 255)
+        case .link: SceneColor.line(150)
         }
     }
 
@@ -192,7 +192,7 @@ extension AppModel {
             let before = sh.bottom
             lowerForReach()
             if let after = setup.shoulders?.bottom, after > before {
-                planNotes.append("The part's top edge plus the tool's radius was \(Length.mm(r.above)) mm beyond the CR-1's X travel: the shoulders' bottom now comes off \(Length.mm(after)) mm (was \(Length.mm(before))), so the bar sits lower and every wall is in reach.")
+                planNotes.append("The part's top edge plus the tool's radius was \(Length.mm(r.above)) mm beyond the machine's X travel: the shoulders' bottom now comes off \(Length.mm(after)) mm (was \(Length.mm(before))), so the bar sits lower and every wall is in reach.")
             }
         }
         isGenerating = true
@@ -484,7 +484,7 @@ extension AppModel {
                     let probing = group.filter { $0.0.operation.kind == .engrave && $0.0.operation.engraving?.probeSurface == true }
                         .map { (depth: $0.0.operation.engraving?.depth ?? 0.15, moves: $0.1.moves) }
                     let task = Task.detached(priority: .userInitiated) { () -> Posted in
-                        var posted = CR1Post.programWithLineMap(
+                        var posted = GRBLPost.programWithLineMap(
                             header: .init(programName: fileName, setupName: setupName, tool: tool, operationNames: names,
                                           stockDescription: stockName),
                             rpm: rpm, paths: groupPaths)
@@ -501,7 +501,7 @@ extension AppModel {
                         }
                         if let probeNote { report.issues.append(Issue(.info, probeNote)) }
                         if probe != nil {
-                            report.issues.append(Issue(.info, "The engraving follows the face as probed: a probing step comes first in the guided job (M111), the program turns CRWrite's compensation on (M112) and off (M113)."))
+                            report.issues.append(Issue(.info, "The engraving follows the face as probed: a probing step comes first in the guided job (M111), the program turns the sender's compensation on (M112) and off (M113)."))
                         }
                         return (posted, report, TimeEstimate.seconds(groupPaths), hits, probe)
                     }
@@ -549,7 +549,7 @@ extension AppModel {
                     }
                     if outside > 0, r.operationProgram.indices.contains(k),
                        let pi = allPrograms.firstIndex(where: { $0.index == r.operationProgram[k] }), let q = first {
-                        allPrograms[pi].report.issues.append(Issue(.error, "\(outside) move\(outside == 1 ? "" : "s") leave the CR-1's travel (first at machine \(String(format: "X%.2f Y%.2f Z%.2f", q.x, q.y, q.z)))."))
+                        allPrograms[pi].report.issues.append(Issue(.error, "\(outside) move\(outside == 1 ? "" : "s") leave the machine's travel (first at machine \(String(format: "X%.2f Y%.2f Z%.2f", q.x, q.y, q.z)))."))
                     }
                 }
             }
@@ -726,7 +726,7 @@ extension AppModel {
         // program (it removes nothing).
         let size = displayStockSize ?? stock.map { setup.stockSize($0) } ?? SIMD3(10, 10, 10)
         let protrusion = viewSide == -1 ? (currentPrepStage?.protrusion ?? 3) : effectiveProtrusion
-        // In the clamp kit the first tool probes electrically; elsewhere the Fisher edge finder.
+        // In the clamp kit the first tool probes electrically; elsewhere the edge finder.
         let electrical = viewSide >= 0 && !setup.onBed && AppSettings.shared.clampKitProbing == .electrical
         let probeTool = electrical ? (r.planned.first?.tool ?? EdgeFinding.tool) : EdgeFinding.tool
         var probeMoves = EdgeFinding.moves(stock: size, depth: min(electrical ? 1.0 : 1.5, max(protrusion - 0.5, 0.5)), radius: probeTool.diameter / 2)

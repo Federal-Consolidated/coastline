@@ -56,7 +56,7 @@ extension AppModel {
         let hits = (viewSide == -1 ? prepPrograms : programs.filter { $0.side == viewSide }).flatMap(\.clearanceHits)
         guard !hits.isEmpty else { return }
         let o = SIMD3<Float>(workOrigin(stockSize: displayStockSize ?? setup.stockSize(stock)))
-        let red = SIMD4<UInt8>(255, 40, 40, 255)
+        let red = SceneColor.danger
         var segs: [LineSegment] = []
         for h in hits {
             let c = SIMD3<Float>(h.position) + o

@@ -1,7 +1,7 @@
 import Foundation
 
 /// A material Coastline knows how to cut. Values are **starting points for a carbide tool on the
-/// CR-1**, a light machine with a spindle limited to 8000 RPM. The feeds engine scales
+/// machine**, a light machine with a spindle limited to 8000 RPM. The feeds engine scales
 /// them by tool diameter, flutes and engagement, and the job journal tunes them from
 /// real results.
 public struct Material: Identifiable, Hashable, Sendable, Codable {
@@ -34,7 +34,7 @@ public struct Material: Identifiable, Hashable, Sendable, Codable {
         }
     }
 
-    /// How hard this material is on the CR-1. It decides how conservative the planner is.
+    /// How hard this material is on the machine. It decides how conservative the planner is.
     public enum Difficulty: Int, Comparable, CaseIterable, Sendable, Codable {
         case easy, moderate, careful, experimental
 
@@ -51,10 +51,10 @@ public struct Material: Identifiable, Hashable, Sendable, Codable {
 
         public var explanation: String {
             switch self {
-            case .easy: "Cuts cleanly on the CR-1 with standard settings."
+            case .easy: "Cuts cleanly on the machine with standard settings."
             case .moderate: "Needs sharp tools and the right lubricant, but is routine."
             case .careful: "Light radial engagement, low speed and strict load limits. Expect faster tool wear."
-            case .experimental: "Possible on the CR-1, but at its limits. Make test cuts in scrap first."
+            case .experimental: "Possible on the machine, but at its limits. Make test cuts in scrap first."
             }
         }
     }
@@ -72,10 +72,10 @@ public struct Material: Identifiable, Hashable, Sendable, Codable {
 
     // MARK: Cutting data (carbide, starting points)
 
-    /// Surface speed range, m/min. On the CR-1 small tools often hit the 8000 RPM cap first.
+    /// Surface speed range, m/min. On the machine small tools often hit the 8000 RPM cap first.
     public var surfaceSpeed: ClosedRange<Double>
     /// Feed per tooth relative to 6061 aluminium (1.0) at the same diameter. The aluminium
-    /// anchor comes from Coast Runner's feeds & speeds master document.
+    /// anchor comes from the maker's feeds & speeds master document.
     public var chipLoadFactor: Double
     /// Max radial engagement for adaptive roughing, as a fraction of tool diameter.
     public var adaptiveStepoverMax: Double

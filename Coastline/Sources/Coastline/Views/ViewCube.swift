@@ -5,7 +5,7 @@ import Viewport
 /// The orientation cube, in the style of PreForm's: a cube with bevelled edges and cut corners.
 /// The 6 faces (squares with clipped corners), the 12 edge strips (long rectangles) and the 8
 /// hexagonal corners are all clickable. Faces give the standard views, edges the views between two
-/// faces, corners the isometric views. Faces are named for the CR-1: TOOL is the side the
+/// faces, corners the isometric views. Faces are named for the machine: TOOL is the side the
 /// spindle comes from. Clicks ease the camera round (`ViewportRenderer.moveCamera`).
 struct ViewCube: View {
     let camera: OrbitCamera

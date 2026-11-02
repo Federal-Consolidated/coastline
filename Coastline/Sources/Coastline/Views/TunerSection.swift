@@ -62,7 +62,7 @@ struct TunerSection: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text("Pace")
-                InfoTip(text: "Feeds (and roughing engagement) relative to the recommended values. Faster saves time but wears tools much faster (Taylor: life falls with the 4th power of speed) and can chatter on the CR-1.")
+                InfoTip(text: "Feeds (and roughing engagement) relative to the recommended values. Faster saves time but wears tools much faster (Taylor: life falls with the 4th power of speed) and can chatter on the machine.")
                 Spacer()
                 Text("\(Int((model.tuning.pace * 100).rounded())) %").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
             }
@@ -96,7 +96,7 @@ struct TunerSection: View {
             curve
             DisclosureGroup("Rates") {
                 NumberField(title: "Machine per hour", value: $model.costModel.machinePerHour, unit: c.currency,
-                            tip: "Power, wear and maintenance of the CR-1 per running hour.")
+                            tip: "Power, wear and maintenance of the machine per running hour.")
                 NumberField(title: "Your time per hour", value: $model.costModel.labourPerHour, unit: c.currency,
                             tip: "0 for a hobby. Used for the setup time.")
                 NumberField(title: "Setup per clamping", value: $model.costModel.setupMinutes, unit: "min")

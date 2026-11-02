@@ -58,7 +58,7 @@ struct ViewModeBar: View {
                 Toggle("Perspective", isOn: $model.perspective)
                 Toggle("Step Card", isOn: $model.showStepCard)
                 Toggle("Next Cut Face Highlight", isOn: $model.showCutFace)
-                Toggle("Back Faces in Red", isOn: $model.showUndercutOverlay)
+                Toggle("Highlight Back Faces", isOn: $model.showUndercutOverlay)
                 Divider()
                 Button("Sweep the Travel", systemImage: "move.3d") { model.sweepTravel() }
                     .disabled(!model.machineLoaded)

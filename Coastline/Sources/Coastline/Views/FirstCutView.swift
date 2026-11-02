@@ -2,7 +2,7 @@ import AppKit
 import CoastlineCore
 import SwiftUI
 
-/// The first cut on the real CR-1 (docs/FIRST_CUT.md) as a checklist: every stage in order,
+/// The first cut on the real machine (docs/FIRST_CUT.md) as a checklist: every stage in order,
 /// ticked off as you go (remembered), with the buttons that do each stage's part in Coastline:
 /// the test coupon, the guided job, the coupon in POM and aluminium, recording what you measured.
 /// Never skip a stage for a new kind of operation.
@@ -16,22 +16,22 @@ struct FirstCutStage: Identifiable {
 
 enum FirstCut {
     static let stages: [FirstCutStage] = [
-        .init(id: "crwrite", title: "CRWrite basics", detail: [
-            "Connect, check the DRO, home with $H, jog in both modes and check the soft limits (CRWrite's own checklist).",
+        .init(id: "basics", title: "Machine basics", detail: [
+            "Connect, check the DRO, home with $H, jog in both modes and check the soft limits (the machine's own checklist).",
         ]),
         .init(id: "coupon", title: "Open the test coupon", detail: [
             "34 × 24 × 6 in machinable wax, with only tools you have: facing, the outline, a pocket, two holes and a step.",
             "About 8 minutes of cutting. Every feature has a size to measure afterwards.",
         ], action: .openCoupon),
         .init(id: "export", title: "Export the guided job", detail: [
-            "Machining ▸ Export Guided Job for CRWrite, then open it in CRWrite and pick the job.",
+            "Machining ▸ Export Guided Job for the sender, then open it in the sender and pick the job.",
         ], action: .exportJob),
         .init(id: "dry", title: "Dry run: no stock, no tool", detail: [
             "Run the helper steps (home, tool-change position) and watch where the spindle goes.",
         ]),
         .init(id: "edge", title: "Edge finding on scrap", detail: [
             "Clamp a scrap block and edge-find X and Y.",
-            "In CRWrite, G54 X/Y should now be the middle of the block: jog to X0 Y0 to see it.",
+            "In the sender, G54 X/Y should now be the middle of the block: jog to X0 Y0 to see it.",
         ]),
         .init(id: "air", title: "Touch off and air cut", detail: [
             "Fit the tool at the stick-out shown and touch off with paper.",
@@ -82,8 +82,8 @@ struct FirstCutView: View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("First Cut on the CR-1").font(.title2.weight(.semibold))
-                    Text("Coastline has only run against CRWrite's simulated mill so far. Bring it up on the machine in this order, and never skip a stage for a new kind of operation.")
+                    Text("First Cut on the Machine").font(.title2.weight(.semibold))
+                    Text("Coastline has only run against a simulated mill so far. Bring it up on the machine in this order, and never skip a stage for a new kind of operation.")
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     ProgressView(value: Double(done.count), total: Double(FirstCut.stages.count)) {
                         Text("\(done.count) of \(FirstCut.stages.count) done").font(.caption).foregroundStyle(.secondary)
@@ -124,7 +124,7 @@ struct FirstCutView: View {
             Button { setDone(stage.id, !isDone) } label: {
                 Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundStyle(isDone ? Color.green : Color.secondary)
+                    .foregroundStyle(isDone ? Theme.ok : Color.secondary)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isDone ? "Done: \(stage.title)" : "Not done: \(stage.title)")
@@ -149,7 +149,7 @@ struct FirstCutView: View {
         case .exportJob:
             Button("Export Guided Job…", systemImage: "list.bullet.rectangle.portrait") { exportJob() }
                 .disabled(!isCouponOpen || model.programs.isEmpty)
-                .help(isCouponOpen ? "Save the coupon's guided job and open it in CRWrite" : "Open the coupon first")
+                .help(isCouponOpen ? "Save the coupon's guided job and open it in the sender" : "Open the coupon first")
         case .material(let m):
             Button("Open the Coupon in \(MaterialLibrary.material(id: m)?.name ?? m)", systemImage: "arrow.triangle.2.circlepath") {
                 Task { await openCoupon(material: m) }
@@ -173,13 +173,13 @@ struct FirstCutView: View {
         panel.allowedContentTypes = [.init(filenameExtension: "crproj") ?? .data]
         let material = model.stock.flatMap { MaterialLibrary.material(id: $0.materialID)?.name } ?? "Coupon"
         panel.nameFieldStringValue = "First-Cut Coupon (\(material)).crproj"
-        panel.message = "Save the guided job. Open it in CRWrite's Guided Mode."
+        panel.message = "Save the guided job. Open it in the sender's guided mode."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try model.exportGuidedJob(to: url, measuring: inventory.inventory.measuring)
             message = "Saved \(url.lastPathComponent)."
             setDone("export", true)
-            if let app = AppModel.crwriteURL {
+            if let app = AppModel.senderAppURL(for: url) {
                 NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
             } else {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -213,7 +213,7 @@ struct FirstCutView: View {
                         Text(unit).foregroundStyle(.secondary).frame(width: 52, alignment: .leading)
                         if let v = values[key] {
                             Image(systemName: abs(v - value) <= 0.5 ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                                .foregroundStyle(abs(v - value) <= 0.5 ? .green : .orange)
+                                .foregroundStyle(abs(v - value) <= 0.5 ? Theme.ok : Theme.warning)
                                 .accessibilityLabel(abs(v - value) <= 0.5 ? "Same as the default" : "Differs from the default")
                         }
                     }
@@ -222,11 +222,11 @@ struct FirstCutView: View {
                 }
             }
         } header: {
-            Text("Firmware settings ($$ in CRWrite's console)")
+            Text("Firmware settings ($$ in the sender's console)")
         } footer: {
             Text(differing.isEmpty
                  ? "Coastline's time estimates use the firmware defaults shown in grey. Type what $$ prints to compare."
-                 : "Differs from the defaults (\(differing.map(\.0).joined(separator: ", "))): the time estimates are off by that much until the CR-1 profile carries your values (the limits themselves stay the firmware's).")
+                 : "Differs from the defaults (\(differing.map(\.0).joined(separator: ", "))): the time estimates are off by that much until the machine profile carries your values (the limits themselves stay the firmware's).")
         }
     }
 

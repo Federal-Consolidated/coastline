@@ -10,7 +10,7 @@ struct WelcomeView: View {
         ("square.3.layers.3d.down.right", "3 · Stock prep", "Each clamping on the bed. Press on the stop or a C-clamp and drag it; a picked C-clamp turns with its red ring. Anything that collides turns red."),
         ("square.and.arrow.down.on.square", "4 · Clamp kit", "Slide the universal clamps along the T-slots, drag the stock to stand it out. The orange strips are what the jaws hold: never cut."),
         ("point.topleft.down.to.point.bottomright.curvepath", "5 · Machining", "Operations, the quality ↔ time tuner, generation, the simulation. Add text to engrave."),
-        ("checklist", "6 · Review", "Walk through the job (Tour), export the guided job for CRWrite, and afterwards record it in the journal: tool wear, stock and feeds learn from it."),
+        ("checklist", "6 · Review", "Walk through the job (Tour), export the guided job for the sender, and afterwards record it in the journal: tool wear, stock and feeds learn from it."),
     ]
 
     var body: some View {
@@ -19,7 +19,7 @@ struct WelcomeView: View {
                 Image(systemName: "water.waves").font(.system(size: 34, weight: .semibold)).foregroundStyle(Theme.accent)
                 VStack(alignment: .leading) {
                     Text("Welcome to Coastline").font(.title.weight(.semibold))
-                    Text("From a CAD part to a guided job on your Coast Runner CR-1, one stage at a time.").foregroundStyle(.secondary)
+                    Text("From a CAD part to a guided job on your machine, one stage at a time.").foregroundStyle(.secondary)
                 }
             }
             ForEach(stages, id: \.1) { s in
@@ -41,7 +41,7 @@ struct WelcomeView: View {
                 GridRow { Text("Playback").bold(); Text("Space plays; ← → a move, ⌥← ⌥→ an operation, ⌘[ ⌘] a step") }
             }
             .font(.callout)
-            Label("Every new program runs as an air cut first (spindle off, 10 mm up). Never use compressed air on the CR-1: vacuum and wipe.",
+            Label("Every new program runs as an air cut first (spindle off, 10 mm up). Never use compressed air on the machine: vacuum and wipe.",
                   systemImage: "shield.lefthalf.filled")
                 .font(.callout).foregroundStyle(.secondary)
             HStack {

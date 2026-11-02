@@ -87,7 +87,7 @@ public struct Operation: Identifiable, Equatable, Sendable, Codable {
             data.notes.append("Stepover \(Length.mm(data.stepover)) mm leaves cusps about \(Int((scallop * 1000).rounded())) µm high.")
         }
         if abs(feedScale - 1) > 1e-6 {
-            let cap = MachineProfile.cr1.maxFeedAnyDirection
+            let cap = MachineProfile.standard.maxFeedAnyDirection
             data.feed = min((data.feed * feedScale).rounded(), cap)
             data.plungeFeed = min((data.plungeFeed * feedScale).rounded(), cap)
             data.rampFeed = min((data.rampFeed * feedScale).rounded(), cap)

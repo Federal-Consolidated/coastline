@@ -20,11 +20,11 @@ enum PathColorMode: String, CaseIterable, Identifiable {
     /// What the colours mean, in one line.
     var explanation: String {
         switch self {
-        case .moveType: "Blue cutting, yellow leading in and out, pink going down into the material, red dashed rapids through the air"
-        case .feed: "Blue slow to red fast: where the feed drops (corners, ramps)"
+        case .moveType: "Bright cutting, light gray leading in and out, dark gray going down into the material, gray dashed rapids through the air"
+        case .feed: "Dark slow to bright fast: where the feed drops (corners, ramps)"
         case .depth: "Light near the face to dark at the deepest"
-        case .operation: "One colour per operation, as on the timeline bar"
-        case .tool: "One colour per tool"
+        case .operation: "One gray per operation, as on the timeline bar"
+        case .tool: "One gray per tool"
         }
     }
 }
@@ -45,8 +45,8 @@ struct InspectedMove: Equatable {
 }
 
 extension AppModel {
-    static let palette: [SIMD4<UInt8>] = [SIMD4(46, 160, 255, 255), SIMD4(52, 199, 89, 255), SIMD4(255, 159, 10, 255),
-                                          SIMD4(191, 90, 242, 255), SIMD4(255, 55, 95, 255), SIMD4(100, 210, 255, 255)]
+    /// Grays far enough apart to tell neighbouring operations or tools apart.
+    static let palette: [SIMD4<UInt8>] = [240, 170, 210, 120, 190, 145].map { SceneColor.line($0) }
 
     private func colour(for e: ToolpathTimeline.Entry, maxFeed: Double, depth: ClosedRange<Double>) -> SIMD4<UInt8> {
         if e.move.role == .rapid { return PathColor.rapid }
@@ -56,11 +56,11 @@ extension AppModel {
         case .tool: return Self.palette[e.program % Self.palette.count]
         case .feed:
             let t = min(max(e.move.feed / max(maxFeed, 1), 0), 1)
-            return SIMD4(UInt8(40 + 215 * t), UInt8(170 - 120 * t), UInt8(255 - 215 * t), 255)
+            return SceneColor.line(UInt8(90 + 155 * t))
         case .depth:
             let span = max(depth.upperBound - depth.lowerBound, 1e-6)
             let t = min(max((depth.upperBound - e.move.z) / span, 0), 1)
-            return SIMD4(UInt8(170 - 140 * t), UInt8(230 - 120 * t), 255, 255)
+            return SceneColor.line(UInt8(235 - 145 * t))
         }
     }
 
@@ -549,7 +549,7 @@ extension AppModel {
         if loose.pieces > 0 {
             let o = SimSurfaces.overlay(cols: cols, rows: rows, x0: x0, y0: y0, cell: cell, top: h, mask: loose.mask)
             if !o.p.isEmpty, let m = SceneMesh(device: renderer.device, id: "simstock.loose", positions: o.p, normals: o.n,
-                                              indices: (0..<UInt32(o.p.count / 3)).map { $0 }, color: SIMD4(0.95, 0.15, 0.75, 1), transform: sim.transform) {
+                                              indices: (0..<UInt32(o.p.count / 3)).map { $0 }, color: SceneColor.dangerSurface, transform: sim.transform) {
                 m.depthBias = 1
                 m.isVisible = sim.isVisible
                 scene.setMesh(m)

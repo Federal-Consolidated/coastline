@@ -120,7 +120,7 @@ public struct Tool: Identifiable, Hashable, Sendable, Codable {
     public var unitCost: Double?
     public var notes: String
     public var presets: [Preset]
-    /// Where it came from, e.g. "Fusion library CR-tools-for-Aluminum.tools, T2".
+    /// Where it came from, e.g. "Fusion library tools-aluminium.tools, T2".
     public var source: String
 
     // MARK: Usage (filled from the job journal)

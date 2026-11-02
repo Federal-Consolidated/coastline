@@ -100,7 +100,7 @@ public enum ToolCatalog {
         tool(n, name, kind, d: inch * 25.4, flutes: flutes, loc: locInch * 25.4, stickout: stickout, length: lengthInch * 25.4, cost: cost,
              vendor: "Harvey Tool", part: part,
              link: "https://www.harveytool.com/products/tool-details-\(part)",
-             why: why + " Spins at the CR-1's 8000 RPM with a feed of a few tens of mm/min; an ultra-precision collet (runout ≤ 5 µm) makes it last.")
+             why: why + " Spins at the machine's 8000 RPM with a feed of a few tens of mm/min; an ultra-precision collet (runout ≤ 5 µm) makes it last.")
     }
 
     private static func threadMill(_ n: Int, _ spec: ThreadSpec, d: Double, flutes: Int, reach: Double, shank: Double = 3,

@@ -1,9 +1,9 @@
-"""The CR-1 clamp kit, from a hand-modelled Rhino file (CR-1 Clamp Kit - Accessories.3dm).
+"""The clamp kit, from a hand-modelled Rhino file (clamp-kit.3dm).
 
-The file is a reference scene on the CR-1 bed (z = 0 is the bed top, −y points at the spindle,
+The file is a reference scene on the machine bed (z = 0 is the bed top, −y points at the spindle,
 x runs left–right), with two universal clamps, spacers, an acetal squaring brick and hex
 eccentric clamps laid out along the bed. This module cuts it into kits, each in its own local
-frame, and stores the meshes in `resources/fixtures/cr1_clamp_kit.npz` for the app:
+frame, and stores the meshes in `resources/fixtures/clamp_kit.npz` for the app:
 
     clamp       universal clamp: body, soft jaw, feet, insulators, bolts, washers, T-slot nuts
     spacer_u    U-shaped spacer block (raises thin stock in the clamp)
@@ -16,7 +16,7 @@ the kit), z up from the bed top. Measurements used by the app (UniversalClamp.sw
 the same geometry.
 
 Rebuild after editing the Rhino file:
-    uv run python -m coastline_engine.fixture_kit "/path/to/CR-1 Clamp Kit - Accessories.3dm"
+    uv run python -m coastline_engine.fixture_kit "/path/to/clamp-kit.3dm"
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ import numpy as np
 
 from .cad_import import Mesh, tessellate
 
-OUT = Path(__file__).resolve().parents[2] / "resources/fixtures/cr1_clamp_kit.npz"
+OUT = Path(__file__).resolve().parents[2] / "resources/fixtures/clamp_kit.npz"
 
 # Linear RGB.
 ALUMINIUM = (0.50, 0.52, 0.56)
@@ -161,7 +161,7 @@ ZINC = (0.62, 0.64, 0.66)
 CAST_IRON = (0.04, 0.04, 0.045)
 
 # The C-clamp model (resources/fixtures/c_clamp.step: frame, screw, swivel pad, T-handle)
-# is a generic clamp: 60 mm from the fixed jaw to the screw boss, 47.5 mm throat. Coast Runner's
+# is a generic clamp: 60 mm from the fixed jaw to the screw boss, 47.5 mm throat. The maker's
 # kit has 3" clamps: scaled along the screw to open 76.2 mm with the pad (9 mm) on, and in depth
 # to a 50 mm throat (FlatPrep.clampOpening / clampThroat).
 C_JAW_X, C_AXIS_Y = 11.0, 24.55      # fixed jaw face, screw axis (model file)

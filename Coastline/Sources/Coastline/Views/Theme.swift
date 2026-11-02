@@ -11,25 +11,31 @@ typealias Operation = CoastlineCore.Operation
 /// controls (sidebar, toolbar, inspector, search) get glass automatically; custom floating
 /// surfaces use `glassEffect` grouped in `GlassEffectContainer`s.
 enum Theme {
-    /// The accent chosen in Settings (sea teal #2BB3B8 by default, close to CRWrite's teal so
-    /// the two apps feel related). Read inside a view's body, so a change redraws it.
+    /// The accent chosen in Settings: a gray (graphite by default). The palette is black, white and
+    /// gray; red and yellow are kept for safety (Stop, E-stop, alarms; cautions). Read inside a
+    /// view's body, so a change redraws it.
     @MainActor static var accent: Color { AppSettings.shared.accent.color }
     /// Behind everything (the window, under the glass sidebar and the panels): near-black in
     /// dark mode so the part and the toolpaths stand out; the system's own in light mode.
     static let windowBackground = Color(nsColor: NSColor(name: "coastline.window") { a in
         a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(srgbRed: 0.050, green: 0.054, blue: 0.064, alpha: 1) : .windowBackgroundColor
+            ? NSColor(white: 0.055, alpha: 1) : .windowBackgroundColor
     })
     /// Behind the forms in the panels (their sections sit on it as cards).
     static let panelBackground = Color(nsColor: NSColor(name: "coastline.panel") { a in
         a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(srgbRed: 0.066, green: 0.071, blue: 0.083, alpha: 1) : .windowBackgroundColor
+            ? NSColor(white: 0.072, alpha: 1) : .windowBackgroundColor
     })
+    /// Stop, E-stop, alarms, collisions: the one red.
     static let danger = Color.red
-    static let warning = Color.orange
+    /// Cautions the operator must notice: the one yellow.
+    static let warning = Color(nsColor: .systemYellow)
     /// Material a prep step mills off (on the bar in 3D, its numbers, the step list).
-    static let prepCut = Color(red: 1.0, green: 0.55, blue: 0.1)
-    static let ok = Color.green
+    static let prepCut = Color(white: 0.85)
+    /// Done, fits, in tolerance: no colour, just a bright neutral.
+    static let ok = Color(nsColor: NSColor(name: "coastline.ok") { a in
+        a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 0.88, alpha: 1) : NSColor(white: 0.25, alpha: 1)
+    })
 
     static func color(_ severity: Issue.Severity) -> Color {
         switch severity {
@@ -49,10 +55,10 @@ enum Theme {
 
     static func color(_ difficulty: Material.Difficulty) -> Color {
         switch difficulty {
-        case .easy: .green
-        case .moderate: .teal
-        case .careful: .orange
-        case .experimental: .red
+        case .easy: .secondary
+        case .moderate: .primary
+        case .careful: warning
+        case .experimental: danger
         }
     }
 }

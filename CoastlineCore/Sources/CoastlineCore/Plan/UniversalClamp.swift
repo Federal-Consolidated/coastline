@@ -1,8 +1,8 @@
 import Foundation
 import simd
 
-/// The CR-1 universal clamp kit, measured from a hand-modelled Rhino file
-/// (`CR-1 Clamp Kit - Accessories.3dm` → `resources/fixtures/cr1_clamp_kit.npz`, see
+/// The universal clamp kit, measured from a hand-modelled Rhino file
+/// (`clamp-kit.3dm` → `resources/fixtures/clamp_kit.npz`, see
 /// `engine/coastline_engine/fixture_kit.py`).
 ///
 /// One clamp is a C-shaped aluminium body on an insulator sheet, bolted into **both** T-slots
@@ -196,7 +196,7 @@ public enum SideClamps {
     public static let brickInnerY = 9.52
     public static let brickFrontLocal = 24.75
 
-    /// The table on the CR-1 model, with the stop's face from where it bolts in.
+    /// The table on the machine model, with the stop's face from where it bolts in.
     public static func table(topX: Double, frontSlotZ: Double) -> FlatPrep.Table {
         FlatPrep.Table(topX: topX, stopNorthZ: frontSlotZ - UniversalClamp.frontSlotX + brickFrontLocal)
     }

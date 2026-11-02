@@ -219,7 +219,7 @@ struct MeasureHUD: View {
                 ForEach(Array(model.measurePoints.enumerated()), id: \.offset) { i, p in
                     HStack(alignment: .firstTextBaseline) {
                         Text(i == 0 ? "A" : "B").font(.caption.weight(.bold))
-                            .frame(width: 18, height: 18).background(Color.yellow.opacity(0.85), in: Circle())
+                            .frame(width: 18, height: 18).background(Color.white.opacity(0.9), in: Circle())
                             .foregroundStyle(.black)
                         Text(p.info?.summary ?? (model.part?.exact == true ? "Measuring…" : "Point on render mesh"))
                             .font(.callout)
@@ -403,21 +403,21 @@ struct EmptyWorkspacePrompt: View {
     }
 }
 
-/// Shown while edge finding plays with the Fisher edge finder: the animation is only the order of
+/// Shown while edge finding plays with the edge finder: the animation is only the order of
 /// the edges; at the machine it's all done by hand.
 struct ManualEdgeFindingNote: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "hand.raised.fill").font(.title3).foregroundStyle(.orange).accessibilityHidden(true)
+            Image(systemName: "hand.raised.fill").font(.title3).foregroundStyle(Theme.warning).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Simulation only: by hand at the machine").font(.callout.weight(.semibold))
-                Text("The CR-1 can't feel this stock (not insulated, or against the acetal stop on the bed). In CRWrite's Manual Operations, jog the spinning edge finder to each edge until it kicks, then store it. This shows only the order and the edges.")
+                Text("The machine can't feel this stock (not insulated, or against the acetal stop on the bed). In Machine Control, jog the spinning edge finder to each edge until it kicks, then store it. This shows only the order and the edges.")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(12)
         .frame(width: 340, alignment: .leading)
-        .glassEffect(.regular.tint(.orange.opacity(0.12)), in: .rect(cornerRadius: 14))
+        .glassEffect(.regular.tint(Theme.warning.opacity(0.12)), in: .rect(cornerRadius: 14))
         .accessibilityElement(children: .combine)
     }
 }

@@ -17,6 +17,8 @@ let suites: [(String, [TestCase])] = [
     ("Journal", journalTests),
     ("Triage", triageTests),
     ("PrepGeometry", prepGeometryTests),
+    ("Program", programTests),
+    ("Dexel", dexelTests),
 ]
 
 setvbuf(stdout, nil, _IONBF, 0)

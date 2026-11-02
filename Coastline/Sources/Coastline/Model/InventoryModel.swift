@@ -79,7 +79,7 @@ final class InventoryModel {
         return InventoryStore.defaultURL
     }
 
-    /// Coast Runner's Fusion libraries shipped with Coastline (`resources/libraries`).
+    /// The maker's Fusion libraries shipped with Coastline (`resources/libraries`).
     static var bundledToolLibraries: [URL] {
         let dir = AppModel.repoRoot.appendingPathComponent("resources/libraries")
         let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
@@ -125,7 +125,7 @@ final class InventoryModel {
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         do {
-            let result = try FusionToolImport.load(url)
+            let result = try ToolLibraryImport.load(url)
             let known = Set(inventory.tools.map { "\($0.vendor)|\($0.partNumber)|\($0.diameter)" })
             let fresh = result.tools.filter { $0.partNumber.isEmpty || !known.contains("\($0.vendor)|\($0.partNumber)|\($0.diameter)") }
             update { $0.tools += fresh }

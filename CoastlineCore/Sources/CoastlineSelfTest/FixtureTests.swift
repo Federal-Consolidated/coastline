@@ -1,5 +1,5 @@
 import CoastlineCore
-import CRCore
+import MillCore
 import Foundation
 import simd
 
@@ -92,7 +92,7 @@ let fixtureTests: [TestCase] = [
         // two rounds.
         var m = GuidedJobBuilder.MillDown(raw: SIMD3(63.5, 85, 25.4), target: 40, tool: tool, neededLength: 60)
         let (plan, items) = m.programs(material: al, sawn: true)
-        // Coast Runner's way: one end faced, the bar keeps its length.
+        // The maker's way: one end faced, the bar keeps its length.
         try expectEqual(plan.sawLength, nil)
         try expect(plan.faceEnds && abs(plan.cut - 23.5) < 1e-9 && plan.thickness == 25.4 && plan.finalLength == 84.5, "\(plan)")
         try expectEqual(items.map(\.title), ["Face end A", "Edge, round 1 of 2 (to 51.75 mm)", "Edge, round 2 of 2 (to 40 mm)"])
@@ -290,7 +290,7 @@ let fixtureTests: [TestCase] = [
                         fluteLength: 19, stickout: 28, overallLength: 63.5)
         let stock = StockItem(materialID: "al-6061", sizeX: 85, sizeY: 63.5, sizeZ: 25.4)
         let g = FacingProgram.make(width: 38, length: 85, depth: 0.25, tool: tool, data: FeedsEngine.compute(tool: tool, material: al, kind: .facing),
-                                   machine: .cr1, title: "T")
+                                   machine: .standard, title: "T")
         var input = GuidedJobBuilder.Input(partName: "Pendant", material: al, stock: stock, stockSize: SIMD3(40, 84, 25.4),
                                            setupName: "Setup 1", programs: [.init(tool: tool, gcode: g, operationNames: ["Facing"], minutes: 3)],
                                            checkpoints: [], measuring: [], setupImage: nil, squareStockFirst: true)
@@ -298,7 +298,7 @@ let fixtureTests: [TestCase] = [
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("coastline-\(UUID()).crproj")
         defer { try? FileManager.default.removeItem(at: url) }
         try GuidedJobBuilder.write(input, to: url)
-        let project = try CRProject.open(url: url)
+        let project = try JobPackage.open(url: url)
         try project.verify()
         try expectEqual(project.jobs.map(\.title), ["Square and Size the Stock", "Setup 1 · Pendant"])
         let steps = project.jobs[0].steps.map(\.title)
@@ -313,7 +313,7 @@ let fixtureTests: [TestCase] = [
         try expectEqual(mounts, 3)
         try expectEqual(steps.filter { $0 == "Fit the Edge Finder" }.count, mounts)
         try expectEqual(steps.filter { $0.hasPrefix("Touch Off · ") }.count, mounts)
-        // By hand on the bed (nothing insulated); after the first clamping the CR-1 brings the
+        // By hand on the bed (nothing insulated); after the first clamping the machine brings the
         // finder near each of the four edges.
         try expect(steps.contains("Finding the Stock on the Bed"), "\(steps)")
         try expectEqual(steps.filter { $0.hasPrefix("Move Near the ") }.count, 4 * (mounts - 1))
@@ -353,7 +353,7 @@ let fixtureTests: [TestCase] = [
                         fluteLength: 9.5, stickout: 20, overallLength: 38)
         let stock = StockItem(materialID: "al-6061", sizeX: 40, sizeY: 60, sizeZ: 10)
         let data = FeedsEngine.compute(tool: tool, material: al, kind: .facing)
-        let g = FacingProgram.make(width: 40, length: 60, depth: 0.25, tool: tool, data: data, machine: .cr1, title: "T")
+        let g = FacingProgram.make(width: 40, length: 60, depth: 0.25, tool: tool, data: data, machine: .standard, title: "T")
         var input = GuidedJobBuilder.Input(
             partName: "Pendant", material: al, stock: stock, stockSize: SIMD3(40, 60, 10), setupName: "Setup 1",
             programs: [.init(tool: tool, gcode: g, operationNames: ["Facing"], minutes: 3, side: 0),
@@ -366,7 +366,7 @@ let fixtureTests: [TestCase] = [
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("coastline-\(UUID()).crproj")
         defer { try? FileManager.default.removeItem(at: url) }
         try GuidedJobBuilder.write(input, to: url)
-        let project = try CRProject.open(url: url)
+        let project = try JobPackage.open(url: url)
         try project.verify()
         let steps = project.jobs[0].steps
         let mount = try unwrap(steps.first { $0.title == "Mount the Stock" })
@@ -377,7 +377,7 @@ let fixtureTests: [TestCase] = [
         try expectEqual(steps[flip + 2].title, "Fit the Edge Finder")
         // The 12 and 17 mm wrenches, the collet for the shank, the stick-out.
         try expect(steps[flip + 2].markdown.contains("12 mm wrench") && steps[flip + 2].markdown.contains("17 mm wrench"), steps[flip + 2].markdown)
-        // Side B sits where side A did: the CR-1 drives the finder near each edge.
+        // Side B sits where side A did: the machine drives the finder near each edge.
         let near = try unwrap(steps.first { $0.title == "Move Near the Left Edge (Y)" })
         let nearCode = String(decoding: try unwrap(GuidedJobBuilder.build(input).files[near.gcodePath]), as: UTF8.self)
         try expect(nearCode.contains("G53 G0 Z-1") && nearCode.contains("G54 G0 X0 Y-") && nearCode.split(separator: "\n").allSatisfy { $0.count <= 79 }, nearCode)

@@ -100,7 +100,7 @@ extension AppModel {
             ix += [base, base + 1, base + 2, base, base + 2, base + 3]
         }
         guard !ix.isEmpty, let m = SceneMesh(device: renderer.device, id: "grip.strips", positions: p, normals: n, indices: ix,
-                                             color: SIMD4(1.0, 0.45, 0.05, 0.45)) else { return }
+                                             color: SceneColor.surface(0.95, alpha: 0.45)) else { return }
         m.unlit = true
         m.depthBias = 0.002
         scene.setMesh(m)

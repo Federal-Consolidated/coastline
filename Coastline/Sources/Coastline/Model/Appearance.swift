@@ -63,10 +63,10 @@ extension AppModel {
     }
 
     /// How a clamp-kit part looks wherever it's drawn (workspace, inventory): the insulating
-    /// feet and washers are clear plastic, the rest keeps its kit colour.
+    /// feet and washers are clear plastic, the rest keeps its kit colour's brightness, in gray.
     static func kitAppearance(_ p: FixturePart) -> (color: SIMD4<Float>, material: SurfaceMaterial) {
-        if p.role == "insulator" { return (SIMD4(0.86, 0.9, 0.93, 0.35), SurfaceMaterial(metallic: 0, roughness: 0.05, edges: 0.8)) }
-        let c = SIMD4(p.color, 1)
+        if p.role == "insulator" { return (SceneColor.surface(0.9, alpha: 0.35), SurfaceMaterial(metallic: 0, roughness: 0.05, edges: 0.8)) }
+        let c = SIMD4(SIMD3(repeating: SceneColor.luminance(p.color)), 1)
         return (c, fixtureSurface(id: "fixture", color: c))
     }
 

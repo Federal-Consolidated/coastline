@@ -8,36 +8,21 @@ import SwiftUI
 final class AppSettings {
     static let shared = AppSettings()
 
+    /// Grays only (the palette is monotone). Each stays dark enough for white text on it, and is a
+    /// little lighter in dark mode so it still shows on the near-black panels.
     enum Accent: String, CaseIterable, Identifiable {
-        case sea, amber, orange, red, magenta, purple, indigo, blue, green, graphite
+        case graphite, charcoal, steel
         var id: String { rawValue }
-        var title: String {
-            switch self {
-            case .sea: "Sea Teal"
-            case .amber: "Amber"
-            case .orange: "Orange"
-            case .red: "Red"
-            case .magenta: "Magenta"
-            case .purple: "Purple"
-            case .indigo: "Indigo"
-            case .blue: "Blue"
-            case .green: "Green"
-            case .graphite: "Graphite"
-            }
-        }
+        var title: String { rawValue.capitalized }
         var color: Color {
-            switch self {
-            case .sea: Color(red: 0x2B / 255, green: 0xB3 / 255, blue: 0xB8 / 255)
-            case .amber: Color(red: 0.98, green: 0.72, blue: 0.10)
-            case .orange: Color(red: 1.00, green: 0.50, blue: 0.12)
-            case .red: Color(red: 0.93, green: 0.22, blue: 0.24)
-            case .magenta: Color(red: 0.90, green: 0.25, blue: 0.62)
-            case .purple: Color(red: 0.62, green: 0.36, blue: 0.95)
-            case .indigo: Color(red: 0.36, green: 0.40, blue: 0.95)
-            case .blue: Color(red: 0.12, green: 0.52, blue: 1.00)
-            case .green: Color(red: 0.20, green: 0.74, blue: 0.40)
-            case .graphite: Color(red: 0.55, green: 0.57, blue: 0.60)
+            let (dark, light): (CGFloat, CGFloat) = switch self {
+            case .graphite: (0.50, 0.32)
+            case .charcoal: (0.40, 0.20)
+            case .steel: (0.58, 0.42)
             }
+            return Color(nsColor: NSColor(name: "coastline.accent.\(rawValue)") { a in
+                NSColor(white: a.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light, alpha: 1)
+            })
         }
     }
 
@@ -74,7 +59,7 @@ final class AppSettings {
     var referenceBores: Bool { didSet { defaults.set(referenceBores, forKey: "referenceBores") } }
 
     private init() {
-        accent = Accent(rawValue: defaults.string(forKey: "accent") ?? "") ?? .sea
+        accent = Accent(rawValue: defaults.string(forKey: "accent") ?? "") ?? .graphite
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         engines = defaults.integer(forKey: "engines")
         clampKitProbing = ClampKitProbing(rawValue: defaults.string(forKey: "clampKitProbing") ?? "") ?? .electrical

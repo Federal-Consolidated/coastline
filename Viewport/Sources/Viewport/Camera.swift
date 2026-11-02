@@ -62,7 +62,7 @@ public struct OrbitCamera: Equatable, Sendable {
     }
 
     /// Standard views in display space (Z up, the operator looks along +Y).
-    /// `tool` looks down the spindle at the face being cut (the CAM "top" view on the CR-1).
+    /// `tool` looks down the spindle at the face being cut (the CAM "top" view on the machine).
     public enum StandardView: String, CaseIterable, Sendable {
         case tool, front, top, right, left, iso, toolIso
 

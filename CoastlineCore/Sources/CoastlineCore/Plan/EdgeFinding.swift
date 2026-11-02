@@ -1,11 +1,11 @@
 import Foundation
 
 /// The edge finder's visits after a clamping, so the viewer can show them like a program:
-/// the spinning Fisher edge finder comes down beside each edge of the face and creeps in until
+/// the spinning edge finder comes down beside each edge of the face and creeps in until
 /// it kicks (lower and upper edge in X, left and right end in Y), as the guided job's steps do.
 public enum EdgeFinding {
-    /// Fisher A250: 0.2" tip on a 1/4" shank.
-    public static let tool = Tool(id: UUID(uuidString: "E06EF1D0-0000-4000-8000-000000000001")!, name: "Edge finder (Fisher A250)",
+    /// 0.2\" edge finder: 0.2" tip on a 1/4" shank.
+    public static let tool = Tool(id: UUID(uuidString: "E06EF1D0-0000-4000-8000-000000000001")!, name: "Edge finder (0.2\" tip)",
                                   kind: .flatEndMill, diameter: 5.08, shankDiameter: 6.35, flutes: 0, fluteLength: 9,
                                   stickout: 32, overallLength: 63.5)
 

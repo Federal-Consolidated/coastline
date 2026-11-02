@@ -9,7 +9,7 @@ import Viewport
 /// and the later steps' cuts faint with theirs. As bought (and in Holding) every cut shows,
 /// numbered in order.
 extension AppModel {
-    static let prepCutColor = SIMD4<Float>(1.0, 0.55, 0.1, 0.6)
+    static let prepCutColor = SceneColor.surface(0.92, alpha: 0.6)
 
     func layoutPrepBar(plan: FlatPrep.Plan, stage k: Int, origin: SIMD3<Double>, color c: SIMD3<Float>) {
         let scene = renderer.scene
@@ -18,7 +18,7 @@ extension AppModel {
         if let m = Self.boxesMesh(device: renderer.device, id: "stock", boxes: material, origin: origin, color: SIMD4(c, 0.22)) {
             scene.setMesh(m)
         }
-        let edges = material.flatMap { LineSegment.box(min: SIMD3<Float>($0.min + origin), max: SIMD3<Float>($0.max + origin), color: SIMD4(200, 205, 215, 255)) }
+        let edges = material.flatMap { LineSegment.box(min: SIMD3<Float>($0.min + origin), max: SIMD3<Float>($0.max + origin), color: SceneColor.edge) }
         if let l = SceneLines(device: renderer.device, id: "stock.edges", segments: edges) { scene.setLines(l) }
 
         var labels: [SceneLabel] = []
@@ -41,10 +41,10 @@ extension AppModel {
             scene.setMesh(m)
         }
         if let l = SceneLines(device: renderer.device, id: "prep.cut.edges",
-                              segments: grown(now).flatMap { LineSegment.box(min: SIMD3<Float>($0.min + origin), max: SIMD3<Float>($0.max + origin), color: SIMD4(255, 140, 26, 255)) }) {
+                              segments: grown(now).flatMap { LineSegment.box(min: SIMD3<Float>($0.min + origin), max: SIMD3<Float>($0.max + origin), color: SceneColor.highlight) }) {
             scene.setLines(l)
         }
-        if let m = Self.boxesMesh(device: renderer.device, id: "prep.next", boxes: grown(later), origin: origin, color: SIMD4(1.0, 0.55, 0.1, 0.16)) {
+        if let m = Self.boxesMesh(device: renderer.device, id: "prep.next", boxes: grown(later), origin: origin, color: SceneColor.surface(0.92, alpha: 0.16)) {
             m.depthBias = 1
             scene.setMesh(m)
         }

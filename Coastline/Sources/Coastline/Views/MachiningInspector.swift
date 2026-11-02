@@ -305,7 +305,7 @@ struct ResultsSection: View {
             }
             LabeledContent("Tool changes", value: "\(max(model.programs.count - 1, 0))")
             ForEach(model.programs) { p in ProgramRow(program: p) }
-            Button("Export Guided Job for CRWrite…", systemImage: "list.bullet.rectangle.portrait") { exportGuided() }
+            Button("Export Guided Job…", systemImage: "list.bullet.rectangle.portrait") { exportGuided() }
             Button("Print a Nest for a Second Side…", systemImage: "cube.transparent") { model.showNestSheet = true }
                 .help("A printed block shaped like one face of the part, to hold it once it's cut free and machine the other face.")
                 .buttonStyle(.glassProminent)
@@ -326,7 +326,7 @@ struct ResultsSection: View {
         } header: {
             HStack {
                 Text("Result")
-                InfoTip(text: "Every program is checked independently against the CR-1's limits before it can be exported. Always air-cut a new program first (spindle off, Z raised).")
+                InfoTip(text: "Every program is checked independently against the machine's limits before it can be exported. Always air-cut a new program first (spindle off, Z raised).")
             }
         }
     }
@@ -335,12 +335,12 @@ struct ResultsSection: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.init(filenameExtension: "crproj") ?? .data]
         panel.nameFieldStringValue = ((model.part?.fileName as NSString?)?.deletingPathExtension ?? "Coastline") + ".crproj"
-        panel.message = "Save the guided job. Open it in CRWrite's Guided Mode."
+        panel.message = "Save the guided job. Open it in the sender's guided mode."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try model.exportGuidedJob(to: url, measuring: inventory.inventory.measuring)
             exportMessage = "Saved \(url.lastPathComponent)."
-            if let app = AppModel.crwriteURL {
+            if let app = AppModel.senderAppURL(for: url) {
                 NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
             } else {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -447,7 +447,7 @@ struct EngravingFields: View {
         }
         Toggle(isOn: Binding(get: { engraving.probeSurface == true }, set: { engraving.probeSurface = $0 ? true : nil })) {
             Text("Follow the real face")
-            Text("Probes the face at up to \(SurfaceProbe.maxPoints) points first, so the depth stays even on stock that isn't flat or square (CRWrite's contour map). Flat faces only.")
+            Text("Probes the face at up to \(SurfaceProbe.maxPoints) points first, so the depth stays even on stock that isn't flat or square (the sender's contour map). Flat faces only.")
         }
         if engraving.probeSurface == true, let why = probeUnavailable {
             Label(why, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(Theme.warning)

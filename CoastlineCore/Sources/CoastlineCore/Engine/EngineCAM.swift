@@ -122,10 +122,10 @@ extension EngineClient {
             if let w = p.operation.floorMaxWidth { d["floor_max_width"] = w }
             if let b = p.band { d["band"] = b }
             if p.operation.kind == .adaptive {
-                // Roughing never asks for more travel than the CR-1 has (less 1.5 mm for the
+                // Roughing never asks for more travel than the machine has (less 1.5 mm for the
                 // edge finding and the solver's overshoot): on a bar nearly as wide as the X
                 // travel, a strip at its outer edge stays uncut instead.
-                let t = MachineProfile.cr1.travel
+                let t = MachineProfile.standard.travel
                 d["max_span"] = [t.x - 1.5, t.y - 1.5]
             }
             if let f = p.frameTop { d["frame_top"] = f }

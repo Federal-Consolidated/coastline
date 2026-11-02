@@ -166,7 +166,7 @@ extension EngineClient {
         )
     }
 
-    /// The CR-1 assembly as display meshes grouped by motion axis (cached by the engine).
+    /// The machine assembly as display meshes grouped by motion axis (cached by the engine).
     public func machineModel(_ step: URL) throws -> MachineModel {
         let r = try call("machine_model", ["path": step.path])
         let meta = r.result["parts"] as? [[String: Any]] ?? []
@@ -182,13 +182,13 @@ extension EngineClient {
                                               exact: false, faceCount: 0)))
         }
         let nose = r.result["spindle_nose"] as? [Double] ?? [0, 0, 0]
-        let pose = r.result["model_pose"] as? [Double] ?? [-57, -90.75, -77.75]
+        let pose = r.result["model_pose"] as? [Double] ?? [-1.25, -146.5, -54.0]
         return MachineModel(parts: parts, spindleNose: Vec3(nose[0], nose[1], nose[2]),
                             tableTopX: r.result["table_top_x"] as? Double ?? 0, modelPose: Vec3(pose[0], pose[1], pose[2]),
                             tSlotZ: r.result["tslot_z"] as? [Double] ?? [-53.5, -13.4])
     }
 
-    /// The CR-1 clamp kit's parts (universal clamp, spacers, acetal brick, eccentric clamps),
+    /// The clamp kit's parts (universal clamp, spacers, acetal brick, eccentric clamps),
     /// each in its kit's local frame (see `UniversalClamp`).
     public func fixtureKit() throws -> [FixturePart] {
         let r = try call("fixture_kit", [:])
@@ -211,7 +211,7 @@ extension EngineClient {
     }
 }
 
-/// The CR-1 assembly for the viewport. Coordinates are the machine axes (see `Setup`).
+/// The machine assembly for the viewport. Coordinates are the machine axes (see `Setup`).
 public struct MachineModel: Sendable {
     public struct Part: Sendable {
         /// "static", "x", "y" or "z": which axis moves it.

@@ -3,9 +3,9 @@ import Foundation
 /// Coastline's built-in materials.
 ///
 /// Where the numbers come from:
-/// - Aluminium chip loads and engagement come from Coast Runner's feeds & speeds master document
+/// - Aluminium chip loads and engagement come from the maker's feeds & speeds master document
 ///   (1/4" 3-flute: 8000 RPM, 0.0013"/tooth adaptive, ½·D stepdown).
-/// - Steel factors are scaled from Coast Runner's steel/titanium Fusion library (1/4" 4-flute:
+/// - Steel factors are scaled from the maker's steel/titanium Fusion library (1/4" 4-flute:
 ///   3000 RPM, 0.00058"/tooth, about 0.45 × aluminium).
 /// - Everything else uses common carbide starting values, derated for a light machine.
 ///
@@ -25,7 +25,7 @@ public enum MaterialLibrary {
                  lubricant: "A light mist of WD-40 or isopropyl alcohol stops chips welding to the tool. Dry works for light finishing.",
                  chips: "Long, curly chips. Clear them often; re-cutting chips ruins the finish and can snap small tools.",
                  tooling: "3-flute carbide for aluminium (polished, uncoated or ZrN/DLC). Avoid TiAlN: aluminium sticks to it.",
-                 notes: "The reference material for the CR-1. Coast Runner's own guide is written for it."),
+                 notes: "The reference material for the machine. The maker's own guide is written for it."),
         Material(id: "al-7075", name: "Aluminium 7075-T6", family: .aluminium, grade: "7075-T6", difficulty: .easy,
                  density: 2.81, hardness: "150 HB", surfaceSpeed: 150 ... 500, chipLoadFactor: 0.95,
                  adaptiveStepoverMax: 0.10, adaptiveDepthMax: 2.0, slotDepthMax: 0.25,
@@ -62,7 +62,7 @@ public enum MaterialLibrary {
                  lubricant: "Usually dry; a drop of light oil for fine finishing.",
                  chips: "Fine broken chips and dust, which get everywhere. Vacuum often and keep them off the ballscrews.",
                  tooling: "Uncoated carbide with a neutral or low rake. Brass \"grabs\" sharp high-rake drills.",
-                 notes: "The easiest jewellery metal on the CR-1. Gives a gold-like finish after polishing."),
+                 notes: "The easiest jewellery metal on the machine. Gives a gold-like finish after polishing."),
         Material(id: "brass-c260", name: "Brass C260 (cartridge)", family: .copperAlloy, grade: "C26000", difficulty: .moderate,
                  density: 8.53, hardness: "70 HRB (half hard)", surfaceSpeed: 90 ... 220, chipLoadFactor: 0.75,
                  adaptiveStepoverMax: 0.08, adaptiveDepthMax: 1.2, slotDepthMax: 0.2,
@@ -114,8 +114,8 @@ public enum MaterialLibrary {
                  specificCuttingForce: 1800, toolWearFactor: 2.5,
                  lubricant: "Cutting oil applied regularly.",
                  chips: "Hot blue chips. Never touch them; vacuum only once they've cooled.",
-                 tooling: "4-flute TiAlN/AlTiN carbide (Coast Runner's steel library uses Helical 30137).",
-                 notes: "Coast Runner's library runs a 1/4\" end mill at about 3000 RPM and 7 ipm. Use light radial passes with full flute length."),
+                 tooling: "4-flute TiAlN/AlTiN carbide (the maker's steel library uses Helical 30137).",
+                 notes: "The maker's library runs a 1/4\" end mill at about 3000 RPM and 7 ipm. Use light radial passes with full flute length."),
         Material(id: "steel-12l14", name: "Free-machining steel 12L14", family: .steel, grade: "12L14", difficulty: .moderate,
                  density: 7.87, hardness: "160 HB", surfaceSpeed: 70 ... 140, chipLoadFactor: 0.5,
                  adaptiveStepoverMax: 0.06, adaptiveDepthMax: 1.5, slotDepthMax: 0.12,
@@ -131,7 +131,7 @@ public enum MaterialLibrary {
                  lubricant: "Cutting oil.",
                  chips: "Hot.",
                  tooling: "4-flute AlTiN carbide only.",
-                 notes: "Near the CR-1's limit. Test in scrap first."),
+                 notes: "Near the machine's limit. Test in scrap first."),
     ]
 
     static let stainless: [Material] = [
@@ -158,7 +158,7 @@ public enum MaterialLibrary {
                  lubricant: "Cutting oil.",
                  chips: "Hot.",
                  tooling: "4-flute AlTiN carbide.",
-                 notes: "Coast Runner's Lesson 5 material test swatch."),
+                 notes: "The maker's Lesson 5 material test swatch."),
     ]
 
     // MARK: Titanium
@@ -170,7 +170,7 @@ public enum MaterialLibrary {
                  specificCuttingForce: 1600, toolWearFactor: 3.5,
                  lubricant: "Cutting oil on every pass. Heat stays in the tool, not the chip.",
                  chips: "**Fine titanium chips and dust can burn.** Vacuum them up promptly; never let fines pile up near heat.",
-                 tooling: "4-flute AlTiN or AlCrN carbide. Coast Runner's steel library is labelled \"Titanium\".",
+                 tooling: "4-flute AlTiN or AlCrN carbide. The maker's steel library is labelled \"Titanium\".",
                  notes: "Commercially pure titanium is popular for jewellery: light and hypoallergenic, and it can be anodised in colours."),
         Material(id: "ti-gr5", name: "Titanium Grade 5 (Ti-6Al-4V)", family: .titanium, grade: "Ti-6Al-4V", difficulty: .experimental,
                  density: 4.43, hardness: "36 HRC", surfaceSpeed: 25 ... 50, chipLoadFactor: 0.3,
@@ -179,7 +179,7 @@ public enum MaterialLibrary {
                  lubricant: "Cutting oil, generously.",
                  chips: "**Fines can burn.** Clean up after every operation.",
                  tooling: "AlTiN/AlCrN carbide, short stick-out.",
-                 notes: "At the CR-1's limit. Test in scrap first, and expect short tool life."),
+                 notes: "At the machine's limit. Test in scrap first, and expect short tool life."),
     ]
 
     // MARK: Plastics

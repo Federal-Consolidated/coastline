@@ -85,7 +85,7 @@ enum KeyPassThrough {
         return true
     }
 
-    private static func wantsKeys(_ responder: NSResponder) -> Bool {
+    static func wantsKeys(_ responder: NSResponder) -> Bool {
         if let text = responder as? NSTextView { return text.isEditable }
         return responder is NSControl && !(responder is NSTableView)
     }

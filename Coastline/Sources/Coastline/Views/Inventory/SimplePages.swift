@@ -103,7 +103,7 @@ struct FixtureInspector: View {
             } header: {
                 Text("Workholding")
             } footer: {
-                Text("Isolated fixtures let the CR-1's probe wire touch off on the part (conductive probing). The universal clamp clamps along X, a vise along Y.")
+                Text("Isolated fixtures let the machine's probe wire touch off on the part (conductive probing). The universal clamp clamps along X, a vise along Y.")
             }
             Section("Model") {
                 TextField("3D model file", text: Binding(get: { fixture.modelPath ?? "" }, set: { fixture.modelPath = $0.isEmpty ? nil : $0 }),

@@ -19,7 +19,7 @@ public struct HoldingTabs: Equatable, Sendable, Codable {
     /// Circles no tab may cross (x, y, radius; side B's work frame): the windows side B opens
     /// over the reference bores would cut a tab in two.
     public var avoid: [SIMD3<Double>]?
-    /// Where the tools can go all the way round a tab's end (work X, within the CR-1's travel):
+    /// Where the tools can go all the way round a tab's end (work X, within the machine's travel):
     /// past it the moves are pulled back to the limit, straight through the tab.
     public var withinX: ClosedRange<Double>?
     /// One side cut through: the tabs are gaps the finishing contour lifts over (bridging its
