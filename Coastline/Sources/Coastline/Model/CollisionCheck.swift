@@ -168,7 +168,7 @@ extension AppModel {
         applyBedHighlight()
         guard !collisions.isEmpty else { return }
         var segs: [LineSegment] = []
-        let c8 = SIMD4<UInt8>(255, 30, 30, 255)
+        let c8 = SceneColor.danger
         for c in collisions {
             let p = SIMD3<Float>(c.point)
             let r: Float = 3

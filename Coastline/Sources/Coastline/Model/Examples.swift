@@ -2,7 +2,7 @@ import CoastlineCore
 import Foundation
 
 /// Parts to try Coastline with (resources/examples, modelled by scripts/support/make_examples.py),
-/// each held a different way on the CR-1. Opening one imports it, puts it in a standard bar
+/// each held a different way on the machine. Opening one imports it, puts it in a standard bar
 /// (added to the inventory as Not owned when you don't have it) and picks its holding.
 @MainActor
 struct ExamplePart: Identifiable, Hashable {

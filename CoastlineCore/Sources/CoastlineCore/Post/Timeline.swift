@@ -23,7 +23,7 @@ public struct ToolpathTimeline: Sendable {
 
     /// Builds the timeline from per-operation toolpaths. `programOf[i]` is the program index of
     /// operation i; `lines[i]` maps operation i's moves to G-code lines.
-    public init(paths: [OperationToolpath], programOf: [Int], lines: [[Int?]], machine: MachineProfile = .cr1) {
+    public init(paths: [OperationToolpath], programOf: [Int], lines: [[Int?]], machine: MachineProfile = .standard) {
         // Times come from a simulation of grbl's planner (see `plannerSeconds`).
         var flat: [(oi: Int, mi: Int, start: SIMD3<Double>, move: Move)] = []
         var pos: SIMD3<Double>?
@@ -49,7 +49,7 @@ public struct ToolpathTimeline: Sendable {
     /// pass so every entry speed is reachable with the machine's acceleration, then trapezoidal
     /// (accelerate, cruise, decelerate) profiles. Corners and dense 3D paths slow down here
     /// exactly where the real machine does.
-    public static func plannerSeconds(_ moves: [(start: SIMD3<Double>, move: Move)], machine: MachineProfile = .cr1) -> [Double] {
+    public static func plannerSeconds(_ moves: [(start: SIMD3<Double>, move: Move)], machine: MachineProfile = .standard) -> [Double] {
         let a = max(machine.acceleration.x, 1)          // mm/s²
         let jd = max(machine.junctionDeviation, 0.001)  // mm
         // Chords: (owner move, length, max speed mm/s, direction).

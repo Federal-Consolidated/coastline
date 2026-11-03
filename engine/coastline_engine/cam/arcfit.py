@@ -1,7 +1,7 @@
 """Arc fitting: turns dense polylines into G2/G3 arcs and lines.
 
 grbl's planner holds only 16 blocks and every line costs serial bandwidth, so long chains of
-tiny segments make the CR-1 stutter. Fitting arcs within a tight tolerance keeps the motion
+tiny segments make the machine stutter. Fitting arcs within a tight tolerance keeps the motion
 smooth and the files short, without changing the shape by more than `tol`.
 """
 

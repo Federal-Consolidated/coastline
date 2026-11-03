@@ -48,7 +48,7 @@ public enum Feasibility {
     static let standardSizes: [Double] = [0.5, 0.8, 1.0, 1.5875, 2.0, 2.38, 3.0, 3.175, 4.0, 4.7625, 6.0, 6.35, 8.0]
 
     public static func assess(_ a: PartAnalysis, inventory: Inventory, partSize: SIMD3<Double>? = nil,
-                              stockSize: SIMD3<Double>? = nil, machine: MachineProfile = .cr1) -> [Issue] {
+                              stockSize: SIMD3<Double>? = nil, machine: MachineProfile = .standard) -> [Issue] {
         var out: [Issue] = []
         let tools = OperationPlanner.usableTools(inventory)
         let flats = tools.filter { [.flatEndMill, .bullNoseEndMill].contains($0.kind) }
@@ -92,7 +92,7 @@ public enum Feasibility {
             let env = machine.physicalEnvelope
             let mfit = min(env.x / p.x, env.y / p.y, env.z / p.z)
             if mfit < 1 {
-                out.append(Issue(.error, "The part is larger than the CR-1 can reach as oriented. Scaled to \(Int((mfit * 100).rounded(.down)))% it would fit, or turn it."))
+                out.append(Issue(.error, "The part is larger than the machine can reach as oriented. Scaled to \(Int((mfit * 100).rounded(.down)))% it would fit, or turn it."))
             }
         }
         return out

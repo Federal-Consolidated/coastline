@@ -1,6 +1,6 @@
 import Foundation
 
-/// Squaring and sizing oversized bar stock the way Coast Runner's Universal Clamp cutcode does
+/// Squaring and sizing oversized bar stock the way the maker's Universal Clamp cutcode does
 /// it: the bar lies **flat** on the riser plate, registered against **one** squaring stop (an
 /// acetal brick bolted into both T-slots, its spindle-side face level with the table's edge) and
 /// held down with two 3" screw C-clamps that wrap the table's back edge. Upright clamping on the
@@ -34,12 +34,12 @@ public enum FlatPrep {
     /// How far the C-clamps turn about their screws when the bar reaches past the bed (rad).
     public static let angledClamp = Double.pi / 4
 
-    /// Where things are on the CR-1's table (model coordinates: X up, Z toward the spindle).
+    /// Where things are on the machine's table (model coordinates: X up, Z toward the spindle).
     public struct Table: Sendable, Equatable {
         public var topX = -31.12
         /// The table's spindle-side ("north") edge and its back edge (toward you).
         public var northZ = -2.4
-        /// The T-slot bed's back edge across its middle (raycast on the CR-1 model; only the
+        /// The T-slot bed's back edge across its middle (raycast on the machine model; only the
         /// rounded ears at its far ends reach −77.4).
         public var backZ = -67.12
         /// The squaring stop's spindle-side face (bolted into both T-slots).
@@ -154,7 +154,7 @@ public enum FlatPrep {
         let t = alongY ? raw.z : raw.y, l = alongY ? raw.y : raw.z, w = raw.x
         let cut = max(w - target, 0)
         var issues: [Issue] = []
-        // Coast Runner's way: face ONE sawn end square (long side against the stop), then push
+        // The maker's way: face ONE sawn end square (long side against the stop), then push
         // that end against the stop and take the long edge down. The bar keeps its length: the
         // clamp kit takes long stock. A long bar overhangs the bed for the end; a parallel laid
         // across it, clamped at both ends by the C-clamps beside it, holds it (SideClamps).
@@ -229,7 +229,7 @@ public enum FlatPrep {
         public var moves: [Move]
     }
 
-    public static func programs(_ p: Plan, tool: Tool, material: Material, machine: MachineProfile = .cr1) -> [Program] {
+    public static func programs(_ p: Plan, tool: Tool, material: Material, machine: MachineProfile = .standard) -> [Program] {
         p.stages.map { s in
             switch s.kind {
             case .faceEnd:

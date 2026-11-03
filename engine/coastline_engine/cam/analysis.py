@@ -1,4 +1,4 @@
-"""Part analysis in the work frame (tool from +Z): what limits machining this part on the CR-1.
+"""Part analysis in the work frame (tool from +Z): what limits machining this part on the machine.
 
 - smallest inside corner radius around the tool axis (vertical concave cylinders and fillets)
   → the largest end mill that can finish every inside corner;

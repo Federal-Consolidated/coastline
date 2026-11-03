@@ -4,7 +4,7 @@ import simd
 import Viewport
 
 extension AppModel {
-    /// Drives the modelled CR-1 through its whole travel with the bit in the collet: around the
+    /// Drives the modelled machine through its whole travel with the bit in the collet: around the
     /// X–Y limits with the spindle retracted, the same fully plunged, and along the four Z
     /// edges. The tool tip's path, drawn on the table, is the real work volume: it must match
     /// the ghosted work-area box, and nothing may pass through the machine on the way.
@@ -30,7 +30,7 @@ extension AppModel {
         // Relative to the table, the tip moves by the full machine displacement from the pose.
         func tipOnTable(_ q: SIMD3<Double>) -> SIMD3<Float> { SIMD3<Float>(tip0 + (q - pose)) }
         renderer.scene.remove(id: "travel.trace")
-        status = "Sweeping the CR-1's travel…"
+        status = "Sweeping the machine's travel…"
         let start = Date()
         flipTask = Task { @MainActor [weak self] in
             var trace: [SIMD3<Float>] = []
@@ -49,7 +49,7 @@ extension AppModel {
                 trace.append(tipOnTable(q))
                 var segs: [LineSegment] = []
                 for i in 1..<max(trace.count, 1) {
-                    segs.append(LineSegment(trace[i - 1], trace[i], color: SIMD4(255, 210, 60, 255)))
+                    segs.append(LineSegment(trace[i - 1], trace[i], color: SceneColor.line(175)))
                 }
                 if !segs.isEmpty, let set = SceneLines(device: self.renderer.device, id: "travel.trace", segments: segs) {
                     self.renderer.scene.setLines(set)

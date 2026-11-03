@@ -46,7 +46,7 @@ extension AppModel {
             }
         }
         let m = SceneMesh(device: device, id: "nest", positions: positions, normals: normals, indices: indices,
-                          color: SIMD4(0.78, 0.80, 0.84, 1), pickable: false)
+                          color: SceneColor.surface(0.80), pickable: false)
         m?.material = SurfaceMaterial(metallic: 0, roughness: 0.55, edges: 0.4)
         return m
     }

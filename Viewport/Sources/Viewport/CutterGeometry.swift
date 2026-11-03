@@ -3,7 +3,7 @@ import simd
 
 /// Realistic cutter geometry from a tool's numbers: helical flutes with lands and gullets,
 /// the right tip (flat, ball, bull nose, cone, drill point), the flute run-out, a neck and the
-/// shank with its chamfer. Tip at the origin, axis +Z (the CR-1's tool axis, pointing away from
+/// shank with its chamfer. Tip at the origin, axis +Z (the machine's tool axis, pointing away from
 /// the work), so it drops straight into the collet in the scene.
 public struct CutterShape: Sendable {
     public enum Tip: Sendable {

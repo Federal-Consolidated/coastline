@@ -43,14 +43,14 @@ def test_face_info_on_clamp_planes():
 def test_machine_model_groups_and_axes(tmp_path):
     from coastline_engine.machine_model import load_machine
 
-    parts = load_machine(RES / "machine/cr1_mechanicals_v1.3.step", tmp_path)
+    parts = load_machine(RES / "machine/machine.step", tmp_path)
     groups = {p.group for p in parts}
     assert groups == {"static", "x", "y", "z"}
     assert any(p.role == "enclosure" for p in parts)
     total = sum(len(p.mesh.indices) for p in parts)
     assert 200_000 < total < 1_500_000
     # Cached second load returns the same meshes.
-    again = load_machine(RES / "machine/cr1_mechanicals_v1.3.step", tmp_path)
+    again = load_machine(RES / "machine/machine.step", tmp_path)
     assert sum(len(p.mesh.indices) for p in again) == total
 
 

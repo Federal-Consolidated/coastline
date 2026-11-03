@@ -175,7 +175,7 @@
           "intendedFor" : "Aluminum & Plastic",
           "kind" : "flatEndMill",
           "name" : "1\/4\" flat end mill · Helical 81400",
-          "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+          "notes" : "Imported from the maker's library. Set the quantity to what you own.",
           "overallLength" : 50.8,
           "partNumber" : "81400",
           "presets" : [
@@ -414,7 +414,7 @@
               "chipLoad" : 0.06603999999999999,
               "feed" : 1585,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 10 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 10 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 555,
               "power" : 1.0064495999999998,
@@ -451,7 +451,7 @@
               "intendedFor" : "Aluminum & Plastic",
               "kind" : "flatEndMill",
               "name" : "1\/4\" flat end mill · Helical 81400",
-              "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+              "notes" : "Imported from the maker's library. Set the quantity to what you own.",
               "overallLength" : 50.8,
               "partNumber" : "81400",
               "presets" : [
@@ -481,7 +481,7 @@
               "chipLoad" : 0.08254999999999998,
               "feed" : 1981,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 10 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower.",
+                "Normal for a small tool: its ideal cutting speed would need 10 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower.",
                 "Chip thinning at 20% engagement: feed raised 25%."
               ],
               "plungeFeed" : 693,
@@ -519,7 +519,7 @@
               "intendedFor" : "Aluminum & Plastic",
               "kind" : "flatEndMill",
               "name" : "1\/4\" flat end mill · Helical 81400",
-              "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+              "notes" : "Imported from the maker's library. Set the quantity to what you own.",
               "overallLength" : 50.8,
               "partNumber" : "81400",
               "presets" : [
@@ -549,7 +549,7 @@
               "chipLoad" : 0.02032,
               "feed" : 488,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 15 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 15 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 171,
               "power" : 0.294967152,
@@ -608,7 +608,7 @@
               "chipLoad" : 0.04064,
               "feed" : 975,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 20 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 20 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 341,
               "power" : 0,
@@ -667,7 +667,7 @@
               "chipLoad" : 0.04064,
               "feed" : 975,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 20 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 20 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 341,
               "power" : 8.193532,
@@ -726,7 +726,7 @@
               "chipLoad" : 0.04064,
               "feed" : 975,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 20 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 20 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 341,
               "power" : 8.193532,

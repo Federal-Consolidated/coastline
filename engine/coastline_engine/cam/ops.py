@@ -1,6 +1,6 @@
 """2.5D operations. Each returns a Toolpath in the work frame.
 
-Conventions: climb milling with the CR-1's clockwise (M3) spindle: outside walls are cut
+Conventions: climb milling with the machine's clockwise (M3) spindle: outside walls are cut
 clockwise, pockets and holes counter-clockwise, so the material is always on the tool's right.
 """
 

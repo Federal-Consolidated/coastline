@@ -17,7 +17,7 @@ let camTests: [TestCase] = [
         let table = FeedsEngine.compute(tool: quarter, material: al, kind: .adaptive, roughing: .table)
         let thin = FeedsEngine.compute(tool: quarter, material: al, kind: .adaptive, roughing: .thinned)
         let deep = FeedsEngine.compute(tool: quarter, material: al, kind: .adaptive, roughing: .deep)
-        // Coast Runner's 1/4" adaptive: 30 ipm, 0.020" stepover, 0.125" deep.
+        // The maker's 1/4" adaptive: 30 ipm, 0.020" stepover, 0.125" deep.
         try expect(abs(table.stepdown - 3.175) < 0.01 && table.feed < 950, "table \(table.feed) \(table.stepdown)")
         // The same chip per tooth at 8 % engagement: the feed rises (capped at ×1.6), the depth stays.
         try expect(thin.feed > table.feed * 1.3 && thin.feed <= table.feed / 1.15 * 1.6 + 1 && thin.stepdown == table.stepdown, "thin \(thin.feed)")
@@ -32,7 +32,7 @@ let camTests: [TestCase] = [
         var hidden = Tuning.preset(.fine); hidden.hiddenSide = 1
         try expectEqual(hidden.preset, .fine)
     },
-    TestCase(name: "feedsMatchCoastRunnersAluminiumTable") {
+    TestCase(name: "feedsMatchTheMakersAluminiumTable") {
         let al = MaterialLibrary.material(id: "al-6061")!
         let face = FeedsEngine.compute(tool: quarter, material: al, kind: .facing)
         try expectEqual(face.rpm, 8000)
@@ -54,7 +54,7 @@ let camTests: [TestCase] = [
         try expect(d.rampAngle <= 1, "careful mode ramps gently")
         let wax = MaterialLibrary.material(id: "wax-machinable")!
         let w = FeedsEngine.compute(tool: quarter, material: wax, kind: .adaptive)
-        try expect(w.feed <= MachineProfile.cr1.maxFeedAnyDirection)
+        try expect(w.feed <= MachineProfile.standard.maxFeedAnyDirection)
     },
     TestCase(name: "threeDFinishingPlansBallsAndCuspStepovers") {
         var inv = Inventory()
@@ -145,18 +145,18 @@ let camTests: [TestCase] = [
         let moves = [Move(.rapid, x: a.x, y: a.y, z: 1), Move(.plunge, x: a.x, y: a.y, z: -1, feed: 300),
                      Move(.cut, .arcCCW, x: b.x, y: b.y, z: -1, i: c.x - a.x, j: c.y - a.y, feed: 800),
                      Move(.rapid, x: b.x, y: b.y, z: 3)]
-        let g = CR1Post.program(header: .init(programName: "t", setupName: "OP1", tool: quarter, operationNames: ["Test"], stockDescription: "6061"),
+        let g = GRBLPost.program(header: .init(programName: "t", setupName: "OP1", tool: quarter, operationNames: ["Test"], stockDescription: "6061"),
                                 rpm: 8000, paths: [OperationToolpath(operationID: UUID(), moves: moves)])
         let ctx = GCodeValidator.Context(stockMin: SIMD3(-40, -75, -20), stockMax: SIMD3(40, 75, 0), tool: quarter)
         let report = GCodeValidator().validate(g, context: ctx)
         try expect(report.passed, "\(report.issues.map(\.message))")
         try expect(g.contains("G3 X5 Y6.215"), g)
     },
-    TestCase(name: "postFollowsCoastRunnerConventions") {
+    TestCase(name: "postFollowsTheMakersConventions") {
         let moves = [Move(.rapid, x: 0, y: 0, z: 3), Move(.rapid, x: 0, y: 0, z: 1),
                      Move(.plunge, x: 0, y: 0, z: -1, feed: 300), Move(.cut, x: 10, y: 0, z: -1, feed: 800),
                      Move(.cut, .arcCCW, x: 10, y: 10, z: -1, i: 0, j: 5, feed: 800), Move(.rapid, x: 10, y: 10, z: 3)]
-        let g = CR1Post.program(header: .init(programName: "t", setupName: "OP1", tool: quarter, operationNames: ["Test"],
+        let g = GRBLPost.program(header: .init(programName: "t", setupName: "OP1", tool: quarter, operationNames: ["Test"],
                                               stockDescription: "6061"),
                                 rpm: 8000, paths: [OperationToolpath(operationID: UUID(), moves: moves)])
         let lines = g.split(separator: "\n").map(String.init)
@@ -187,7 +187,7 @@ let camTests: [TestCase] = [
         try expect(errors(header + "(" + String(repeating: "x", count: 90) + ")\n").contains { $0.contains("79") })
     },
     TestCase(name: "plannerProposesFromInventory") {
-        let inv = Inventory.starter(toolLibraries: [repoRoot.appendingPathComponent("resources/libraries/CR-tools-for-Aluminum.tools")])
+        let inv = Inventory.starter(toolLibraries: [repoRoot.appendingPathComponent("resources/libraries/tools-aluminium.tools")])
         var withCollets = inv
         withCollets.accessories.append(Accessory(name: "3/16", kind: .collet, size: 4.7625))
         let p = OperationPlanner.propose(inventory: withCollets, holeDiameters: [2.4])
@@ -219,7 +219,7 @@ let camTests: [TestCase] = [
         try expectEqual(paths.count, 4)
         for (p, path) in zip(planned, paths) {
             try expect(path.moves.count > 10, "\(p.operation.kind) produced \(path.moves.count) moves, warnings \(path.warnings), data \(p.data.stepdown)/\(p.data.stepover) m=\(m)")
-            let g = CR1Post.program(header: .init(programName: "pendant", setupName: "OP1", tool: p.tool, operationNames: [p.operation.kind.title], stockDescription: "6061"),
+            let g = GRBLPost.program(header: .init(programName: "pendant", setupName: "OP1", tool: p.tool, operationNames: [p.operation.kind.title], stockDescription: "6061"),
                                     rpm: p.data.rpm, paths: [path])
             let report = GCodeValidator().validate(g, context: .init(stockMin: box.min, stockMax: box.max, tool: p.tool))
             if !report.passed { try? g.write(to: URL(fileURLWithPath: "/tmp/coastline_failed_\(p.operation.kind).nc"), atomically: true, encoding: .utf8) }

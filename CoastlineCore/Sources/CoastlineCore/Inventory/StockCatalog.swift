@@ -1,14 +1,14 @@
 import Foundation
 
 /// Stock sizes you can simply buy: the common extruded flat and square bar sections (EN 755 /
-/// ASTM B221 aluminium, CW614N / C360 brass, POM plate), cut to a length that suits the CR-1.
+/// ASTM B221 aluminium, CW614N / C360 brass, POM plate), cut to a length that suits the machine.
 /// Like ToolCatalog they sit in the inventory with quantity 0, marked "Not owned"; a part that
 /// fits one says so, and "I Have It Now" turns it into owned stock.
 public enum StockCatalog {
     public static let source = "Coastline suggestion · standard size"
     /// Bumped when sizes are added: inventories that saw an older catalog get the new ones.
     public static let version = 1
-    /// Bars are suggested cut to this length (most suppliers saw to length; the CR-1's Y
+    /// Bars are suggested cut to this length (most suppliers saw to length; the machine's Y
     /// travel is 241 mm, and the clamp kit wants a bar no longer than the job needs).
     public static let cutLength = 150.0
 

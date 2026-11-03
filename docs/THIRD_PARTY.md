@@ -9,23 +9,20 @@
 | rhino3dm (openNURBS) | pip | MIT | Rhino `.3dm` import. |
 | OpenCAMLib | pip | LGPL-2.1 | Drop-cutter and waterline. |
 | pyclipper, numpy, trimesh | pip | MIT / BSD | 2D offsets, arrays, mesh utilities. |
-| CRCore | `CRCore/` | GPL-3.0 (this project); a Swift port of Coast Runner's CRWrite v2, which is CC0 | `.crproj` model/writer, G-code classifier, GRBL protocol. |
+| MillCore | `MillCore/` | GPL-3.0 (this project); a Swift port of the original controller software, released under CC0 | `.crproj` model/writer, G-code classifier, GRBL protocol, machine session. |
 
-## Coast Runner design files
+## Machine and fixture design files
 
-Coast Runner, Inc. licenses "all design files and models by Coast Runner" under CC0 1.0 Universal
-([archived licence page, June 2025](https://web.archive.org/web/20250619071646/https://coastrunner.net/license/)).
-Included here with their geometry unchanged:
+These files were released into the public domain (CC0 1.0 Universal) by the machine's maker and
+are included with their geometry unchanged. Their source is recorded outside this repository.
 
 | File | What |
 |---|---|
-| `resources/machine/cr1_mechanicals_v1.3.step` | CR-1 mechanical assembly v1.3 |
+| `resources/machine/machine.step` | Machine mechanical assembly |
+| `resources/machine/dimensions.3dm` | Measured work envelope |
 | `resources/fixtures/universal_clamp_v96.step` | Universal clamp |
 | `resources/fixtures/quick_release_jig_plate.step` | Quick release jig plate, Rev D (metric) |
-| `resources/libraries/CR-tools-for-Aluminum.tools`, `CR-tools-for-Steel.tools` | Fusion tool libraries |
-| `resources/libraries/Coast-Runner-CR-1-Machine-Model.mch` | Fusion machine definition |
-| `docs/cr1_feeds_speeds_aluminum.pdf` | Feeds and speeds guide |
+| `resources/fixtures/clamp_kit.npz` | Clamp kit meshes, built from the maker's clamp kit model |
+| `resources/libraries/tools-aluminium.tools`, `tools-steel.tools` | Tool libraries (Fusion `.tools` format) |
 
-Coast Runner's Fusion post-processor is not included: it is copyright Autodesk, Inc. `CR1Post`
-in CoastlineCore is an independent implementation.
-
+No vendor post-processor is included: `GRBLPost` in CoastlineCore is an independent implementation.

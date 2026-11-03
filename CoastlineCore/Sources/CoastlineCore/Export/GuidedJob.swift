@@ -1,7 +1,7 @@
-import CRCore
+import MillCore
 import Foundation
 
-/// Builds a guided `.crproj` for CRWrite: the same step-by-step structure as Coast Runner's own
+/// Builds a guided `.crproj` for the sender: the same step-by-step structure as the maker's own
 /// cutcodes (`setup_stock → edgefinder → edgefind → install tool → touch off → cut`), plus
 /// Coastline's air cuts, measuring checkpoints and the stock-squaring job.
 public enum GuidedJobBuilder {
@@ -32,9 +32,9 @@ public enum GuidedJobBuilder {
     /// How the guided job finds the stock's position after each clamping.
     public struct Probing: Sendable {
         /// The clamp kit is electrically isolated: the tool itself finds edges, bores and the
-        /// face (G38.2, the probe wire on the clamp). Otherwise the Fisher edge finder and paper.
+        /// face (G38.2, the probe wire on the clamp). Otherwise the edge finder and paper.
         public var electrical = false
-        /// Which X edges (lower, upper) the CR-1 reaches in this clamping, per side. An edge out
+        /// Which X edges (lower, upper) the machine reaches in this clamping, per side. An edge out
         /// of reach is replaced by the other edge and the stock's height.
         public var lowerXReachable = [true, true]
         public var upperXReachable = [true, true]
@@ -92,10 +92,10 @@ public enum GuidedJobBuilder {
         public var probing = Probing()
         /// How far the spindle comes out at the tool-change position (machine Z), when Coast
         /// Runner's own Z would touch the clamps, parallels or stock of this job (worked out
-        /// from the clamp kit's and bed's geometry); nil: Coast Runner's.
+        /// from the clamp kit's and bed's geometry); nil: The maker's.
         public var toolChangeZ: Double?
-        /// Where along Y it stops (machine Y), when Coast Runner's Y would put the spindle right
-        /// beside the clamps; nil: Coast Runner's.
+        /// Where along Y it stops (machine Y), when the maker's Y would put the spindle right
+        /// beside the clamps; nil: The maker's.
         public var toolChangeY: Double?
         /// The clamp kit sits left of the middle so the tools are changed on its right: the
         /// stock's right end this far left of the spindle's centre at the tool-change position, mm.
@@ -126,7 +126,7 @@ public enum GuidedJobBuilder {
         public var image: Data?
         /// How long a bar the part setup needs (a long sawn bar is cut to this first).
         public var neededLength: Double?
-        /// The CR-1's table and the stop's face, from the machine model.
+        /// The machine's table and the stop's face, from the machine model.
         public var table = SideClamps.table(topX: -31, frontSlotZ: -13.4)
         public var frontSlotZ = -13.4
         /// The work axis the bar was extruded along (FlatPrep.plan).
@@ -164,13 +164,13 @@ public enum GuidedJobBuilder {
         /// The prep programs, each checked like any program plus against the stop, riser,
         /// C-clamps and table as they sit for that stage (the edge cut runs out below the bar on
         /// purpose, so through-cuts are allowed).
-        public func programs(material: Material, sawn: Bool, machine: MachineProfile = .cr1) -> (plan: FlatPrep.Plan, items: [Item]) {
+        public func programs(material: Material, sawn: Bool, machine: MachineProfile = .standard) -> (plan: FlatPrep.Plan, items: [Item]) {
             var plan = plan(sawn: sawn)
             var items: [Item] = []
             for (k, p) in FlatPrep.programs(plan, tool: tool, material: material, machine: machine).enumerated() {
                 let kind: OperationKind = p.stage.isEdge ? .adaptive : .facing
                 let data = FeedsEngine.compute(tool: tool, material: material, kind: kind, machine: machine)
-                let g = CR1Post.program(header: .init(programName: p.title, setupName: "Flat on the squaring stop", tool: tool,
+                let g = GRBLPost.program(header: .init(programName: p.title, setupName: "Flat on the squaring stop", tool: tool,
                                                       operationNames: [p.title], stockDescription: "\(material.name)"),
                                         rpm: data.rpm, paths: [OperationToolpath(operationID: UUID(), moves: p.moves)], machine: machine)
                 var ctx = GCodeValidator.Context(stockMin: SIMD3(-p.stock.x / 2, -p.stock.y / 2, -p.stock.z),
@@ -199,17 +199,17 @@ public enum GuidedJobBuilder {
         }
     }
 
-    // MARK: Fixed helper programs (Coast Runner's conventions [UC])
+    // MARK: Fixed helper programs (the maker's conventions [UC])
 
     /// The tool-change moves, the spindle's last move out stopping at `z` when given.
     /// Where along the table the kit goes: roughly centred, or left of the middle so the tools
     /// are changed on its right (with a measure to set it by).
     static func kitPlace(_ i: Input, machine: MachineProfile) -> String {
         guard let d = i.stockRightOfToolChange else {
-            return "Just keep it roughly centred left to right so the whole cut stays within the CR-1's travel."
+            return "Just keep it roughly centred left to right so the whole cut stays within the machine's travel."
         }
         let y = i.toolChangeY ?? machine.toolChangePose.y
-        return "**Keep it left of the middle**, so the tools are changed on its right: before snugging the T-slot bolts, jog Y to **Y\(ReferenceBores.n(y))** in Manual Operations (where tools are changed) and place the kit so the stock's **right end is about \(Length.mm((d * 2).rounded() / 2)) mm left of the spindle's centre**. Your hands and both wrenches then have room at every tool change."
+        return "**Keep it left of the middle**, so the tools are changed on its right: before snugging the T-slot bolts, jog Y to **Y\(ReferenceBores.n(y))** in Machine Control (where tools are changed) and place the kit so the stock's **right end is about \(Length.mm((d * 2).rounded() / 2)) mm left of the spindle's centre**. Your hands and both wrenches then have room at every tool change."
     }
 
     static func toolChangeMoves(machine: MachineProfile, z: Double?, y: Double? = nil) -> [String] {
@@ -254,7 +254,7 @@ public enum GuidedJobBuilder {
             : ""
         return [
             step("Tool Change Position", markdown: """
-            Click Next: the CR-1 homes, lowers the table to the bottom of its travel (the stock as far from the spindle as it goes), moves the gantry to where there's room and brings the spindle forward, out of the machine towards you, so the collet nut stands free with room for both wrenches.
+            Click Next: the machine homes, lowers the table to the bottom of its travel (the stock as far from the spindle as it goes), moves the gantry to where there's room and brings the spindle forward, out of the machine towards you, so the collet nut stands free with room for both wrenches.
 
             Leave the stock clamped: the zero found for it stays valid.
             """, gcode: "Code/tool_change_position.nc", timeout: 90),
@@ -278,7 +278,7 @@ public enum GuidedJobBuilder {
     /// Paper touch-off by hand (manual §4.6.2): the spindle stopped, 1 → 0.1 → 0.01 mm steps.
     static func paperTouchOff(_ where_: String, extra: String = "") -> String {
         """
-        The spindle stays **stopped**. In **Manual Operations**:
+        The spindle stays **stopped**. In **Machine Control**:
         1. Jog the tool over \(where_) and toward the face in 1 mm steps until it's 1–2 mm away.
         2. Slide a strip of paper between the tip and the face and keep wiggling it.
         3. Jog in 0.1 mm steps until the paper drags. If it's pinched tight, back off 0.1 mm.
@@ -339,7 +339,7 @@ public enum GuidedJobBuilder {
 
     // MARK: Build
 
-    public static func build(_ input: Input, machine: MachineProfile = .cr1) -> (jobs: [Job], files: [String: Data]) {
+    public static func build(_ input: Input, machine: MachineProfile = .standard) -> (jobs: [Job], files: [String: Data]) {
         var files: [String: Data] = helperFiles(machine: machine, toolChangeZ: input.toolChangeZ, toolChangeY: input.toolChangeY).mapValues { Data($0.utf8) }
         if let img = input.setupImage { files["Image/setup.png"] = img }
         if let img = input.flipImage { files["Image/flip.png"] = img }
@@ -351,8 +351,8 @@ public enum GuidedJobBuilder {
         return (jobs, files)
     }
 
-    /// Writes the guided project. CRCore's writer re-reads its own manifest before saving.
-    public static func write(_ input: Input, to url: URL, machine: MachineProfile = .cr1) throws {
+    /// Writes the guided project. MillCore's writer re-reads its own manifest before saving.
+    public static func write(_ input: Input, to url: URL, machine: MachineProfile = .standard) throws {
         let (jobs, files) = build(input, machine: machine)
         try? FileManager.default.removeItem(at: url)
         try ProjectWriter.save(jobs: jobs, extraFiles: files, from: MemoryProjectSource([:]), to: url)
@@ -391,7 +391,7 @@ public enum GuidedJobBuilder {
     }
 
     /// Why the bed needs the edge finder and paper: nothing there is insulated.
-    static let bedFindingNote = "**Finding the stock here is by hand.** Only the clamp kit sits on an insulating sheet; the stop and the steel C-clamps touch the table, so the CR-1's electrical probing can't work (its circuit would always be closed). X and Y come from the clicking Fisher edge finder, Z from paper touch-off, both jogged in Manual Operations. After the first clamping the CR-1 can drive the finder close to each edge (the stop puts the stock back in a known place), but the last millimetres are always yours."
+    static let bedFindingNote = "**Finding the stock here is by hand.** Only the clamp kit sits on an insulating sheet; the stop and the steel C-clamps touch the table, so the machine's electrical probing can't work (its circuit would always be closed). X and Y come from the clicking edge finder, Z from paper touch-off, both jogged in Machine Control. After the first clamping the machine can drive the finder close to each edge (the stop puts the stock back in a known place), but the last millimetres are always yours."
 
     static func partJob(_ i: Input, machine: MachineProfile, files: inout [String: Data]) -> Job {
         var job = Job(title: "\(i.setupName) · \(i.partName)",
@@ -402,7 +402,7 @@ public enum GuidedJobBuilder {
             "\(k + 1). **\(p.tool.name)**, stick-out \(Length.mm(p.tool.stickout)) mm (\(p.operationNames.joined(separator: ", ")), about \(Int(p.minutes.rounded())) min)"
         }.joined(separator: "\n")
         steps.append(step("Before You Start", markdown: """
-        This job was planned by **Coastline** for your Coast Runner CR-1.
+        This job was planned by **Coastline** for your machine.
 
         **Material** \(i.material.name). \(i.material.lubricant)
 
@@ -411,7 +411,7 @@ public enum GuidedJobBuilder {
         **Tools, in order**
         \(toolList)
 
-        Stay with the machine while it cuts, and keep a hand near the E-stop. Never use compressed air on the CR-1; vacuum chips instead.
+        Stay with the machine while it cuts, and keep a hand near the E-stop. Never use compressed air on the machine; vacuum chips instead.
         """))
         steps.append(step("Home the Machine", text: "Click Next to home all axes.", gcode: "Code/home.nc", timeout: 60))
         let clamps = i.clampCount == 1 ? "the universal clamp" : "\(i.clampCount) universal clamps"
@@ -438,7 +438,7 @@ public enum GuidedJobBuilder {
         let pr = i.probing
         if pr.electrical {
             steps.append(step("Connect the Probe Wire", markdown: """
-            Coastline finds the stock with **electrical probing**: the clamp kit sits on its insulating pad, so when the tool touches the stock it closes a circuit and the CR-1 stops right there (G38.2). No edge finder, no paper.
+            Coastline finds the stock with **electrical probing**: the clamp kit sits on its insulating pad, so when the tool touches the stock it closes a circuit and the machine stops right there (G38.2). No edge finder, no paper.
 
             1. Plug the red probe wire's barrel jack into the port on the left side of the mill's LED board.
             2. Bolt the other end to the top of the clamp (the tapped M5 hole) or tape it on firmly. The stock touches the clamp, so it's in the circuit too.
@@ -467,12 +467,12 @@ public enum GuidedJobBuilder {
             let faced = p.touchZ < -1e-6 ? " The face was milled \(Length.mm(-p.touchZ)) mm down by an earlier program: touch off anywhere on the milled face (Coastline stores it as Z\(ReferenceBores.n(p.touchZ)))." : ""
             if pr.electrical {
                 steps.append(step("Touch Off Tool \(n)", markdown: """
-                In **Manual Operations**, jog the tool **2–5 mm above a solid spot of the face** (the frame, not over a cut).\(faced) Then close Manual Operations and click Next: the tool turns slowly backwards and creeps down until it touches.
+                In **Machine Control**, jog the tool **2–5 mm above a solid spot of the face** (the frame, not over a cut).\(faced) Then close Machine Control and click Next: the tool turns slowly backwards and creeps down until it touches.
                 """, popup: ("Above the face?", "Is the tool 2–5 mm above solid stock?"), noStep: "-0"))
                 steps.append(step("Probe Z for Tool \(n)", text: "Click Next to probe the face and store Z.", gcode: touchZFile(p.touchZ, electrical: true), timeout: 120))
             } else {
                 steps.append(step("Touch Off Tool \(n) on the Face", markdown: """
-                The stock isn't insulated in this setup, so the CR-1 can't feel the face: touch off by hand with paper.
+                The stock isn't insulated in this setup, so the machine can't feel the face: touch off by hand with paper.
 
                 \(paperTouchOff("a solid spot of the stock face (the frame, not over a cut)", extra: faced.isEmpty ? "" : "\n\n" + faced))
                 """, popup: ("Paper pinched?", "Is the paper just pinched between the tool and the stock face?"), noStep: "-0"))
@@ -530,7 +530,7 @@ public enum GuidedJobBuilder {
                 steps.append(step("Probe the Surface", markdown: """
                 The engraving follows the real face, not the CAD: the tool feels it at **\(count) points** over the text. It turns slowly backwards and creeps down at each one until it touches (the stock is insulated in the clamp kit; the probe wire stays on the clamp).
 
-                The points go into CRWrite's contour map (M111); the engraving turns the compensation on (M112), so its depth stays the same everywhere, even on a face that isn't quite flat or square.
+                The points go into the sender's contour map (M111); the engraving turns the compensation on (M112), so its depth stays the same everywhere, even on a face that isn't quite flat or square.
                 """, gcode: probePath, timeout: 240,
                 popup: ("Wire on the clamp?", "Is the probe wire plugged in and fixed to the clamp, and the tool clean?")))
             }
@@ -549,7 +549,7 @@ public enum GuidedJobBuilder {
             \(i.material.chips)
             """, gcode: cutPath))
             steps.append(step("Clear the Chips", markdown: """
-            Vacuum the chips from the stock, clamps and table\(p.reference == .windows ? ", and out of both reference bores (a chip in a bore throws the probing off)" : ""). Never use compressed air: it drives chips into the CR-1's bearings.
+            Vacuum the chips from the stock, clamps and table\(p.reference == .windows ? ", and out of both reference bores (a chip in a bore throws the probing off)" : ""). Never use compressed air: it drives chips into the machine's bearings.
             """))
             if p.reference == .windows, let plan = pr.bores {
                 steps += borePickupSteps(plan, tool: p.tool, electrical: pr.electrical, files: &files)
@@ -580,9 +580,9 @@ public enum GuidedJobBuilder {
         return job
     }
 
-    /// Edge finding to the stock centre in X and Y, as Coast Runner's cutcodes do it:
+    /// Edge finding to the stock centre in X and Y, as the maker's cutcodes do it:
     /// store both edges in G55/G56, then M100 puts their midpoint into G54. The edge finder's
-    /// radius cancels out in the midpoint. An X edge out of the CR-1's reach: X0 from the other
+    /// radius cancels out in the midpoint. An X edge out of the machine's reach: X0 from the other
     /// edge and the stock's height instead.
     static func edgeFindSteps(machine: MachineProfile, note: String = "", lower: Bool = true, upper: Bool = true,
                               height: Double = 0, previous: Tool? = nil, approach: Approach? = nil, tag: String = "",
@@ -592,7 +592,7 @@ public enum GuidedJobBuilder {
         let r = finder.diameter / 2
         if previous.map(EdgeFinding.isEdgeFinder) != true {
             s += toolChangeSteps("Fit the Edge Finder", tool: finder, previous: previous,
-                                 note: "The stock was just clamped, so its edges are found again: everything after this works from them. The **Fisher edge finder** spins at \(Int(machine.probeSpindleRPM)) RPM while you search. \(note)")
+                                 note: "The stock was just clamped, so its edges are found again: everything after this works from them. The **edge finder** spins at \(Int(machine.probeSpindleRPM)) RPM while you search. \(note)")
         } else if !note.isEmpty {
             s.append(step("Edge Finder Still In", markdown: "The edge finder is still in the spindle. \(note)"))
         }
@@ -602,7 +602,7 @@ public enum GuidedJobBuilder {
             if let a = approach {
                 let file = "Code/near_\(tag)_\(axis == 0 ? "x" : "y")\(side < 0 ? "lo" : "hi").nc"
                 files[file] = Data(a.program(axis: axis, side: side, radius: r).utf8)
-                s.append(step("Move Near the \(title)", markdown: "Click Next: the CR-1 drives the spinning finder to about 4 mm outside \(where_), 6 mm in front of the face, from where the stock should be. It can't feel the edge: if the stock sits elsewhere, stop and jog instead.",
+                s.append(step("Move Near the \(title)", markdown: "Click Next: the machine drives the spinning finder to about 4 mm outside \(where_), 6 mm in front of the face, from where the stock should be. It can't feel the edge: if the stock sits elsewhere, stop and jog instead.",
                               gcode: file, timeout: 60))
             }
             s += edgePair(title, where_, store, nearby: approach != nil)
@@ -617,7 +617,7 @@ public enum GuidedJobBuilder {
             files["Code/" + name] = Data(ReferenceBores.singleEdgeProgram(axis: "X", toward: useLower ? 1 : -1, edgeAt: (useLower ? -1 : 1) * height / 2,
                                                                          radius: EdgeFinding.tool.diameter / 2, electrical: false).utf8)
             s.append(step("Find the \(useLower ? "Lower" : "Upper") Edge (X)", markdown: """
-            The \(useLower ? "upper" : "lower") edge is **out of the CR-1's reach** in this clamping, so X0 comes from the \(useLower ? "lower" : "upper") edge and the stock's height, **\(Length.mm(height)) mm** (measure it: if it differs, the part shifts by half the difference).
+            The \(useLower ? "upper" : "lower") edge is **out of the machine's reach** in this clamping, so X0 comes from the \(useLower ? "lower" : "upper") edge and the stock's height, **\(Length.mm(height)) mm** (measure it: if it differs, the part shifts by half the difference).
 
             \(edgeFinding("the **\(useLower ? "lower" : "upper")** edge"))
             """, popup: ("Edge found?", "Has the edge finder just clicked off-centre at the edge, in 0.01 mm steps?"), noStep: "-0"))
@@ -644,16 +644,16 @@ public enum GuidedJobBuilder {
         func edge(_ title: String, _ where_: String, axis: String, toward: Double, file: String, program: String) {
             files[file] = Data(program.utf8)
             if let a = approach {
-                // The stock is where it was: the CR-1 brings the tool beside the edge itself.
+                // The stock is where it was: the machine brings the tool beside the edge itself.
                 let near = file.replacingOccurrences(of: ".nc", with: "_near.nc")
                 files[near] = Data(a.probeProgram(axis: axis == "X" ? 0 : 1, side: -toward, radius: tool.diameter / 2, depth: d).utf8)
-                s.append(step("Move Beside the \(title)", markdown: "Click Next: the CR-1 brings the tool to about 3 mm outside \(where_) and creeps down to \(depth) mm below the face. It stops if it touches the stock on the way.",
+                s.append(step("Move Beside the \(title)", markdown: "Click Next: the machine brings the tool to about 3 mm outside \(where_) and creeps down to \(depth) mm below the face. It stops if it touches the stock on the way.",
                               gcode: near, timeout: 60))
                 s.append(step("Check the Position", markdown: "The probe light should be **off** and the tool beside the edge, not on the face.",
                               popup: ("In position?", "Is the tool about 3 mm from the edge, \(depth) mm below the face, not touching? (No: jog it there by hand, then answer again.)"), noStep: "-0"))
             } else {
                 s.append(step("Beside the \(title)", markdown: """
-                In **Manual Operations**, with the spindle stopped, jog the tool to about **3 mm outside \(where_)**, about **\(depth) mm below the face** (so its side, not its tip, will touch): 1 mm steps, then 0.1 mm as you get close. Close Manual Operations.
+                In **Machine Control**, with the spindle stopped, jog the tool to about **3 mm outside \(where_)**, about **\(depth) mm below the face** (so its side, not its tip, will touch): 1 mm steps, then 0.1 mm as you get close. Close Machine Control.
                 """, popup: ("In position?", "Is the tool about 3 mm from the edge, \(depth) mm below the face, not touching?"), noStep: "-0"))
             }
             s.append(step("Probe the \(title)", text: "Click Next: the tool turns slowly backwards and creeps toward the edge until it touches.", gcode: file, timeout: 120))
@@ -668,7 +668,7 @@ public enum GuidedJobBuilder {
         } else {
             let useLower = lower
             edge("\(useLower ? "Lower" : "Upper") Edge (X)",
-                 "the stock's **\(useLower ? "lower" : "upper")** edge (the other one is out of the CR-1's reach: X0 comes from this edge and the stock's height, \(Length.mm(i.stockSize.x)) mm)",
+                 "the stock's **\(useLower ? "lower" : "upper")** edge (the other one is out of the machine's reach: X0 comes from this edge and the stock's height, \(Length.mm(i.stockSize.x)) mm)",
                  axis: "X", toward: useLower ? 1 : -1, file: "Code/probe\(sideTag)_x_single.nc",
                  program: ReferenceBores.singleEdgeProgram(axis: "X", toward: useLower ? 1 : -1, edgeAt: (useLower ? -1 : 1) * i.stockSize.x / 2,
                                                            radius: tool.diameter / 2, electrical: true))
@@ -700,7 +700,7 @@ public enum GuidedJobBuilder {
             }
         } else {
             s.append(step("Install the Edge Finder", markdown: """
-            The spindle moves to the tool-change position. Take the tool out and fit the **Fisher edge finder**: it finds the bores' walls.
+            The spindle moves to the tool-change position. Take the tool out and fit the **edge finder**: it finds the bores' walls.
             """, gcode: "Code/tool_change_position.nc", timeout: 90))
             for k in 0..<2 {
                 let over = "Code/B_over_bore\(k + 1).nc"
@@ -708,7 +708,7 @@ public enum GuidedJobBuilder {
                 s.append(step("Over Bore \(k + 1)", text: "Click Next to bring the edge finder over bore \(k + 1).", gcode: over, timeout: 120))
                 s.append(step("Start the Edge Finder", text: "Click Next to spin the edge finder.", gcode: "Code/edgefinder_spin.nc"))
                 s.append(step("Into Bore \(k + 1)", markdown: """
-                In **Manual Operations**, lower the edge finder into the bore to about **Z\(ReferenceBores.n(plan.probeZ))**, its tip below the wider window, in the bore's own wall.
+                In **Machine Control**, lower the edge finder into the bore to about **Z\(ReferenceBores.n(plan.probeZ))**, its tip below the wider window, in the bore's own wall.
                 """, popup: ("In the bore?", "Is the edge finder's tip down in the narrow bore, not touching?"), noStep: "-0"))
                 for axis in ["X", "Y"] {
                     let plus = "Code/B_wall_\(axis)p.nc", minus = "Code/B_wall_\(axis)m.nc"
@@ -740,7 +740,7 @@ public enum GuidedJobBuilder {
     /// Edge finding by hand (manual §4.6.1): 1 → 0.1 → 0.01 mm steps, backing off between.
     static func edgeFinding(_ where_: String, nearby: Bool = false) -> String {
         """
-        In **Manual Operations**:
+        In **Machine Control**:
         1. \(nearby ? "Jog toward the stock (−Z) about 7.5 mm, so the tip is 1.5 mm below the face beside the edge." : "Bring the spinning edge finder beside \(where_), its tip about 1.5 mm below the face (its side touches, not its end).")
         2. Jog toward the edge in 1 mm steps until it **clicks** and kicks off-centre.
         3. Back off 1 mm, then jog in 0.1 mm steps until it clicks again.
@@ -956,7 +956,7 @@ public enum GuidedJobBuilder {
     static func step(_ title: String, text: String = "", markdown: String = "", image: String = "", gcode: String = "",
                      timeout: UInt = 0, popup: (String, String)? = nil, noStep: String = "", yesStep: String = "",
                      goTo: String = "") -> Step {
-        var s = Step(manifest: CRProject.rootManifest)
+        var s = Step(manifest: JobPackage.rootManifest)
         s.title = clean(title)
         s.prompt = clean(text)
         s.markdown = safeMarkdown(markdown)
@@ -977,7 +977,7 @@ public enum GuidedJobBuilder {
     static func clean(_ s: String) -> String { s.replacingOccurrences(of: "#", with: "No.") }
 
     /// Markdown blocks end at any line that looks like `key: value`, and 3-character lines are
-    /// skipped by CRWrite's parser. Make every line safe without changing what it says.
+    /// skipped by the sender's parser. Make every line safe without changing what it says.
     public static func safeMarkdown(_ md: String) -> String {
         guard !md.isEmpty else { return "" }
         let keyLike = try! NSRegularExpression(pattern: #"^\s*[A-Za-z0-9_\-]+\s*:"#)
@@ -994,7 +994,7 @@ public enum GuidedJobBuilder {
 /// so the whole program can be watched safely above the stock.
 public enum AirCut {
     public static func make(from gcode: String, lift: Double = 10) -> String {
-        var out = ["(AIR CUT: spindle off, all moves \(CR1Post.fmt(lift)) mm above the work)"]
+        var out = ["(AIR CUT: spindle off, all moves \(GRBLPost.fmt(lift)) mm above the work)"]
         for raw in gcode.split(separator: "\n", omittingEmptySubsequences: false) {
             var line = String(raw)
             let upper = line.uppercased()
@@ -1005,7 +1005,7 @@ public enum AirCut {
             }
             if !upper.contains("G53"), let r = line.range(of: #"Z(-?\d+(\.\d+)?)"#, options: .regularExpression) {
                 let v = Double(line[r].dropFirst()) ?? 0
-                line.replaceSubrange(r, with: "Z" + CR1Post.fmt(v + lift))
+                line.replaceSubrange(r, with: "Z" + GRBLPost.fmt(v + lift))
             }
             out.append(line)
         }
@@ -1017,7 +1017,7 @@ public enum AirCut {
 public enum FacingProgram {
     public static func make(width: Double, length: Double, depth: Double, tool: Tool, data: CuttingData,
                             machine: MachineProfile, title: String) -> String {
-        CR1Post.program(header: .init(programName: title, setupName: "Squaring", tool: tool, operationNames: ["Facing"],
+        GRBLPost.program(header: .init(programName: title, setupName: "Squaring", tool: tool, operationNames: ["Facing"],
                                       stockDescription: "\(Length.mm(width)) × \(Length.mm(length)) mm face"),
                         rpm: data.rpm, paths: [OperationToolpath(operationID: UUID(), moves: moves(width: width, length: length, depth: depth, tool: tool, data: data))],
                         machine: machine)

@@ -23,26 +23,27 @@ extension Tool {
     /// Flute colour: the coating (linear RGB), or bare carbide / HSS.
     var fluteColor: SIMD4<Float> {
         switch coating {
-        case .tiN: SIMD4(0.78, 0.52, 0.12, 1)
-        case .zrN: SIMD4(0.80, 0.68, 0.40, 1)
-        case .tiAlN, .alTiN: SIMD4(0.18, 0.15, 0.22, 1)
-        case .alCrN: SIMD4(0.30, 0.32, 0.36, 1)
-        case .dlc, .diamond: SIMD4(0.10, 0.10, 0.11, 1)
-        case .none: toolMaterial == .hss ? SIMD4(0.50, 0.50, 0.52, 1) : SIMD4(0.58, 0.59, 0.62, 1)
+        // Coatings as brightness only (monotone palette): light TiN/ZrN, dark AlTiN/DLC.
+        case .tiN: SceneColor.surface(0.70)
+        case .zrN: SceneColor.surface(0.76)
+        case .tiAlN, .alTiN: SceneColor.surface(0.18)
+        case .alCrN: SceneColor.surface(0.32)
+        case .dlc, .diamond: SceneColor.surface(0.10)
+        case .none: toolMaterial == .hss ? SceneColor.surface(0.50) : SceneColor.surface(0.60)
         }
     }
 
     /// Scene meshes for the flutes and the shank (tip at the origin, axis +Z).
     func sceneMeshes(device: MTLDevice, id: String) -> [SceneMesh] {
         if EdgeFinding.isEdgeFinder(self) {
-            // Fisher A250: the 0.2" tip on its spring joint, then the 1/4" body.
+            // 0.2\" edge finder: the 0.2" tip on its spring joint, then the 1/4" body.
             var tip = MeshBuilder(), body = MeshBuilder()
             tip.cylinder(radius: Float(diameter / 2), z0: 0, z1: 9)
             body.cylinder(radius: 1.6, z0: 9, z1: 10.5)
             body.cylinder(radius: Float(shankDiameter / 2), z0: 10.5, z1: Float(stickout))
             var out: [SceneMesh] = []
-            if let m = tip.mesh(device: device, id: id, color: SIMD4(0.85, 0.86, 0.88, 1)) { m.material = .chrome; out.append(m) }
-            if let m = body.mesh(device: device, id: id + ".shank", color: SIMD4(0.75, 0.76, 0.78, 1)) { m.material = .chrome; out.append(m) }
+            if let m = tip.mesh(device: device, id: id, color: SceneColor.surface(0.86)) { m.material = .chrome; out.append(m) }
+            if let m = body.mesh(device: device, id: id + ".shank", color: SceneColor.surface(0.76)) { m.material = .chrome; out.append(m) }
             return out
         }
         let (f, s) = cutterShape.meshes()
@@ -52,7 +53,7 @@ extension Tool {
             out.append(m)
         }
         if let m = SceneMesh(device: device, id: id + ".shank", positions: s.positions, normals: s.normals, indices: s.indices,
-                             color: SIMD4(0.58, 0.59, 0.62, 1)) {
+                             color: SceneColor.surface(0.60)) {
             m.material = SurfaceMaterial(metallic: 1, roughness: 0.14)
             out.append(m)
         }

@@ -16,7 +16,7 @@ public struct Tuning: Codable, Equatable, Sendable {
         public var explanation: String {
             switch self {
             case .draft: "Prototype or wax: coarse cusps, brisk feeds. Fastest; expect to sand."
-            case .standard: "Good machined finish, Coast Runner's recommended feeds."
+            case .standard: "Good machined finish, the maker's recommended feeds."
             case .fine: "Jewellery finish ready for light polishing; slower, gentler on tools."
             case .mirror: "Tiny cusps and light feeds for a near-polished surface. Slowest."
             }

@@ -76,12 +76,12 @@ public enum InventoryStore {
 }
 
 extension Inventory {
-    /// The starting inventory on first launch, built from what ships in the standard CR-1 kit:
-    /// - Coast Runner's two Fusion tool libraries (the tools used in the CR-1 lessons);
-    /// - the ER-11 collets the Coast Runner cutcodes use (1/8" and 1/4");
-    /// - the universal clamp, jig plate and T-slot nuts from the CR-1 clamp kit;
-    /// - the Fisher A250 edge finder from the operator manual;
-    /// - the 150 × 80 × 20 mm 6061 block modelled in `CoastRunnerCNCDimensions.3dm`.
+    /// The starting inventory on first launch, built from what ships in the standard machine kit:
+    /// - The maker's two Fusion tool libraries (the tools used in the machine lessons);
+    /// - the ER-11 collets the maker's cutcodes use (1/8" and 1/4");
+    /// - the universal clamp, jig plate and T-slot nuts from the clamp kit;
+    /// - the 0.2\" edge finder from the operator manual;
+    /// - the 150 × 80 × 20 mm 6061 block modelled in the machine dimensions model.
     /// Everything is editable; the app asks the user to confirm what they actually own.
     /// What holds stock flat on the bed before it fits the clamp kit (FlatPrep): the two
     /// acetal squaring stops, the kit's riser plate and two 3" C-clamps.
@@ -91,25 +91,25 @@ extension Inventory {
         Fixture(name: "Riser plate", kind: .riser, quantity: 1, height: FlatPrep.riserHeight,
                 notes: "12.7 mm aluminium plate under flat stock, placed just behind the squaring stop's face so the cut overhangs it."),
         Fixture(name: "3\" C-clamp", kind: .cClamp, quantity: 2, gripRange: 0 ... FlatPrep.clampOpening,
-                notes: "Screw C-clamp from the Coast Runner kit: 76 mm opening, 50 mm throat. Reaches around the table's back edge to hold flat stock on the riser."),
+                notes: "Screw C-clamp from the maker's kit: 76 mm opening, 50 mm throat. Reaches around the table's back edge to hold flat stock on the riser."),
     ]
 
     public static func starter(toolLibraries: [URL]) -> Inventory {
         var inv = Inventory()
         for url in toolLibraries {
-            guard let result = try? FusionToolImport.load(url) else { continue }
+            guard let result = try? ToolLibraryImport.load(url) else { continue }
             inv.tools += result.tools.map {
                 var t = $0
-                t.notes = "Imported from Coast Runner's library. Set the quantity to what you own."
+                t.notes = "Imported from the maker's library. Set the quantity to what you own."
                 return t
             }
         }
         inv.accessories = [
-            Accessory(name: "ER-11 collet 1/8\"", kind: .collet, size: 3.175, notes: "Used by Coast Runner's cutcodes."),
-            Accessory(name: "ER-11 collet 1/4\"", kind: .collet, size: 6.35, notes: "Used by Coast Runner's cutcodes."),
+            Accessory(name: "ER-11 collet 1/8\"", kind: .collet, size: 3.175, notes: "Used by the maker's cutcodes."),
+            Accessory(name: "ER-11 collet 1/4\"", kind: .collet, size: 6.35, notes: "Used by the maker's cutcodes."),
         ]
         inv.fixtures = [
-            Fixture(name: "CR-1 Universal Clamp", kind: .universalClamp, quantity: 1, clampAxis: .x,
+            Fixture(name: "Universal Clamp", kind: .universalClamp, quantity: 1, clampAxis: .x,
                     height: 0, isolated: true, modelPath: "fixtures/universal_clamp_v96.step",
                     notes: "Bolts to the T-slots, clamps in X and is electrically isolated, so conductive probing works. [MAN §4.4]"),
             Fixture(name: "Quick Release Jig Plate", kind: .jigPlate, quantity: 1,
@@ -120,11 +120,11 @@ extension Inventory {
         ] + Self.flatClampingKit
         inv.flatKitAdded = true
         inv.measuring = [
-            MeasuringTool(name: "Fisher A250 edge finder", kind: .edgeFinder, resolution: 0.01,
+            MeasuringTool(name: "0.2\" edge finder", kind: .edgeFinder, resolution: 0.01,
                           notes: "0.2\" (5.08 mm) tip: offset 2.54 mm. Run at about 1500 RPM. [MAN §4.6]"),
         ]
         inv.stock = [
-            StockItem(materialID: "al-6061", sizeX: 150, sizeY: 80, sizeZ: 20, notes: "From your CR-1 dimensions model."),
+            StockItem(materialID: "al-6061", sizeX: 150, sizeY: 80, sizeZ: 20, notes: "From your machine dimensions model."),
         ]
         return inv
     }

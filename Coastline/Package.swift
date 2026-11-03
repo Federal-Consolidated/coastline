@@ -8,12 +8,13 @@ let package = Package(
     platforms: [.macOS("26.0")],  // Liquid Glass APIs without fallbacks (personal app, macOS 27)
     dependencies: [
         .package(path: "../CoastlineCore"),
+        .package(path: "../MillCore"),
         .package(path: "../Viewport"),
     ],
     targets: [
         .executableTarget(
             name: "Coastline",
-            dependencies: ["CoastlineCore", "Viewport"]
+            dependencies: ["CoastlineCore", "Viewport", "MillCore"]
         ),
     ]
 )

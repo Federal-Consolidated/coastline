@@ -13,8 +13,8 @@ img.lockFocus()
 let rect = NSRect(x: 0, y: 0, width: size, height: size)
 // The rounded square, sky cyan at the top to deep ocean blue at the bottom.
 let body = NSBezierPath(roundedRect: rect.insetBy(dx: 100, dy: 100), xRadius: 185, yRadius: 185)
-NSGradient(colors: [NSColor(displayP3Red: 0.020, green: 0.290, blue: 0.620, alpha: 1),
-                    NSColor(displayP3Red: 0.120, green: 0.620, blue: 0.900, alpha: 1)])!
+NSGradient(colors: [NSColor(displayP3Red: 0.100, green: 0.100, blue: 0.100, alpha: 1),
+                    NSColor(displayP3Red: 0.360, green: 0.360, blue: 0.360, alpha: 1)])!
     .draw(in: body, angle: 90)
 // Three waves, two crests each, solid white (as in the Icon Composer file, scaled onto the
 // 824 px square).

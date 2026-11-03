@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// What to do on opening Coastline: carry on with the last part, open a project, import a part,
-/// or try one of the example parts (each held a different way on the CR-1).
+/// or try one of the example parts (each held a different way on the machine).
 struct StartView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -15,7 +15,7 @@ struct StartView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Coastline").font(.title.weight(.semibold))
-                    Text("From a CAD part to a guided job on your CR-1.").foregroundStyle(.secondary)
+                    Text("From a CAD part to a guided job on your machine.").foregroundStyle(.secondary)
                 }
             }
             HStack(spacing: 10) {

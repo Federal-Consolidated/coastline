@@ -1,7 +1,7 @@
 """Coastline's example parts, modelled in OpenCASCADE: `cd engine && uv run python ../scripts/support/make_examples.py`.
 
 Writes resources/examples/*.step. Each part shows a different way of holding the stock on the
-CR-1 and has real engineering details (fits, countersinks, counterbores, jewel sinks, slots),
+machine and has real engineering details (fits, countersinks, counterbores, jewel sinks, slots),
 all millable with the tools Coastline knows. Units: mm. The face to machine points +Z; the
 part's own origin is unimportant (Coastline places it in the stock).
 
@@ -266,7 +266,7 @@ def motor_mount():
 # --- 5. First-cut test coupon ------------------------------------------------------------------
 
 def first_cut():
-    """The coupon for the first cut on the CR-1 (docs/FIRST_CUT.md), 34 × 24 × 6 with R3
+    """The coupon for the first cut on the machine (docs/FIRST_CUT.md), 34 × 24 × 6 with R3
     corners: every kind of operation once, each leaving something to measure with calipers.
     Facing (thickness), the outline (34 × 24), a 14 × 8 pocket 2.5 deep with R1.6 corners (a
     1/8" end mill fits), Ø4 and Ø6 through holes (bored with a 1/8" you have) and a 1.5 mm step along the

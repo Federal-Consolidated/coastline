@@ -53,12 +53,14 @@ struct ViewModeBar: View {
             .accessibilityAddTraits(model.jogOpen ? .isSelected : [])
             Menu {
                 Toggle("Realistic Rendering", isOn: $model.realistic)
+                Toggle("Chip Guards (Clear)", isOn: $model.showChipGuards)
+                    .help("Show the clear chip guards, or hide them to look inside")
                 Toggle("Show Only the Work", isOn: $model.isolateWork)
                 Toggle("Work Area", isOn: $model.showWorkArea)
                 Toggle("Perspective", isOn: $model.perspective)
                 Toggle("Step Card", isOn: $model.showStepCard)
                 Toggle("Next Cut Face Highlight", isOn: $model.showCutFace)
-                Toggle("Back Faces in Red", isOn: $model.showUndercutOverlay)
+                Toggle("Highlight Back Faces", isOn: $model.showUndercutOverlay)
                 Divider()
                 Button("Sweep the Travel", systemImage: "move.3d") { model.sweepTravel() }
                     .disabled(!model.machineLoaded)

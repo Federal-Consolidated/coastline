@@ -25,12 +25,12 @@ public struct AxisBox: Equatable, Sendable, Codable {
 /// the post-processor and the safety validator use, so every number cites its source.
 ///
 /// Sources:
-/// - [FW]  CR-1 firmware `grblCR/defaults.h`, `DEFAULTS_CR1` (Coast Runner firmware repository)
-/// - [MAN] Coast Runner Operator Manual v0.9 (Nov 2024)
-/// - [CPS] Coast Runner's Fusion post `Coast_Runner_CR-1_Postprocessor.cps`
+/// - [FW]  machine firmware the firmware's `defaults.h` (the firmware repository)
+/// - [MAN] the machine's operator manual v0.9 (Nov 2024)
+/// - [CPS] the maker's Fusion post the maker's post-processor (.cps)
 /// - [UC]  Universal Clamp cutcode `universal_clamp_v1_WFzXVS736N.14.crproj`
-/// - [CRC] `CRCore/GRBL/RealTimeStatus.swift` (soft-limit maths)
-/// - [DIM] `CoastRunnerCNCDimensions.3dm` (a measured envelope model)
+/// - [CRC] `MillCore/GRBL/RealTimeStatus.swift` (soft-limit maths)
+/// - [DIM] the machine dimensions model (a measured envelope model)
 public struct MachineProfile: Equatable, Sendable, Codable {
     public var name: String
 
@@ -38,7 +38,7 @@ public struct MachineProfile: Equatable, Sendable, Codable {
 
     /// Travel per axis, mm ($130–$132). [FW]
     public var travel: Vec3
-    /// Reachable machine coordinates. Home is the 0 corner; everything is negative. CRWrite's
+    /// Reachable machine coordinates. Home is the 0 corner; everything is negative. The sender's
     /// soft-limit window: X −(travel−0.5)…−0.5, Y and Z −travel…−0.5. [CRC]
     public var machineEnvelope: AxisBox
     /// Max feed per axis, mm/min ($110–$112). [FW]
@@ -85,7 +85,7 @@ public struct MachineProfile: Equatable, Sendable, Codable {
 
     // MARK: Probing & workholding
 
-    /// Fisher A250 edge finder tip, mm (0.2"). Offset = radius = 2.54 mm. [MAN §4.6]
+    /// 0.2\" edge finder tip, mm (0.2"). Offset = radius = 2.54 mm. [MAN §4.6]
     public var edgeFinderTipDiameter: Double
     /// Conductive probing feed, mm/min, and spindle mode (M4 S1500). [MAN §5.4, UC]
     public var probeFeed: Double
@@ -97,8 +97,8 @@ public struct MachineProfile: Equatable, Sendable, Codable {
     /// [DIM]
     public var physicalEnvelope: Vec3
 
-    public static let cr1 = MachineProfile(
-        name: "Coast Runner CR-1",
+    public static let standard = MachineProfile(
+        name: "Desktop Mill",
         travel: Vec3(86.5, 241.5, 78.5),
         machineEnvelope: AxisBox(x: -86.0 ... -0.5, y: -241.5 ... -0.5, z: -78.5 ... -0.5),
         maxRate: Vec3(2540, 3100, 3100),

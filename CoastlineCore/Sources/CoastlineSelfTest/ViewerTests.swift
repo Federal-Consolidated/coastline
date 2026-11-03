@@ -24,7 +24,7 @@ let viewerTests: [TestCase] = [
                      Move(.cut, x: 10, y: 0, z: -1, feed: 600)]
         let path = OperationToolpath(operationID: UUID(), moves: moves)
         let tool = Tool(name: "t", kind: .flatEndMill, diameter: 3, shankDiameter: 3, flutes: 2, fluteLength: 9, stickout: 20, overallLength: 38)
-        let post = CR1Post.programWithLineMap(header: .init(programName: "t", setupName: "s", tool: tool, operationNames: [], stockDescription: ""),
+        let post = GRBLPost.programWithLineMap(header: .init(programName: "t", setupName: "s", tool: tool, operationNames: [], stockDescription: ""),
                                               rpm: 8000, paths: [path])
         try expectEqual(post.lines[0].count, 3)
         let gl = post.text.split(separator: "\n", omittingEmptySubsequences: false)

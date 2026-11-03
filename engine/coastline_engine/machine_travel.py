@@ -1,4 +1,4 @@
-"""Calibrates where in its travel the CR-1 assembly STEP is modelled, by moving it.
+"""Calibrates where in its travel the machine assembly STEP is modelled, by moving it.
 
 The STEP shows the machine at one arbitrary pose. To know which machine coordinates that pose
 is, each motion group is slid along its axis until it first touches a part it wasn't already
@@ -11,7 +11,7 @@ Collision is tested on 0.5 mm voxels of every part's surface: fast (seconds per 
 matches an exact B-rep distance sweep to ~0.5 mm. Parts touching at the modelled pose (rods
 in their bearings, screws in their holes) are joined or sliding, so those pairs are ignored.
 
-Run:  uv run python -m coastline_engine.machine_travel [path/to/cr1.step]
+Run:  uv run python -m coastline_engine.machine_travel [path/to/machine.step]
 """
 
 from __future__ import annotations
@@ -26,10 +26,9 @@ import trimesh
 PITCH = 0.5
 # Groups that move with each axis (Z rides on the Y translator).
 AXIS_GROUPS = {"x": ({"x"}, 0), "y": ({"y", "z"}, 1), "z": ({"z"}, 2)}
-# A stationary reinforcement plate the CAD places 0.1 mm into the X switch tab's path; the real
-# machine travels past it (the firmware's X travel would be impossible otherwise).
 IGNORE = ("Outer Enclosure",)
-IGNORE_FOR = {"x": ("X Linkage",)}
+# Parts to ignore for one axis (none in the current model).
+IGNORE_FOR: dict[str, tuple[str, ...]] = {}
 
 
 @dataclass
@@ -51,7 +50,7 @@ def voxelise(step_path: str | Path) -> list[Voxels]:
     from .cad_import import tessellate
     from .machine_model import GROUPS, _name
 
-    doc = TDocStd_Document(TCollection_ExtendedString("cr1"))
+    doc = TDocStd_Document(TCollection_ExtendedString("machine"))
     reader = STEPCAFControl_Reader()
     reader.SetNameMode(True)
     reader.ReadFile(str(step_path))
@@ -141,7 +140,7 @@ def calibrate(step_path: str | Path, envelope_low=(-86.0, -241.5, -78.5)) -> dic
     """Mechanical free range per axis around the modelled pose, and the machine position that
     centres the firmware travel inside it. Machine directions: X+ lowers the table (world −x),
     Y+ moves right (world +y), Z+ retracts (world +z). Envelope: envelope_low … −0.5
-    (MachineProfile.cr1.machineEnvelope)."""
+    (MachineProfile.standard.machineEnvelope)."""
     parts = voxelise(step_path)
     retract = {"z": np.array([0, 0, int(80 / PITCH)])}  # spindle out of the table's way for X
     up, _, _ = free_travel(parts, "x", +1, retract)
@@ -160,7 +159,7 @@ def calibrate(step_path: str | Path, envelope_low=(-86.0, -241.5, -78.5)) -> dic
 
 
 if __name__ == "__main__":
-    path = sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parents[2] / "resources/machine/cr1_mechanicals_v1.3.step"
+    path = sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parents[2] / "resources/machine/machine.step"
     r = calibrate(path)
     for a in "xyz":
         print(f"{a}: free {r[a][0]:.1f} / {r[a][1]:.1f} mm")

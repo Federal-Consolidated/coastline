@@ -43,7 +43,7 @@ struct FlowSteps: View {
                  detail: generated ? (passed ? "Safety-checked. Play them back and compare with the CAD." : "A program needs attention: see Machining.") : "Generate them (a minute or two for 3D finishing).",
                  tab: .machining),
             Step(title: "Export", symbol: "square.and.arrow.up", state: passed ? .next : .later,
-                 detail: "A guided job for CRWrite: clamping, edge finding, tools, air cuts, cuts and measuring.",
+                 detail: "A guided job for the sender: clamping, edge finding, tools, air cuts, cuts and measuring.",
                  tab: .machining),
         ]
     }

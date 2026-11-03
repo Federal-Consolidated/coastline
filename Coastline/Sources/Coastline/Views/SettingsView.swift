@@ -37,7 +37,7 @@ struct SettingsView: View {
                             ForEach(AppSettings.ClampKitProbing.allCases) { Text($0.title).tag($0) }
                         }
                     } footer: {
-                        Text("The clamp kit is electrically isolated from the machine: with the probe wire clipped to the stock, the tool touching it closes the circuit, so the CR-1 finds edges, bores and the top itself (G38.2). On the bed with acetal stops there is no circuit; there it's the edge finder and the paper.")
+                        Text("The clamp kit is electrically isolated from the machine: with the probe wire clipped to the stock, the tool touching it closes the circuit, so the machine finds edges, bores and the top itself (G38.2). On the bed with acetal stops there is no circuit; there it's the edge finder and the paper.")
                     }
                     Section {
                         Toggle("Reference bores on two-sided parts", isOn: $settings.referenceBores)
@@ -81,7 +81,7 @@ struct SettingsView: View {
                 VStack(spacing: 10) {
                     Image(systemName: "water.waves").font(.system(size: 44)).foregroundStyle(Theme.accent)
                     Text("Coastline").font(.title.weight(.semibold))
-                    Text("CAM and guided setups for the Coast Runner CR-1").foregroundStyle(.secondary)
+                    Text("CAM and guided setups for the machine").foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }

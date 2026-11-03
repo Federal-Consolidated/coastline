@@ -37,7 +37,7 @@ extension AppModel {
             // Coastline's own shoulders: lower the bar until the part's top is in reach.
             if shouldersAuto, let r = reachExcess, r.above > 0, let sh = setup.shoulders, sh.bottom < maxShoulderBottom {
                 lowerForReach()
-                status = "The part reached above the CR-1's travel: the shoulders' bottom comes off too (\(Length.mm(setup.shoulders?.bottom ?? 0)) mm), so the bar sits that much lower."
+                status = "The part reached above the machine's travel: the shoulders' bottom comes off too (\(Length.mm(setup.shoulders?.bottom ?? 0)) mm), so the bar sits that much lower."
                 return
             }
             // The shoulders fit the jaw chosen in the clamp kit: the soft jaws take shorter ones,
@@ -130,7 +130,7 @@ extension AppModel {
         return (a * 200).rounded(.down) / 200  // 0.5 % steps
     }
 
-    /// The CR-1's table and the squaring stop's face, from the machine model.
+    /// The machine's table and the squaring stop's face, from the machine model.
     var prepTable: FlatPrep.Table {
         var t = SideClamps.table(topX: machineModel?.tableTopX ?? -31.12, frontSlotZ: machineModel?.tSlotZ.max() ?? -13.4)
         if let r = cClampFrameAtBed { (t.clampInnerReach, t.clampHalfWidth) = r }
@@ -212,7 +212,7 @@ extension AppModel {
         return h
     }
 
-    /// Path D: the part's top and bottom against the CR-1's X travel (+ above, − below), mm;
+    /// Path D: the part's top and bottom against the machine's X travel (+ above, − below), mm;
     /// positive means it's out of reach by that much.
     var reachExcess: (above: Double, below: Double)? {
         guard let part, let xr = kitWorkXRange else { return nil }
@@ -293,7 +293,7 @@ extension AppModel {
             let op = Operation(kind: item.stage.isEdge ? .adaptive : .facing, toolID: tool.id)
             let data = FeedsEngine.compute(tool: tool, material: material, kind: op.kind)
             let path = OperationToolpath(operationID: op.id, moves: item.moves)
-            let posted = CR1Post.programWithLineMap(
+            let posted = GRBLPost.programWithLineMap(
                 header: .init(programName: part?.fileName ?? "Prep", setupName: "Prep: flat on the squaring stop", tool: tool,
                               operationNames: [item.title], stockDescription: "\(material.name) \(stock.sizeDescription)"),
                 rpm: data.rpm, paths: [path])

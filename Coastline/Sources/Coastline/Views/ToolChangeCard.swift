@@ -1,7 +1,7 @@
 import CoastlineCore
 import SwiftUI
 
-/// The tool change playback stopped at: the CR-1 at the tool-change position, what comes out,
+/// The tool change playback stopped at: the machine at the tool-change position, what comes out,
 /// what goes in and how (the operator manual's steps), and "Tool Changed" to carry on.
 struct ToolChangeCard: View {
     @Environment(AppModel.self) private var model
@@ -26,7 +26,7 @@ struct ToolChangeCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             VStack(alignment: .leading, spacing: 5) {
-                line("The CR-1 has lowered the table (the stock as far from the spindle as it goes) and brought the spindle forward, out of the machine towards you: the collet nut is free and in reach, the stock stays clamped (its zero stays valid).")
+                line("The machine has lowered the table (the stock as far from the spindle as it goes) and brought the spindle forward, out of the machine towards you: the collet nut is free and in reach, the stock stays clamped (its zero stays valid).")
                 if let from = stop.from {
                     line("**Take out the \(from.name)**: 12 mm wrench on the spindle's flats, 17 mm on the collet nut; hold the 12, loosen with the 17.")
                 }

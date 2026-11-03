@@ -76,7 +76,7 @@ extension AppModel {
         // transform the triangles were made with.
         let placed = partMesh.transform * (analysisTransform ?? now).inverse.float
         if let m = SceneMesh(device: renderer.device, id: "undercuts", positions: t, normals: normals,
-                             indices: (0..<UInt32(t.count / 3)).map { $0 }, color: SIMD4(0.9, 0.12, 0.08, 0.75),
+                             indices: (0..<UInt32(t.count / 3)).map { $0 }, color: SceneColor.surface(0.97, alpha: 0.8),
                              transform: placed) {
             renderer.scene.setMesh(m)
             undercutOverlayShown = true

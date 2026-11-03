@@ -28,7 +28,7 @@ struct MaterialsPage: View {
             .width(min: 220, ideal: 280)
             TableColumn("Family") { Label($0.family.title, systemImage: $0.family.symbol).foregroundStyle(.secondary) }
                 .width(min: 120, ideal: 170)
-            TableColumn("On the CR-1") { Badge(text: $0.difficulty.title, color: Theme.color($0.difficulty)) }
+            TableColumn("On the machine") { Badge(text: $0.difficulty.title, color: Theme.color($0.difficulty)) }
                 .width(min: 100, ideal: 120)
             TableColumn("Surface speed") { m in
                 Text("\(Int(m.surfaceSpeed.lowerBound))–\(Int(m.surfaceSpeed.upperBound)) m/min").monospacedDigit()
@@ -64,7 +64,7 @@ struct MaterialsPage: View {
 
 struct MaterialDetail: View {
     let material: Material
-    private let machine = MachineProfile.cr1
+    private let machine = MachineProfile.standard
 
     var body: some View {
         ScrollView {
@@ -91,7 +91,7 @@ struct MaterialDetail: View {
 
                 GlassCard {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Spindle speed on the CR-1").font(.headline)
+                        Text("Spindle speed on the machine").font(.headline)
                         ForEach([1.5875, 3.175, 6.35], id: \.self) { d in
                             let ideal = material.idealRPM(toolDiameter: d)
                             let actual = min(max(ideal, machine.spindleRPM.lowerBound), machine.spindleRPM.upperBound)
@@ -135,8 +135,8 @@ struct MaterialDetail: View {
 
     private var capNote: String {
         material.idealRPM(toolDiameter: 3.175) > machine.spindleRPM.upperBound
-            ? "Small tools want more speed than the CR-1's 8000 RPM, so Coastline keeps the chip load right by lowering the feed instead."
-            : "Within the CR-1's 1500–8000 RPM range."
+            ? "Small tools want more speed than the machine's 8000 RPM, so Coastline keeps the chip load right by lowering the feed instead."
+            : "Within the machine's 1500–8000 RPM range."
     }
 
     private func row(_ label: String, _ value: String) -> some View {

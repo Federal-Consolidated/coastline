@@ -21,7 +21,7 @@ struct PartInfo: Equatable {
     var warnings: [String]
 }
 
-/// How much of the CR-1 to draw.
+/// How much of the machine to draw.
 enum MachineDisplay: String, CaseIterable, Identifiable {
     case full, open, ghost, moving, hidden
     var id: Self { self }
@@ -44,13 +44,13 @@ struct MeasurePoint: Equatable {
 
 /// App state: navigation plus the workspace (machine, part, stock, setup, measuring).
 ///
-/// Scene frame: the CR-1 assembly's own coordinates, which are the machine axes (X up,
+/// Scene frame: the machine assembly's own coordinates, which are the machine axes (X up,
 /// Y right, Z toward the spindle). The work frame of `Setup` is placed into it with
 /// `workToModel` (a pure translation: the axes are the same).
 @MainActor
 @Observable
 final class AppModel {
-    let machine = MachineProfile.cr1
+    let machine = MachineProfile.standard
     let renderer: ViewportRenderer
 
     // Navigation
@@ -124,6 +124,10 @@ final class AppModel {
     var showStart = false
     /// The job journal.
     let journal = JournalModel()
+    /// The live connection to the machine (Control page).
+    let mill = MillControl()
+    /// Guided jobs around existing G-code (the G-code projects on the Projects page).
+    let jobs = JobsModel()
     /// A typed move waiting for its value (GumballTyping.swift).
     var gumballPrompt: GumballPrompt?
     /// The fixture picked on the bed (stage 3).
@@ -142,6 +146,16 @@ final class AppModel {
     @ObservationIgnored var lastChangeAt = Date.distantPast
     /// The whole machine at start; it turns see-through once there's work inside to look at.
     var machineDisplay = MachineDisplay.full { didSet { applyMachineDisplay() } }
+    /// The chip guards (clear covers on the table, the carriage and the front): shown see-through,
+    /// or hidden to look inside.
+    var showChipGuards = UserDefaults.standard.object(forKey: "showChipGuards") as? Bool ?? true {
+        didSet {
+            if ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil { UserDefaults.standard.set(showChipGuards, forKey: "showChipGuards") }
+            applyMachineDisplay()
+        }
+    }
+    /// Clear polycarbonate for the chip guards.
+    static let chipGuardSurface = SurfaceMaterial(metallic: 0, roughness: 0.05, edges: 0.8)
     var machineLoaded = false
     /// Perspective is optional; orthographic (no distortion) is the default.
     var perspective = false {
@@ -150,7 +164,7 @@ final class AppModel {
     /// Mirror of the renderer's camera for SwiftUI (the view cube).
     var camera = OrbitCamera()
     var showWorkArea = true { didSet { layoutScene() } }
-    /// Live machine coordinates (X, Y, Z) of the modelled CR-1.
+    /// Live machine coordinates (X, Y, Z) of the modelled machine.
     var machinePosition = SIMD3<Double>(0, 0, 0)
     /// The tool in the collet (the playing program's, or the first planned one).
     var currentTool: Tool?
@@ -193,7 +207,7 @@ final class AppModel {
     var opGenState: [UUID: [Int: GenState]] = [:]
     /// Extra engine processes that generate in parallel with the main one, each with the part.
     @ObservationIgnored var workerEngines: [(engine: EngineClient, partURL: URL, partID: String)] = []
-    /// Set when the job needs more travel than the CR-1 has with this stock placement.
+    /// Set when the job needs more travel than the machine has with this stock placement.
     var travelIssue: String?
     /// Two-sided job: side B is machined after turning the stock front-to-back.
     var twoSided = false { didSet { if twoSided != oldValue { clearToolpathResults(); keepStockWorkable(); layoutScene(); noteProjectChange() } } }
@@ -211,7 +225,8 @@ final class AppModel {
     var touring = false
     /// The instruction card over the 3D view (toggle in the view options).
     var showStepCard = true
-    /// What the Projects page selects when it opens ("firstCut"; automation and links).
+    /// What the Projects page selects when it opens: "firstCut", "project:<path>" or
+    /// "job:<folder path>" (imports, automation and links).
     var projectsPick: String?
     /// The Print a Nest sheet.
     var showNestSheet = false
@@ -415,6 +430,11 @@ final class AppModel {
         }
         renderer.worldToDisplay = ViewportRenderer.machineToDisplay
         renderer.camera.set(.iso)
+        jobs.engine = { [unowned self] in try self.connectedEngine() }
+        jobs.machineSource = { [unowned self] in
+            await self.loadMachine()
+            return self.machineModel
+        }
         renderer.animationsEnabled = ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil
             || ProcessInfo.processInfo.environment["COASTLINE_ANIMATE"] != nil
         renderer.realistic = realistic
@@ -486,13 +506,13 @@ final class AppModel {
 
     // MARK: Machine
 
-    /// Loads the CR-1 assembly (cached by the engine after the first run, ~6 s → 0.1 s).
+    /// Loads the machine assembly (cached by the engine after the first run, ~6 s → 0.1 s).
     func loadMachine() async {
         guard machineModel == nil else { return }
-        status = "Loading the CR-1 model…"
+        status = "Loading the machine model…"
         do {
             let engine = try connectedEngine()
-            let model = try await engine.machineModel(Self.repoRoot.appendingPathComponent("resources/machine/cr1_mechanicals_v1.3.step"))
+            let model = try await engine.machineModel(Self.repoRoot.appendingPathComponent("resources/machine/machine.step"))
             machineModel = model
             kitParts = (try? await engine.fixtureKit()) ?? []
             // The collision engine's machine tree (628 k triangles) is built now, in the
@@ -529,6 +549,11 @@ final class AppModel {
             case .open: m.isVisible = !shell
             case .moving: m.isVisible = group != "static" && !shell
             case .hidden: m.isVisible = false
+            }
+            // Chip guards are clear, so the work shows through them; they can be hidden too.
+            if role.hasSuffix("guard") {
+                m.color.w = machineDisplay == .ghost ? 0.1 : 0.2
+                if !showChipGuards { m.isVisible = false }
             }
             if isolateWork || showingStockOnly { m.isVisible = false }  // stage 1: just the stock and the part
         }
@@ -592,7 +617,7 @@ final class AppModel {
         return SIMD3(m.x - t.x + o.x, m.y + o.y - t.y, m.z + o.z - t.z)
     }
 
-    /// In the clamp kit: the work X (up) the CR-1 can reach, with 0.05 mm to spare. Moves are
+    /// In the clamp kit: the work X (up) the machine can reach, with 0.05 mm to spare. Moves are
     /// kept inside it (at the bar's outer edge only the frame is cut, never the part).
     var kitWorkXRange: ClosedRange<Double>? {
         guard !setup.onBed, let mm = machineModel, let stock, let p = clampPlacement(stockSize: setup.stockSize(stock)) else { return nil }
@@ -619,7 +644,7 @@ final class AppModel {
         return stock.map { setup.stockSize($0) }
     }
 
-    /// The machine position the CR-1 assembly is modelled at (calibrated, machine_travel.py).
+    /// The machine position the machine assembly is modelled at (calibrated, machine_travel.py).
     var modelPose: SIMD3<Double>? { machineModel.map { SIMD3($0.modelPose.x, $0.modelPose.y, $0.modelPose.z) } }
 
     /// Model y of the spindle axis when the gantry is in the middle of its Y travel.
@@ -708,7 +733,7 @@ final class AppModel {
                     scene.setMesh(m)
                 }
                 if let edges = SceneLines(device: renderer.device, id: "stock.edges",
-                                          segments: shoulderEdges(stockSize: stockSize, origin: origin, color: SIMD4(200, 205, 215, 255))) {
+                                          segments: shoulderEdges(stockSize: stockSize, origin: origin, color: SceneColor.edge)) {
                     scene.setLines(edges)
                 }
             } else {
@@ -716,7 +741,7 @@ final class AppModel {
                     scene.setMesh(m)
                 }
                 if let edges = SceneLines(device: renderer.device, id: "stock.edges",
-                                          segments: LineSegment.box(min: lo, max: hi, color: SIMD4(200, 205, 215, 255))) {
+                                          segments: LineSegment.box(min: lo, max: hi, color: SceneColor.edge)) {
                     scene.setLines(edges)
                 }
             }
@@ -727,7 +752,7 @@ final class AppModel {
         if showingStockOnly, let stock, setup.stockSize(stock) != stockSize {
             let f = setup.stockSize(stock)
             let lo = SIMD3<Float>(SIMD3(-stockSize.x / 2, -f.y / 2, -f.z) + origin), hi = SIMD3<Float>(SIMD3(-stockSize.x / 2 + f.x, f.y / 2, 0) + origin)
-            if let l = SceneLines(device: renderer.device, id: "stock.final", segments: LineSegment.box(min: lo, max: hi, color: SIMD4(255, 196, 0, 255))) {
+            if let l = SceneLines(device: renderer.device, id: "stock.final", segments: LineSegment.box(min: lo, max: hi, color: SceneColor.highlight)) {
                 l.group = "x"
                 scene.setLines(l)
             }
@@ -796,7 +821,7 @@ final class AppModel {
             bodies.append(BedBody(name: Self.fixtureName(box: id), meshPrefix: id, shape: .box(lo, hi)))
             scene.remove(id: id)
             if let m = SceneMesh.box(device: renderer.device, id: id, min: SIMD3<Float>(lo), max: SIMD3<Float>(hi),
-                                     color: SIMD4(0.30, 0.31, 0.33, 1)) {
+                                     color: SceneColor.dark) {
                 scene.setMesh(m)
                 used.insert(id)
             }
@@ -924,7 +949,7 @@ final class AppModel {
         let bottom = r.lowerBound, top = r.upperBound
         let o = SIMD3<Float>(origin)
         var segs: [LineSegment] = []
-        let c = SIMD4<UInt8>(255, 150, 40, 255)
+        let c = SceneColor.highlight
         for t in placedTabs where t.corners.count >= 3 {
             for k in t.corners.indices {
                 let a = t.corners[k], n = t.corners[(k + 1) % t.corners.count]
@@ -945,7 +970,7 @@ final class AppModel {
         layoutWorkArea(stockSize: size, origin: workToModel(stockSize: size))
     }
 
-    /// The CR-1's work area: every point the tool tip can reach, in the table's frame (drawn on
+    /// The machine's work area: every point the tool tip can reach, in the table's frame (drawn on
     /// the table, so it moves with it). The table moves X, the spindle Y and Z, so relative to the
     /// table the tip covers the full X, Y and Z travel from the modelled pose.
     private func layoutWorkArea(stockSize: SIMD3<Double>, origin: SIMD3<Double>) {
@@ -955,11 +980,11 @@ final class AppModel {
         guard machineModel != nil, showWorkArea else { return }
         let (lo, hi) = reachBox()
         if let m = SceneMesh.box(device: renderer.device, id: "workarea", min: SIMD3<Float>(lo), max: SIMD3<Float>(hi),
-                                 color: SIMD4(0.10, 0.55, 0.60, 0.07)) {
+                                 color: SceneColor.surface(0.9, alpha: 0.06)) {
             scene.setMesh(m)
         }
         if let e = SceneLines(device: renderer.device, id: "workarea.edges",
-                              segments: LineSegment.box(min: SIMD3<Float>(lo), max: SIMD3<Float>(hi), color: SIMD4(60, 200, 210, 254))) {
+                              segments: LineSegment.box(min: SIMD3<Float>(lo), max: SIMD3<Float>(hi), color: SceneColor.line(170, alpha: 254))) {
             scene.setLines(e)
         }
     }
@@ -1030,7 +1055,7 @@ final class AppModel {
         }
     }
 
-    /// Whether a machine position is inside the CR-1's travel, and by how much it isn't.
+    /// Whether a machine position is inside the machine's travel, and by how much it isn't.
     func travelProblem(_ q: SIMD3<Double>) -> String? {
         let e = machine.machineEnvelope
         var out: [String] = []
@@ -1038,7 +1063,7 @@ final class AppModel {
             let over = v < r.lowerBound ? r.lowerBound - v : v - r.upperBound
             out.append("\(name) by \(Length.mm(over)) mm")
         }
-        return out.isEmpty ? nil : "Beyond the CR-1's travel: " + out.joined(separator: ", ")
+        return out.isEmpty ? nil : "Beyond the machine's travel: " + out.joined(separator: ", ")
     }
 
     // MARK: Import
@@ -1057,7 +1082,7 @@ final class AppModel {
             }
             guard let sceneMesh = SceneMesh(device: renderer.device, id: "part", positions: mesh.vertices,
                                             normals: mesh.normals, indices: mesh.indices,
-                                            color: SIMD4(0.55, 0.57, 0.6, 1), pickable: true) else {
+                                            color: SceneColor.part, pickable: true) else {
                 throw EngineClient.EngineError(type: "Empty", message: "The file has no surfaces to show.")
             }
             renderer.scene.setMesh(sceneMesh)
@@ -1111,11 +1136,15 @@ final class AppModel {
 
     /// The parts the CAD colours green (the electronics' boards and the cable cover) are black
     /// plastic on the real machine.
+    /// Machine parts in the monotone palette: each its own brightness as a gray, the enclosure a
+    /// mid gray (a generic machine, not a painted one), the E-stop red (safety).
     static func displayColor(role: String, _ c: SIMD3<Float>) -> SIMD3<Float> {
         switch role {
-        case "pcb": SIMD3(0.022, 0.022, 0.025)
-        case "guard": SIMD3(0.62, 0.63, 0.65)  // polished: a bright base so the mirror reads as one
-        default: c
+        case "estop": c
+        case "pcb": SIMD3(repeating: 0.022)
+        case "guard": SIMD3(repeating: 0.9)  // clear polycarbonate (see-through, applyMachineDisplay)
+        case "enclosure": SIMD3(repeating: 0.42)
+        default: SIMD3(repeating: SceneColor.luminance(c))
         }
     }
 
@@ -1254,10 +1283,10 @@ final class AppModel {
         var p: [Float] = [], nn: [Float] = []
         for c in corners { p += [c.x, c.y, c.z]; nn += [Float(-n.x), Float(-n.y), Float(-n.z)] }
         if let quad = SceneMesh(device: renderer.device, id: "section.plane", positions: p, normals: nn, indices: [0, 1, 2, 0, 2, 3],
-                                color: SIMD4(0.95, 0.55, 0.20, 0.10)) {
+                                color: SceneColor.surface(0.9, alpha: 0.10)) {
             renderer.scene.setMesh(quad)
         }
-        let edge = SIMD4<UInt8>(245, 150, 60, 255)
+        let edge = SceneColor.line(225)
         let segs = (0..<4).map { LineSegment(corners[$0], corners[($0 + 1) % 4], color: edge) }
         if let lines = SceneLines(device: renderer.device, id: "section.edges", segments: segs) { renderer.scene.setLines(lines) }
     }
@@ -1310,7 +1339,7 @@ final class AppModel {
         guard !measurePoints.isEmpty else { return }
         var segs: [LineSegment] = []
         let s: Float = 1.5
-        let colour = SIMD4<UInt8>(255, 214, 10, 255)
+        let colour = SceneColor.highlight
         for p in measurePoints {
             let w = p.world
             segs += [LineSegment(w - SIMD3(s, 0, 0), w + SIMD3(s, 0, 0), color: colour),

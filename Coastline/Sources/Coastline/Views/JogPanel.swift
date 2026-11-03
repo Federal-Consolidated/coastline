@@ -1,7 +1,7 @@
 import CoastlineCore
 import SwiftUI
 
-/// Jog the modelled CR-1 with sliders across its travel, with or without a bit: check where
+/// Jog the modelled machine with sliders across its travel, with or without a bit: check where
 /// things reach before cutting.
 struct JogPanel: View {
     @Environment(AppModel.self) private var model
@@ -57,7 +57,7 @@ struct JogPanel: View {
                 }
             }
             .fixedSize()
-            Text("Machine coordinates are what CRWrite's DRO shows (negative from home). The table moves X; the spindle moves Y and Z.")
+            Text("Machine coordinates are what Machine Control's position display shows (negative from home). The table moves X; the spindle moves Y and Z.")
                 .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)

@@ -172,7 +172,7 @@ extension AppModel {
         return pr
     }
 
-    /// Writes the guided `.crproj` for CRWrite.
+    /// Writes the guided job as a `.crproj` package (for a sender that runs guided jobs).
     func exportGuidedJob(to url: URL, measuring: [MeasuringTool]) throws {
         guard programs.allSatisfy(\.report.passed) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Fix the safety errors before exporting."])
@@ -189,14 +189,11 @@ extension AppModel {
         try GuidedJobBuilder.write(input, to: url)
     }
 
-    /// A native CRWrite build, if one is installed (or built next to Coastline).
-    static var crwriteURL: URL? {
-        if let u = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "io.github.xioaniumi.crwrite-native") { return u }
-        for folder in ["crwrite-native"] {
-            let built = repoRoot.deletingLastPathComponent().appendingPathComponent("\(folder)/dist/CRWrite.app")
-            if FileManager.default.fileExists(atPath: built.path) { return built }
-        }
-        return nil
+    /// The app this Mac opens guided-job packages with, if there is one (not Coastline itself).
+    static func senderAppURL(for file: URL) -> URL? {
+        guard let app = NSWorkspace.shared.urlForApplication(toOpen: file),
+              app.standardizedFileURL != Bundle.main.bundleURL.standardizedFileURL else { return nil }
+        return app
     }
 }
 

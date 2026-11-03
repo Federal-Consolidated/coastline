@@ -1,17 +1,17 @@
 import Foundation
 import simd
 
-/// One setup: how the part sits in the stock and how the stock sits in the CR-1.
+/// One setup: how the part sits in the stock and how the stock sits in the machine.
 ///
 /// **Work frame** (the WCS the G-code uses), aligned with the machine axes:
 /// - +X up (the table's vertical travel; X− lifts the table, so the tool moves "down" the work)
 /// - +Y to the operator's right (gantry)
 /// - +Z along the spindle toward the tool: the tool comes from +Z and cuts toward −Z
 /// - origin: the centre of the stock's top face (the face toward the spindle), so Z = 0 is
-///   the stock surface and the part is below it. This matches Coast Runner's edge-finding
+///   the stock surface and the part is below it. This matches the maker's edge-finding
 ///   (midpoints with M100) and paper touch-off on the top face.
 ///
-/// The CR-1 is a horizontal-spindle mill: "top face" means the face pointing at the spindle,
+/// The machine is a horizontal-spindle mill: "top face" means the face pointing at the spindle,
 /// and the stock stands on the table with its X extent vertical.
 public struct Setup: Equatable, Sendable, Codable {
     /// Which part axis points at the spindle (becomes +Z of the work frame).
@@ -347,7 +347,7 @@ public struct Setup: Equatable, Sendable, Codable {
 /// Fit checks for a setup. Plain-language results, like the inventory checks.
 public enum SetupChecks {
     public static func check(_ setup: Setup, partMin lo: SIMD3<Double>, partMax hi: SIMD3<Double>,
-                             stock: StockItem, machine: MachineProfile = .cr1) -> [Issue] {
+                             stock: StockItem, machine: MachineProfile = .standard) -> [Issue] {
         var issues: [Issue] = []
         let m = setup.partToWork(partMin: lo, partMax: hi)
         let (rlo, rhi) = setup.rotatedPartBounds(min: lo, max: hi)
@@ -374,10 +374,10 @@ public enum SetupChecks {
         // Reach: the tool has to cover the stock face in X and Y.
         let size = setup.stockSize(stock)
         if size.x > machine.travel.x {
-            issues.append(Issue(.error, "The stock is \(Length.mm(size.x)) mm tall in X; the CR-1 only travels \(Length.mm(machine.travel.x)) mm vertically."))
+            issues.append(Issue(.error, "The stock is \(Length.mm(size.x)) mm tall in X; the machine only travels \(Length.mm(machine.travel.x)) mm vertically."))
         }
         if size.y > machine.travel.y {
-            issues.append(Issue(.error, "The stock is \(Length.mm(size.y)) mm wide in Y; the CR-1 travels \(Length.mm(machine.travel.y)) mm."))
+            issues.append(Issue(.error, "The stock is \(Length.mm(size.y)) mm wide in Y; the machine travels \(Length.mm(machine.travel.y)) mm."))
         }
         if phi.z - plo.z > 25 {
             issues.append(Issue(.info, "The part is \(Length.mm(phi.z - plo.z)) mm deep along the spindle. Deep walls need long tools; the planner will check reach per tool."))

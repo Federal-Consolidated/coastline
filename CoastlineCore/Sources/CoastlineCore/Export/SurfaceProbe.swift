@@ -1,19 +1,19 @@
 import Foundation
 import simd
 
-/// Engraving that follows the real surface of uneven stock, with CRWrite's contour mapping
-/// (its software M-codes, ports of Coast Runner's ContourMapping):
+/// Engraving that follows the real surface of uneven stock, with the sender's contour mapping
+/// (its software M-codes, ports of the maker's ContourMapping):
 ///
 /// - `M114` clears the map; `M111 Z… F…` probes down (G38.2) and adds the hit to it;
 /// - `M112` turns the Z compensation on: every move's Z gets the probed surface's height at
-///   its X/Y added (a plane through the nearest three points), `M113` turns it off. CRWrite
+///   its X/Y added (a plane through the nearest three points), `M113` turns it off. The sender
 ///   turns it off at the start of every program, so the engraving program turns it on itself.
 ///
 /// The probe program uses the engraving tool, right after its touch-off (the map is in machine
 /// Z, compensated against the touch-off), with the stock electrically insulated in the clamp
 /// kit: M4 S1500 and F20, as the Operator Manual probes. The points are on the engraving's own
 /// cut positions, so every probe lands on the face that gets engraved. The engraving program is
-/// then written relative to the nominal face (its Z minus the face's height), and CRWrite adds
+/// then written relative to the nominal face (its Z minus the face's height), and the sender adds
 /// the measured height back. Only for engravings on a flat face: on a curved one the
 /// compensation would add the curve a second time.
 public enum SurfaceProbe {
@@ -57,28 +57,28 @@ public enum SurfaceProbe {
     /// (rapid at the safe height, feed below the approach height) and probe to 1.5 mm below it.
     /// Work coordinates (G54), absolute.
     public static func program(points: [SIMD2<Double>], face: Double, safeZ: Double = 3, approach: Double = 1,
-                               above: Double = 2, below: Double = 1.5, machine: MachineProfile = .cr1) -> String {
+                               above: Double = 2, below: Double = 1.5, machine: MachineProfile = .standard) -> String {
         var lines = [
             "(Surface probing for the engraving: \(points.count) points)",
             "G21",
             "G90",
             "G54",
             "M114",
-            "G0 Z\(CR1Post.fmt(safeZ))",
+            "G0 Z\(GRBLPost.fmt(safeZ))",
             "M4 S\(Int(machine.probeSpindleRPM))",
             "G4 P2",
         ]
         let start = face + above
         for p in points {
-            lines.append("G0 X\(CR1Post.fmt(p.x)) Y\(CR1Post.fmt(p.y))")
+            lines.append("G0 X\(GRBLPost.fmt(p.x)) Y\(GRBLPost.fmt(p.y))")
             if start >= approach {
-                lines.append("G0 Z\(CR1Post.fmt(start))")
+                lines.append("G0 Z\(GRBLPost.fmt(start))")
             } else {
-                lines.append("G0 Z\(CR1Post.fmt(approach))")
-                lines.append("G1 Z\(CR1Post.fmt(start)) F200")
+                lines.append("G0 Z\(GRBLPost.fmt(approach))")
+                lines.append("G1 Z\(GRBLPost.fmt(start)) F200")
             }
-            lines.append("M111 Z\(CR1Post.fmt(face - below)) F\(Int(machine.probeFeed))")
-            lines.append("G0 Z\(CR1Post.fmt(safeZ))")
+            lines.append("M111 Z\(GRBLPost.fmt(face - below)) F\(Int(machine.probeFeed))")
+            lines.append("G0 Z\(GRBLPost.fmt(safeZ))")
         }
         lines += ["M5", "G53 G0 Z-1"]
         return lines.joined(separator: "\n") + "\n"
@@ -103,7 +103,7 @@ public enum SurfaceProbe {
                 }
                 if let r = line.range(of: #"Z(-?\d+(\.\d+)?)"#, options: .regularExpression) {
                     let v = Double(line[r].dropFirst()) ?? 0
-                    line.replaceSubrange(r, with: "Z" + CR1Post.fmt(v - face))
+                    line.replaceSubrange(r, with: "Z" + GRBLPost.fmt(v - face))
                 }
             } else if on && code.contains("G53") {
                 out.append("M113")

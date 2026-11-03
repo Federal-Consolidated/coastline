@@ -116,7 +116,7 @@ struct IssuesSection: View {
     var body: some View {
         Section("Checks") {
             if issues.isEmpty {
-                Label("Ready to use on the CR-1", systemImage: "checkmark.seal.fill")
+                Label("Ready to use on the machine", systemImage: "checkmark.seal.fill")
                     .foregroundStyle(Theme.ok)
             }
             ForEach(issues.sorted { $0.severity > $1.severity }) { issue in

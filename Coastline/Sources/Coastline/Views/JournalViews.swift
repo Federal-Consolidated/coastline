@@ -49,7 +49,7 @@ struct RecordJobSheet: View {
                                 TextField("mm", value: $entry.measurements[k].measured, format: .number.precision(.fractionLength(0...3)))
                                     .multilineTextAlignment(.trailing).frame(width: 80)
                                 if let ok = m.inTolerance {
-                                    Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill").foregroundStyle(ok ? .green : .red)
+                                    Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill").foregroundStyle(ok ? Theme.ok : Theme.danger)
                                         .accessibilityLabel(ok ? "In tolerance" : "Out of tolerance")
                                         .help(ok ? "In tolerance" : "Out of tolerance")
                                 }
@@ -131,7 +131,7 @@ struct JournalDetail: View {
                 LabeledContent("Stock", value: entry.stockDescription)
                 if entry.copies > 1 { LabeledContent("Copies", value: "\(entry.copies)") }
                 LabeledContent("Finish", value: ["Rough", "Fair", "Good", "Fine", "Mirror"][min(max(entry.finish, 1), 5) - 1])
-                if entry.chatter { Label("Chatter reported", systemImage: "waveform.path").foregroundStyle(.orange) }
+                if entry.chatter { Label("Chatter reported", systemImage: "waveform.path").foregroundStyle(Theme.warning) }
             }
             Section("Programs") {
                 ForEach(Array(entry.programs.enumerated()), id: \.offset) { _, p in
@@ -146,7 +146,7 @@ struct JournalDetail: View {
                                 Text(m.measured.map { Length.mm($0) + " mm" } ?? "—")
                                 Text("(\(Length.mm(m.expected)) ± \(Length.mm(m.tolerance)))").foregroundStyle(.secondary)
                                 if let ok = m.inTolerance {
-                                    Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill").foregroundStyle(ok ? .green : .red)
+                                    Image(systemName: ok ? "checkmark.circle.fill" : "xmark.circle.fill").foregroundStyle(ok ? Theme.ok : Theme.danger)
                                         .accessibilityLabel(ok ? "In tolerance" : "Out of tolerance")
                                         .help(ok ? "In tolerance" : "Out of tolerance")
                                 }
@@ -216,7 +216,7 @@ struct ShoppingListPage: View {
             }
             Section {
                 if list.isEmpty {
-                    Label("Nothing to buy: no tool is near the end of its life.", systemImage: "checkmark.circle").foregroundStyle(.green)
+                    Label("Nothing to buy: no tool is near the end of its life.", systemImage: "checkmark.circle").foregroundStyle(Theme.ok)
                 }
                 ForEach(list, id: \.tool.id) { item in
                     VStack(alignment: .leading, spacing: 3) {
@@ -225,7 +225,7 @@ struct ShoppingListPage: View {
                             Spacer()
                             if let c = item.tool.unitCost { Text(String(format: "%.2f", c)).monospacedDigit() }
                         }
-                        Text(item.why).font(.caption).foregroundStyle(.orange)
+                        Text(item.why).font(.caption).foregroundStyle(Theme.warning)
                         if !item.tool.vendor.isEmpty || !item.tool.partNumber.isEmpty {
                             Text([item.tool.vendor, item.tool.partNumber].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                         }

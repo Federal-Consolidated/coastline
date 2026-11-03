@@ -21,7 +21,7 @@ public enum InventoryChecks {
     /// inch sizes must not be mixed.
     static let colletTolerance = 0.05
 
-    public static func check(_ tool: Tool, machine: MachineProfile = .cr1, inventory: Inventory) -> [Issue] {
+    public static func check(_ tool: Tool, machine: MachineProfile = .standard, inventory: Inventory) -> [Issue] {
         var issues: [Issue] = []
         if tool.shankDiameter > machine.maxShankDiameter + 1e-6 {
             issues.append(Issue(.error, "The \(Length.describe(tool.shankDiameter)) shank is too big for the \(machine.colletName) collet (max \(Length.mm(machine.maxShankDiameter)) mm)."))
@@ -35,7 +35,7 @@ public enum InventoryChecks {
             issues.append(Issue(.warning, "Stick-out (\(Length.mm(tool.stickout)) mm) is shorter than the flutes (\(Length.mm(tool.fluteLength)) mm). The flutes would sit inside the collet."))
         }
         // Slenderness: the fluted length counts at the cutting diameter, the plain shank below
-        // the nut at the shank diameter (a 1/8" tool at 1.125" stick-out is normal on the CR-1).
+        // the nut at the shank diameter (a 1/8" tool at 1.125" stick-out is normal on the machine).
         let fluted = min(tool.fluteLength, tool.stickout)
         let ratio = fluted / max(tool.diameter, 0.01) + (tool.stickout - fluted) / max(tool.shankDiameter, 0.01)
         if tool.kind.cutsSideways && ratio > 10 {
@@ -57,7 +57,7 @@ public enum InventoryChecks {
         return issues
     }
 
-    public static func check(_ stock: StockItem, machine: MachineProfile = .cr1) -> [Issue] {
+    public static func check(_ stock: StockItem, machine: MachineProfile = .standard) -> [Issue] {
         var issues: [Issue] = []
         guard stock.sizeX > 0, stock.sizeY > 0, stock.shape == .roundBar || stock.sizeZ > 0 else {
             return [Issue(.error, "Enter all the dimensions.")]
@@ -69,7 +69,7 @@ public enum InventoryChecks {
         let dims = [stock.envelope.x, stock.envelope.y, stock.envelope.z].sorted()
         let box = [env.x, env.y, env.z].sorted()
         if zip(dims, box).contains(where: { $0 > $1 }) {
-            issues.append(Issue(.error, "Doesn't fit the CR-1 work envelope (\(Length.mm(env.x)) × \(Length.mm(env.y)) × \(Length.mm(env.z)) mm) in any orientation. Cut it down first."))
+            issues.append(Issue(.error, "Doesn't fit the machine work envelope (\(Length.mm(env.x)) × \(Length.mm(env.y)) × \(Length.mm(env.z)) mm) in any orientation. Cut it down first."))
         } else {
             // Lying on its largest face, how much Z is left for the tool?
             let room = env.z - dims[0]

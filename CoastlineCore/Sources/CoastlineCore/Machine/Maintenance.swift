@@ -1,6 +1,6 @@
 import Foundation
 
-/// The CR-1's care, from the Operator Manual (section 7.1, Basic Maintenance), tracked against
+/// The machine's care, from the Operator Manual (section 7.1, Basic Maintenance), tracked against
 /// the job journal: what's due after how many jobs, cutting hours or days.
 public enum Maintenance {
     public struct Task: Identifiable, Sendable {

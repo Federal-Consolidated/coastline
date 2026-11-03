@@ -245,7 +245,7 @@
           "intendedFor" : "3 flute Roughing Endmill",
           "kind" : "flatEndMill",
           "name" : "1\/4\" flat end mill · Helical 82720",
-          "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+          "notes" : "Imported from the maker's library. Set the quantity to what you own.",
           "overallLength" : 63.5,
           "partNumber" : "82720",
           "presets" : [
@@ -423,7 +423,7 @@
           "intendedFor" : "Aluminum Brass Copper",
           "kind" : "flatEndMill",
           "name" : "1\/16\" flat end mill · Titan USA TC10804",
-          "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+          "notes" : "Imported from the maker's library. Set the quantity to what you own.",
           "overallLength" : 38.099999999999994,
           "partNumber" : "TC10804",
           "presets" : [
@@ -508,7 +508,7 @@
           "intendedFor" : "Titanium",
           "kind" : "bullNoseEndMill",
           "name" : "1\/4\" bull nose end mill · Helical 83457",
-          "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+          "notes" : "Imported from the maker's library. Set the quantity to what you own.",
           "overallLength" : 50.8,
           "partNumber" : "83457",
           "presets" : [
@@ -593,7 +593,7 @@
           "intendedFor" : "Aluminum Brass Copper",
           "kind" : "ballEndMill",
           "name" : "1\/8\" ball end mill · Helical 17032",
-          "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+          "notes" : "Imported from the maker's library. Set the quantity to what you own.",
           "overallLength" : 50.8,
           "partNumber" : "17032",
           "presets" : [
@@ -834,7 +834,7 @@
           "intendedFor" : "Aluminium, brass, wax",
           "kind" : "flatEndMill",
           "name" : "1\/32\" flat end mill, 5\/32\" reach",
-          "notes" : "Not in your inventory: Coastline suggests it. Necked: bores and contours small holes and slots down to 4 mm deep (watch plates up to 3.5 mm) without the shank rubbing. Spins at the CR-1's 8000 RPM with a feed of a few tens of mm\/min; an ultra-precision collet (runout ≤ 5 µm) makes it last.",
+          "notes" : "Not in your inventory: Coastline suggests it. Necked: bores and contours small holes and slots down to 4 mm deep (watch plates up to 3.5 mm) without the shank rubbing. Spins at the machine's 8000 RPM with a feed of a few tens of mm\/min; an ultra-precision collet (runout ≤ 5 µm) makes it last.",
           "overallLength" : 38.099999999999994,
           "partNumber" : "944531",
           "presets" : [
@@ -912,7 +912,7 @@
           "intendedFor" : "Aluminum Brass Copper",
           "kind" : "flatEndMill",
           "name" : "1\/16\" flat end mill · Titan USA TC10804",
-          "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+          "notes" : "Imported from the maker's library. Set the quantity to what you own.",
           "overallLength" : 38.099999999999994,
           "partNumber" : "TC10804",
           "presets" : [
@@ -1098,7 +1098,7 @@
               "chipLoad" : 0.029717999999999994,
               "feed" : 713,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 11 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 11 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 250,
               "power" : 5.383740458304,
@@ -1135,7 +1135,7 @@
               "intendedFor" : "3 flute Roughing Endmill",
               "kind" : "flatEndMill",
               "name" : "1\/4\" flat end mill · Helical 82720",
-              "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+              "notes" : "Imported from the maker's library. Set the quantity to what you own.",
               "overallLength" : 63.5,
               "partNumber" : "82720",
               "presets" : [
@@ -1165,7 +1165,7 @@
               "chipLoad" : 0.047548799999999995,
               "feed" : 1141,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 11 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower.",
+                "Normal for a small tool: its ideal cutting speed would need 11 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower.",
                 "Chip thinning at 8% engagement: feed raised 60%."
               ],
               "plungeFeed" : 399,
@@ -1203,7 +1203,7 @@
               "intendedFor" : "3 flute Roughing Endmill",
               "kind" : "flatEndMill",
               "name" : "1\/4\" flat end mill · Helical 82720",
-              "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+              "notes" : "Imported from the maker's library. Set the quantity to what you own.",
               "overallLength" : 63.5,
               "partNumber" : "82720",
               "presets" : [
@@ -1233,7 +1233,7 @@
               "chipLoad" : 0.013715999999999999,
               "feed" : 329,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 11 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 11 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 115,
               "power" : 4.65900616584,
@@ -1293,7 +1293,7 @@
               "chipLoad" : 0.022860000000000002,
               "feed" : 549,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 14 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 14 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 192,
               "power" : 0,
@@ -1353,7 +1353,7 @@
               "chipLoad" : 0.013715999999999999,
               "feed" : 329,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 42 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 42 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 115,
               "power" : 0,
@@ -1391,7 +1391,7 @@
               "intendedFor" : "Aluminum Brass Copper",
               "kind" : "flatEndMill",
               "name" : "1\/16\" flat end mill · Titan USA TC10804",
-              "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+              "notes" : "Imported from the maker's library. Set the quantity to what you own.",
               "overallLength" : 38.099999999999994,
               "partNumber" : "TC10804",
               "presets" : [
@@ -1421,7 +1421,7 @@
               "chipLoad" : 0.013715999999999999,
               "feed" : 439,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 11 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower.",
+                "Normal for a small tool: its ideal cutting speed would need 11 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower.",
                 "Stepover 0,172 mm leaves cusps about 15 µm high."
               ],
               "plungeFeed" : 154,
@@ -1459,7 +1459,7 @@
               "intendedFor" : "Titanium",
               "kind" : "bullNoseEndMill",
               "name" : "1\/4\" bull nose end mill · Helical 83457",
-              "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+              "notes" : "Imported from the maker's library. Set the quantity to what you own.",
               "overallLength" : 50.8,
               "partNumber" : "83457",
               "presets" : [
@@ -1489,7 +1489,7 @@
               "chipLoad" : 0.009144000000000001,
               "feed" : 219,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 25 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower.",
+                "Normal for a small tool: its ideal cutting speed would need 25 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower.",
                 "Stepover 0,435 mm leaves cusps about 15 µm high."
               ],
               "plungeFeed" : 77,
@@ -1527,7 +1527,7 @@
               "intendedFor" : "Titanium",
               "kind" : "bullNoseEndMill",
               "name" : "1\/4\" bull nose end mill · Helical 83457",
-              "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+              "notes" : "Imported from the maker's library. Set the quantity to what you own.",
               "overallLength" : 50.8,
               "partNumber" : "83457",
               "presets" : [
@@ -1563,7 +1563,7 @@
               "intendedFor" : "Aluminum Brass Copper",
               "kind" : "ballEndMill",
               "name" : "1\/8\" ball end mill · Helical 17032",
-              "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+              "notes" : "Imported from the maker's library. Set the quantity to what you own.",
               "overallLength" : 50.8,
               "partNumber" : "17032",
               "presets" : [
@@ -1591,7 +1591,7 @@
               "chipLoad" : 0.0041472,
               "feed" : 66,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 63 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 63 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 66,
               "power" : 0.5520752640000002,
@@ -1652,7 +1652,7 @@
               "chipLoad" : 0.005183999999999999,
               "feed" : 83,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 50 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 50 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 83,
               "power" : 1.078272,
@@ -1713,7 +1713,7 @@
               "chipLoad" : 0.0068031359999999996,
               "feed" : 109,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 85 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 85 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 38,
               "power" : 0.8773306638951628,
@@ -1750,7 +1750,7 @@
               "intendedFor" : "Aluminium, brass, wax",
               "kind" : "flatEndMill",
               "name" : "1\/32\" flat end mill, 5\/32\" reach",
-              "notes" : "Not in your inventory: Coastline suggests it. Necked: bores and contours small holes and slots down to 4 mm deep (watch plates up to 3.5 mm) without the shank rubbing. Spins at the CR-1's 8000 RPM with a feed of a few tens of mm\/min; an ultra-precision collet (runout ≤ 5 µm) makes it last.",
+              "notes" : "Not in your inventory: Coastline suggests it. Necked: bores and contours small holes and slots down to 4 mm deep (watch plates up to 3.5 mm) without the shank rubbing. Spins at the machine's 8000 RPM with a feed of a few tens of mm\/min; an ultra-precision collet (runout ≤ 5 µm) makes it last.",
               "overallLength" : 38.099999999999994,
               "partNumber" : "944531",
               "presets" : [
@@ -1773,7 +1773,7 @@
               "chipLoad" : 0.013715999999999999,
               "feed" : 329,
               "notes" : [
-                "Normal for a small tool: its ideal cutting speed would need 42 000 RPM, far beyond any desktop spindle. At the CR-1's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
+                "Normal for a small tool: its ideal cutting speed would need 42 000 RPM, far beyond any desktop spindle. At the machine's 8000 RPM the feed is lowered to keep the right chip load, so it simply cuts slower."
               ],
               "plungeFeed" : 115,
               "power" : 10.784736494999997,
@@ -1810,7 +1810,7 @@
               "intendedFor" : "Aluminum Brass Copper",
               "kind" : "flatEndMill",
               "name" : "1\/16\" flat end mill · Titan USA TC10804",
-              "notes" : "Imported from Coast Runner's library. Set the quantity to what you own.",
+              "notes" : "Imported from the maker's library. Set the quantity to what you own.",
               "overallLength" : 38.099999999999994,
               "partNumber" : "TC10804",
               "presets" : [

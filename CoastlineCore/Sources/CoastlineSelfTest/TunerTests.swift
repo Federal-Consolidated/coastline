@@ -9,7 +9,7 @@ let tunerTests: [TestCase] = [
         // 100 mm at 3000 mm/min from rest to rest: 50 mm/s, 0.1 s to accelerate at 500 mm/s²
         // (2.5 mm), so 2 s cruising + 0.1 s ramps ≈ 2.1 s (the naive 2.0 s is too short).
         let line = [(start: SIMD3<Double>(0, 0, 0), move: Move(.cut, x: 100, y: 0, z: 0, feed: 3000))]
-        let t = ToolpathTimeline.plannerSeconds(line, machine: .cr1).reduce(0, +)
+        let t = ToolpathTimeline.plannerSeconds(line, machine: .standard).reduce(0, +)
         try expect(abs(t - 2.1) < 0.02, "got \(t)")
         // The same 100 mm as a zig-zag of 2 mm reversals never reaches the feed.
         var zig: [(start: SIMD3<Double>, move: Move)] = []
@@ -19,12 +19,12 @@ let tunerTests: [TestCase] = [
             zig.append((SIMD3(x, 0, 0), Move(.cut, x: nx, y: 0, z: 0, feed: 3000)))
             x = nx
         }
-        let tz = ToolpathTimeline.plannerSeconds(zig, machine: .cr1).reduce(0, +)
+        let tz = ToolpathTimeline.plannerSeconds(zig, machine: .standard).reduce(0, +)
         try expect(tz > t * 1.5, "zig-zag \(tz) vs straight \(t)")
         // Straight segments in line keep their speed through the junction.
         let split = [(start: SIMD3<Double>(0, 0, 0), move: Move(.cut, x: 50, y: 0, z: 0, feed: 3000)),
                      (start: SIMD3<Double>(50, 0, 0), move: Move(.cut, x: 100, y: 0, z: 0, feed: 3000))]
-        try expect(abs(ToolpathTimeline.plannerSeconds(split, machine: .cr1).reduce(0, +) - t) < 0.01)
+        try expect(abs(ToolpathTimeline.plannerSeconds(split, machine: .standard).reduce(0, +) - t) < 0.01)
     },
     TestCase(name: "tuningPresetsAndApply") {
         try expectEqual(Tuning.preset(.fine).preset, .fine)
@@ -41,7 +41,7 @@ let tunerTests: [TestCase] = [
         try expect(slow.feed < base.feed && slow.stepover < base.stepover)
         var brisk = ops[0]
         brisk.feedScale = 1.2
-        try expect(brisk.cuttingData(tool: quarter, material: al).feed <= MachineProfile.cr1.maxFeedAnyDirection)
+        try expect(brisk.cuttingData(tool: quarter, material: al).feed <= MachineProfile.standard.maxFeedAnyDirection)
     },
     TestCase(name: "toolWearAndCost") {
         let al = MaterialLibrary.material(id: "al-6061")!

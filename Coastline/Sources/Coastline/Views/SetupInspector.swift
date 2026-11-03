@@ -27,7 +27,7 @@ struct WorkspaceInspector: View {
     }
 }
 
-/// The part, the stock and how they sit in the CR-1.
+/// The part, the stock and how they sit in the machine.
 struct SetupInspector: View {
     @Environment(AppModel.self) private var model
     @Environment(InventoryModel.self) private var inventory

@@ -117,11 +117,11 @@ struct ToolsPage: View {
                     Gauge(value: min(s.used, 1)) { Text("Wear") }
                         .gaugeStyle(.accessoryLinearCapacity)
                         .labelsHidden()
-                        .tint(s.wornOut ? .red : s.replaceSoon ? .orange : .green)
+                        .tint(s.wornOut ? Theme.danger : s.replaceSoon ? Theme.warning : Theme.ok)
                     // Not colour alone: a warning sign when it's time to replace it.
                     if s.wornOut || s.replaceSoon {
                         Image(systemName: "exclamationmark.triangle.fill").font(.caption)
-                            .foregroundStyle(s.wornOut ? Color.red : Color.orange)
+                            .foregroundStyle(s.wornOut ? Theme.danger : Theme.warning)
                     }
                 }
                 .help("\(Int(s.minutes)) of about \(Int(s.lifeMinutes)) cutting minutes (recorded jobs)" + (s.wornOut ? " · worn out" : s.replaceSoon ? " · replace soon" : ""))
@@ -323,7 +323,7 @@ struct StarterBanner: View {
                 Image(systemName: "sparkles").font(.title2).foregroundStyle(Theme.accent)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Starter inventory").font(.headline)
-                    Text("Coastline filled your inventory from Coast Runner's tool libraries, the CR-1 clamp kit and your dimensions model. Set each quantity to what you actually own; the planner only uses items with a quantity above 0.")
+                    Text("Coastline filled your inventory from the maker's tool libraries, the clamp kit and your dimensions model. Set each quantity to what you actually own; the planner only uses items with a quantity above 0.")
                         .font(.callout).foregroundStyle(.secondary)
                         .lineLimit(4)
                 }

@@ -5,7 +5,7 @@ import Viewport
 /// The orientation cube, in the style of PreForm's: a cube with bevelled edges and cut corners.
 /// The 6 faces (squares with clipped corners), the 12 edge strips (long rectangles) and the 8
 /// hexagonal corners are all clickable. Faces give the standard views, edges the views between two
-/// faces, corners the isometric views. Faces are named for the CR-1: TOOL is the side the
+/// faces, corners the isometric views. Faces are named for the machine: TOOL is the side the
 /// spindle comes from. Clicks ease the camera round (`ViewportRenderer.moveCamera`).
 struct ViewCube: View {
     let camera: OrbitCamera
@@ -60,13 +60,17 @@ struct ViewCube: View {
             let u = simd_normalize(abs(n.z) < 0.9 ? simd_cross(SIMD3(0, 0, 1), n) : simd_cross(SIMD3(1, 0, 0), n))
             let v = simd_cross(n, u)
             let c = n * d
-            var poly = [c - 3 * u - 3 * v, c + 3 * u - 3 * v, c + 3 * u + 3 * v, c - 3 * u + 3 * v]
+            let u3: SIMD3<Float> = 3 * u, v3: SIMD3<Float> = 3 * v  // in steps: Swift 6.3 type-checks the one-liner too slowly
+            var poly: [SIMD3<Float>] = [c - u3 - v3, c + u3 - v3, c + u3 + v3, c - u3 + v3]
             for (m, (pn, pd, _)) in planes.enumerated() where m != k {
                 var out: [SIMD3<Float>] = []
                 for (a, b) in zip(poly, poly.dropFirst() + poly.prefix(1)) {
                     let da = simd_dot(pn, a) - pd, db = simd_dot(pn, b) - pd
                     if da <= 1e-6 { out.append(a) }
-                    if (da < -1e-6 && db > 1e-6) || (da > 1e-6 && db < -1e-6) { out.append(a + (b - a) * (da / (da - db))) }
+                    if (da < -1e-6 && db > 1e-6) || (da > 1e-6 && db < -1e-6) {
+                        let t: Float = da / (da - db)
+                        out.append(a + (b - a) * t)
+                    }
                 }
                 poly = out
                 if poly.isEmpty { break }

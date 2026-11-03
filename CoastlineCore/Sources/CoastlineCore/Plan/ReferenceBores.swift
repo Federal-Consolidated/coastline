@@ -13,10 +13,10 @@ import Foundation
 /// down instead of front-to-back) mirrors it away: the bores aren't found and the job stops.
 ///
 /// Side B's zero then follows side A's features to a few hundredths, whatever the sawn edges
-/// are like, and an edge the CR-1 can't reach doesn't matter any more.
+/// are like, and an edge the machine can't reach doesn't matter any more.
 public enum ReferenceBores {
     /// Bore diameter: fits a 1/4" tool with 1.8 mm to spare each side (electrical probing), or
-    /// the Fisher edge finder's 0.2" tip with 2.5 mm (manual pickup).
+    /// the edge finder's 0.2" tip with 2.5 mm (manual pickup).
     public static let diameter = 10.0
     /// The window opened from side B: wider, so the bore below keeps its own walls.
     public static let windowDiameter = 13.0
@@ -106,7 +106,7 @@ public enum ReferenceBores {
         return nil
     }
 
-    // MARK: Probing programs (CRWrite helpers)
+    // MARK: Probing programs (sender helpers)
 
     /// G-code numbers without trailing zeros.
     static func n(_ v: Double) -> String {
@@ -116,13 +116,13 @@ public enum ReferenceBores {
         return s == "-0" ? "0" : s
     }
 
-    /// Electrical probing: the tool turns slowly backwards (M4 S1500, as Coast Runner's own
+    /// Electrical probing: the tool turns slowly backwards (M4 S1500, as the maker's own
     /// probing cutcode), so a touch never cuts, and the clamp kit closes the circuit.
     static let probeOn = ["M4 S1500", "G4 P2"]
     static let probeFeed = 20.0
 
     /// Finds bore `k`'s centre and stores it as G55 (k = 0) or G56 (k = 1) origin (machine
-    /// coordinates of the centre). G57/G58 hold the touches (G59 is CRWrite's carry-over
+    /// coordinates of the centre). G57/G58 hold the touches (G59 is the sender's carry-over
     /// register: never touched). Side B work coordinates (the rough zero from the edges).
     /// The measured diameter must match: otherwise the step stops with an error.
     public static func boreProgram(_ plan: Plan, bore k: Int, toolDiameter: Double, electrical: Bool) -> String {
@@ -213,7 +213,7 @@ public enum ReferenceBores {
         """
     }
 
-    /// One edge only (the other is out of the CR-1's reach): X0 from that edge and the stock's
+    /// One edge only (the other is out of the machine's reach): X0 from that edge and the stock's
     /// size. The tool touches with its side, so its centre is a radius off the edge.
     public static func singleEdgeProgram(axis: String, toward: Double, edgeAt: Double, radius: Double, electrical: Bool) -> String {
         let at = edgeAt - toward * radius

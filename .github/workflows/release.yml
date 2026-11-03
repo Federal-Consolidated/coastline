@@ -1,0 +1,76 @@
+# Every push to main: build the engine and the app, run the self-tests, make the standalone
+# disk image (scripts/make-dmg.sh) and publish it as a new GitHub release, "Coastline 0.<n>"
+# (n = the number of commits). The newest is always at …/releases/latest.
+#
+# The app is signed ad hoc only (no Apple Developer ID yet): on another Mac the first launch
+# needs System Settings ▸ Privacy & Security ▸ Open Anyway.
+name: Release DMG
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-dmg
+  cancel-in-progress: false
+
+jobs:
+  dmg:
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the build number is the commit count
+
+      - name: Newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          swift --version
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Engine
+        working-directory: engine
+        env:
+          UV_PYTHON_PREFERENCE: only-managed  # uv's relocatable CPython: make-app.sh copies it into the app
+        run: |
+          uv sync --frozen
+          native/build.sh
+
+      - name: Self-tests
+        shell: zsh {0}
+        run: |
+          set -eo pipefail
+          (cd MillCore && swift build --product MillCoreSelfTest && .build/debug/MillCoreSelfTest)
+          (cd CoastlineCore && swift build --product CoastlineSelfTest && .build/debug/CoastlineSelfTest)
+          (cd engine && uv run python -m pytest -q)
+
+      - name: App
+        run: |
+          scripts/build-app.sh
+          test -x Coastline/.build/debug/Coastline
+
+      - name: Disk image
+        run: scripts/make-dmg.sh
+
+      - name: Publish
+        if: github.ref == 'refs/heads/main'  # a run started by hand on another branch only builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          N=$(git rev-list --count HEAD)
+          {
+            echo "Built from $(git rev-parse --short HEAD): $(git log -1 --format=%s)"
+            echo
+            echo "Download Coastline.dmg, open it and drag Coastline to Applications."
+            echo "Needs macOS 26 on Apple silicon. The app is not notarized yet: on the first launch,"
+            echo "open System Settings ▸ Privacy & Security and press Open Anyway."
+          } > notes.md
+          gh release create "v0.$N" build/Coastline.dmg --target "$GITHUB_SHA" \
+            --title "Coastline 0.$N" --notes-file notes.md

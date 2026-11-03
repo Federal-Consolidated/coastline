@@ -43,13 +43,15 @@ if xcrun --find actool >/dev/null 2>&1; then
     --app-icon Coastline --output-partial-info-plist /tmp/coastline-icon.plist >/dev/null 2>&1 && ICONNAME=Coastline
 fi
 VERSION=$(cd $ROOT && git rev-list --count HEAD 2>/dev/null || echo 1)
+# The app's identity: set BUNDLE_ID to your own reverse-DNS name for a branded build.
+BUNDLE_ID="${BUNDLE_ID:-app.coastline}"
 cat > $APP/Contents/Info.plist <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>CFBundleName</key><string>Coastline</string>
   <key>CFBundleDisplayName</key><string>Coastline</string>
-  <key>CFBundleIdentifier</key><string>io.github.xioaniumi.coastline</string>
+  <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
   <key>CFBundleExecutable</key><string>Coastline</string>
   <key>CFBundleIconFile</key><string>Coastline</string>
 $( [[ -n $ICONNAME ]] && echo "  <key>CFBundleIconName</key><string>$ICONNAME</string>" )
@@ -59,7 +61,7 @@ $( [[ -n $ICONNAME ]] && echo "  <key>CFBundleIconName</key><string>$ICONNAME</s
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>UTExportedTypeDeclarations</key><array><dict>
-    <key>UTTypeIdentifier</key><string>io.github.xioaniumi.coastline.project</string>
+    <key>UTTypeIdentifier</key><string>$BUNDLE_ID.project</string>
     <key>UTTypeDescription</key><string>Coastline Job</string>
     <key>UTTypeConformsTo</key><array><string>public.json</string></array>
     <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>coastline</string></array></dict>
@@ -67,7 +69,7 @@ $( [[ -n $ICONNAME ]] && echo "  <key>CFBundleIconName</key><string>$ICONNAME</s
   <key>CFBundleDocumentTypes</key><array><dict>
     <key>CFBundleTypeName</key><string>Coastline Job</string>
     <key>CFBundleTypeRole</key><string>Editor</string>
-    <key>LSItemContentTypes</key><array><string>io.github.xioaniumi.coastline.project</string></array>
+    <key>LSItemContentTypes</key><array><string>$BUNDLE_ID.project</string></array>
   </dict></array>
 </dict></plist>
 PLIST

@@ -138,7 +138,7 @@ extension AppModel {
         }
         var c = MeshBuilder()
         c.ballEnd(radius: r * 2.6, tip: -r * 2.6)
-        if let m = c.mesh(device: renderer.device, id: "gumball.centre", color: SIMD4(0.9, 0.9, 0.92, 1)) {
+        if let m = c.mesh(device: renderer.device, id: "gumball.centre", color: SceneColor.surface(0.9)) {
             m.transform = simd_float4x4(translation: o)
             m.onTop = true
             m.unlit = true

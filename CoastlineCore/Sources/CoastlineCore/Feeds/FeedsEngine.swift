@@ -100,10 +100,10 @@ public struct CuttingData: Equatable, Sendable, Codable {
     public var notes: [String]
 }
 
-/// Computes cutting data. Anchored on Coast Runner's feeds & speeds master document
+/// Computes cutting data. Anchored on the maker's feeds & speeds master document
 /// (aluminium, 3-flute carbide) and scaled by material, tool and operation.
 public enum FeedsEngine {
-    /// Coast Runner's aluminium chip loads (inches per tooth) by tool diameter (inches). [FS]
+    /// The maker's aluminium chip loads (inches per tooth) by tool diameter (inches). [FS]
     static let anchorDiameters: [Double] = [1.0 / 16, 1.0 / 8, 5.0 / 32, 3.0 / 16, 1.0 / 4]
     static let anchorAdaptive: [Double] = [0.0006, 0.0008, 0.0010, 0.0010, 0.0013]  // also face finish
     static let anchorContour: [Double] = [0.0003, 0.0004, 0.0005, 0.0006, 0.0006]
@@ -142,7 +142,7 @@ public enum FeedsEngine {
     /// How hard roughing runs. Roughing leaves stock for the finishing passes, so it never
     /// shows on the part: it can run as hard as the tool and the machine take.
     public enum RoughingStyle: String, Codable, Sendable, CaseIterable {
-        /// Coast Runner's aluminium table as printed (chip thinning barely used: ×1.15).
+        /// The maker's aluminium table as printed (chip thinning barely used: ×1.15).
         case table
         /// The feed raised so each tooth cuts the table's chip at the light engagement adaptive
         /// uses (radial chip thinning, up to ×1.6): the same load per tooth, less time.
@@ -153,14 +153,14 @@ public enum FeedsEngine {
 
         public var title: String {
             switch self {
-            case .table: "Coast Runner table"
+            case .table: "The machine table"
             case .thinned: "Chip-thinned"
             case .deep: "Deep"
             }
         }
         public var explanation: String {
             switch self {
-            case .table: "Coast Runner's printed feeds and ½-diameter levels. The gentlest; the slowest roughing."
+            case .table: "The maker's printed feeds and ½-diameter levels. The gentlest; the slowest roughing."
             case .thinned: "At the light engagement adaptive roughing uses, the chip is thinner than the feed per tooth: the feed rises until each tooth cuts the table's chip again. Same load on the tool, roughly a third less roughing time."
             case .deep: "Chip-thinned, and each level a full tool diameter deep (tools 3 mm and up): about half the levels. Twice the cutting force of the table; listen for chatter on the first cut."
             }
@@ -168,7 +168,7 @@ public enum FeedsEngine {
     }
 
     public static func compute(tool: Tool, material: Material, kind: OperationKind,
-                               machine: MachineProfile = .cr1, roughing: RoughingStyle = .table) -> CuttingData {
+                               machine: MachineProfile = .standard, roughing: RoughingStyle = .table) -> CuttingData {
         let d = max(tool.diameter, 0.1)
         var notes: [String] = []
         let hss = tool.toolMaterial == .hss
@@ -189,9 +189,9 @@ public enum FeedsEngine {
         let idealRPM = vc * 1000 / (Double.pi * d)
         let rpm = min(max(idealRPM, machine.spindleRPM.lowerBound), machine.spindleRPM.upperBound)
         if idealRPM > machine.spindleRPM.upperBound {
-            notes.append("Normal for a small tool: its ideal cutting speed would need \(Int((idealRPM / 1000).rounded())) 000 RPM, far beyond any desktop spindle. At the CR-1's \(Int(machine.spindleRPM.upperBound)) RPM the feed is lowered to keep the right chip load, so it simply cuts slower.")
+            notes.append("Normal for a small tool: its ideal cutting speed would need \(Int((idealRPM / 1000).rounded())) 000 RPM, far beyond any desktop spindle. At the machine's \(Int(machine.spindleRPM.upperBound)) RPM the feed is lowered to keep the right chip load, so it simply cuts slower.")
         } else if idealRPM < machine.spindleRPM.lowerBound {
-            notes.append("Raised to the CR-1's minimum of \(Int(machine.spindleRPM.lowerBound)) RPM; the chip load is kept, so the feed rises with it.")
+            notes.append("Raised to the machine's minimum of \(Int(machine.spindleRPM.lowerBound)) RPM; the chip load is kept, so the feed rises with it.")
         }
 
         // Chip load from the anchor table, scaled for the material and tool material.
@@ -261,7 +261,7 @@ public enum FeedsEngine {
         if kind == .drill { feed = rpm * fz * 2 }  // drills: feed per rev ≈ two "teeth"
         let cap = machine.maxFeedAnyDirection
         if feed > cap {
-            notes.append("Feed capped at the CR-1's \(Int(cap)) mm/min.")
+            notes.append("Feed capped at the machine's \(Int(cap)) mm/min.")
             feed = cap
         }
         let plunge = kind == .drill ? feed : feed * 0.35
@@ -276,7 +276,7 @@ public enum FeedsEngine {
         }
 
         if notes.isEmpty {
-            notes.append("Coast Runner's aluminium values for this tool size, scaled for \(material.name).")
+            notes.append("The maker's aluminium values for this tool size, scaled for \(material.name).")
         }
         return CuttingData(rpm: rpm.rounded(), feed: feed.rounded(), plungeFeed: plunge.rounded(), rampFeed: ramp.rounded(),
                            chipLoad: fz, stepdown: stepdown, stepover: stepover,

@@ -2,7 +2,7 @@ import CoastlineCore
 import Foundation
 import simd
 
-/// Jogging the modelled CR-1 by hand (the Jog panel): machine coordinates across the real
+/// Jogging the modelled machine by hand (the Jog panel): machine coordinates across the real
 /// travel, with or without a bit, the work coordinates of the current setup, and whether the
 /// tool touches a clamp there.
 extension AppModel {

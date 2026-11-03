@@ -64,10 +64,10 @@ public final class ViewportRenderer: NSObject, MTKViewDelegate {
     public var animationsEnabled = true
     public var lineWidth: Float = 2.0
     /// Scene (world) → display space. The camera is Z-up in display space; the scene can be in
-    /// any frame. Coastline's scene is in CR-1 machine axes (X up), so it passes `machineToDisplay`.
+    /// any frame. Coastline's scene is in machine axes (X up), so it passes `machineToDisplay`.
     public var worldToDisplay = matrix_identity_float4x4
 
-    /// CR-1 machine axes → Z-up display: machine Y (operator's right) → display X, machine Z
+    /// machine axes → Z-up display: machine Y (operator's right) → display X, machine Z
     /// (toward the spindle, away from the operator) → display Y, machine X (up) → display Z.
     public static let machineToDisplay = simd_float4x4(rows: [
         SIMD4(0, 1, 0, 0),
@@ -76,7 +76,7 @@ public final class ViewportRenderer: NSObject, MTKViewDelegate {
         SIMD4(0, 0, 0, 1),
     ])
     /// Linear-space clear colour (≈ sRGB #2A2D33, a neutral dark studio grey).
-    public var background = MTLClearColor(red: 0.0062, green: 0.0072, blue: 0.0094, alpha: 1)  // ≈ #131518 (linear)
+    public var background = MTLClearColor(red: 0.0070, green: 0.0070, blue: 0.0070, alpha: 1)  // ≈ #141414 (linear), neutral
     public static let sampleCount = 4
     static let colorFormat = MTLPixelFormat.bgra8Unorm_srgb
     /// Depth plus a stencil: the stock marks its pixels, so x-ray toolpaths show through the
@@ -264,7 +264,7 @@ public final class ViewportRenderer: NSObject, MTKViewDelegate {
         }
         guard lo.x <= hi.x else { return nil }
         guard let map = shadowMap else { return nil }
-        // A softbox above the CR-1's open front (model: X up, Z toward the spindle, so the
+        // A softbox above the machine's open front (model: X up, Z toward the spindle, so the
         // operator's side is −Z), a little to the right: it lights the work through the opening.
         let light = simd_normalize(SIMD3<Float>(0.9, 0.3, -1.0))
         let centre = (lo + hi) / 2, r = max(simd_length(hi - lo) / 2, 1)
