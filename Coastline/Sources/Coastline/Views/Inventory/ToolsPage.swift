@@ -225,7 +225,7 @@ struct ToolInspector: View {
     var body: some View {
         Form {
             Section {
-                PreviewCard(key: "\(tool.id)-\(tool.diameter)-\(tool.fluteLength)-\(tool.flutes)-\(tool.kind)-\(tool.coating)-\(tool.stickout)",
+                PreviewCard(itemID: tool.id, key: tool.inventoryPreviewKey, name: tool.name,
                                 build: { [tool] d in
                                     // Lean it like a product shot: tip toward the viewer, shank away.
                                     let lean = simd_float4x4(simd_quatf(angle: .pi * 0.42, axis: simd_normalize(SIMD3<Float>(1, -1, 0))))
@@ -235,6 +235,8 @@ struct ToolInspector: View {
                 }
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
+            } footer: {
+                Text("Drag to orbit · Pinch to zoom · Double-click to fit")
             }
             Section("Tool") {
                 TextField("Name", text: $tool.name)

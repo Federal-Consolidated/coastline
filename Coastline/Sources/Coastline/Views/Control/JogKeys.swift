@@ -5,7 +5,7 @@ import SwiftUI
 /// The jog keys on the Control page, as the jog buttons: ↑ ↓ the table (X− up, X+ down),
 /// ← → the gantry (Y), Page Up / Page Down or ⇧↑ ⇧↓ the spindle (Z+ out, Z− in).
 ///
-/// They work only in this page's window, without a sheet, while Allow Jog is on and no text
+/// They work only in this page's window, without a sheet, while jogging is unlocked and no text
 /// field or focused control wants the keys. A step per key press (repeats are ignored), or in
 /// hold-to-jog, motion while the key is down. The hold ends when the key comes up, when the
 /// window loses the keys, when the app is left and when the page goes away.

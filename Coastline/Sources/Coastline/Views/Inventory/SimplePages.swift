@@ -1,4 +1,3 @@
-import Metal
 import CoastlineCore
 import SwiftUI
 
@@ -77,14 +76,13 @@ struct FixtureInspector: View {
 
     var body: some View {
         Form {
-            if let device = MTLCreateSystemDefaultDevice(), !app.fixtureMeshes(fixture.kind, device: device).isEmpty {
-                Section {
-                    ItemViewer3D(build: { [kind = fixture.kind] d in app.fixtureMeshes(kind, device: d) }, key: fixture.kind.rawValue)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                } footer: {
-                    Text("From your clamp kit model. Drag to orbit, pinch to zoom.")
-                }
+            InventoryPreviewSection(
+                name: fixture.name,
+                key: "\(fixture.id)-\(fixture.kind)-\(fixture.clampAxis)-\(fixture.height)-\(String(describing: fixture.gripRange))-\(app.machineLoaded)-\(app.kitParts.count)",
+                note: "Clamp kit geometry where available; otherwise a representative model."
+            ) { [fixture] device in
+                let kit = app.fixtureMeshes(fixture.kind, device: device)
+                return kit.isEmpty ? fixture.sceneMeshes(device: device) : kit
             }
             Section("Fixture") {
                 TextField("Name", text: $fixture.name)
@@ -173,6 +171,13 @@ struct MeasuringPage: View {
             Group {
                 if selection.count == 1, let id = selection.first, let m = model.binding(\.measuring, id: id) {
                     Form {
+                        InventoryPreviewSection(
+                            name: m.wrappedValue.name,
+                            key: "\(id)-\(m.wrappedValue.kind)-\(String(describing: m.wrappedValue.range))",
+                            note: "Representative model of this instrument type."
+                        ) { [instrument = m.wrappedValue] device in
+                            instrument.sceneMeshes(device: device)
+                        }
                         Section("Instrument") {
                             TextField("Name", text: m.name)
                             Picker("Type", selection: m.kind) {
@@ -188,7 +193,7 @@ struct MeasuringPage: View {
                         Section("Notes") { TextField("Notes", text: m.notes, axis: .vertical).lineLimit(2 ... 6) }
                     }
                     .formStyle(.grouped)
-        .darkPanel()
+                    .darkPanel()
                     .scrollEdgeEffectStyle(.soft, for: .all)
                 } else {
                     NothingSelected(what: "Instrument")
@@ -196,6 +201,7 @@ struct MeasuringPage: View {
             }
             .panelEdge(.leading).inspectorColumnWidth(min: 300, ideal: 340, max: 460)
         }
+        .onAppear { if selection.isEmpty, let first = model.inventory.measuring.first { selection = [first.id] } }
     }
 }
 
@@ -251,6 +257,13 @@ struct AccessoriesPage: View {
             Group {
                 if selection.count == 1, let id = selection.first, let a = model.binding(\.accessories, id: id) {
                     Form {
+                        InventoryPreviewSection(
+                            name: a.wrappedValue.name,
+                            key: "\(id)-\(a.wrappedValue.kind)-\(String(describing: a.wrappedValue.size))",
+                            note: "Representative model of this accessory type."
+                        ) { [accessory = a.wrappedValue] device in
+                            accessory.sceneMeshes(device: device)
+                        }
                         Section("Item") {
                             TextField("Name", text: a.name)
                             Picker("Type", selection: a.kind) {
@@ -262,7 +275,7 @@ struct AccessoriesPage: View {
                         Section("Notes") { TextField("Notes", text: a.notes, axis: .vertical).lineLimit(2 ... 6) }
                     }
                     .formStyle(.grouped)
-        .darkPanel()
+                    .darkPanel()
                     .scrollEdgeEffectStyle(.soft, for: .all)
                 } else {
                     NothingSelected(what: "Item")
@@ -270,5 +283,6 @@ struct AccessoriesPage: View {
             }
             .panelEdge(.leading).inspectorColumnWidth(min: 300, ideal: 340, max: 460)
         }
+        .onAppear { if selection.isEmpty, let first = model.inventory.accessories.first { selection = [first.id] } }
     }
 }

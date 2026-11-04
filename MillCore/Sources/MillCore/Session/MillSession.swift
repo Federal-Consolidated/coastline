@@ -37,6 +37,8 @@ public final class MillSession: @unchecked Sendable {
     private let consoleStore = Locked(Console())
     private let link = Locked<Link?>(nil)
     private let holdControl = Locked(HoldControl())
+    /// Invalidates jog requests that were accepted before Lock, Feed Hold or a reset.
+    private let jogGeneration = Locked(0)
     private let overrideState = Locked(MillOverrides())
     private let wake = DispatchSemaphore(value: 0)
     private let realtimeQueue = DispatchQueue(label: "coastline.mill.realtime", qos: .userInteractive)
@@ -132,7 +134,8 @@ public final class MillSession: @unchecked Sendable {
     /// A relative jog, shortened to stay inside the envelope.
     @discardableResult public func jog(_ request: JogRequest) -> MillRefusal? {
         if let refusal = snapshot.gates.jog { return refusal }
-        post(.jog(request))
+        guard request.isValid else { return .blocked("Choose finite jog distances, at least one axis, and a feed of at least 1 mm/min.") }
+        post(.jog(request, generation: jogGeneration.current))
         return nil
     }
 
@@ -189,6 +192,7 @@ public final class MillSession: @unchecked Sendable {
     /// `!`: always sent while the port is open.
     public func feedHold() {
         _ = dropHold()
+        cancelQueuedJogs()
         _ = realtime(UInt8(ascii: "!"), "! feed hold")
     }
 
@@ -202,13 +206,20 @@ public final class MillSession: @unchecked Sendable {
     /// 0x85: always sent while the port is open.
     public func jogCancel() {
         _ = dropHold()
+        cancelQueuedJogs()
         _ = realtime(0x85, "0x85 jog cancel")
     }
 
     /// 0x18: always sent while the port is open. The controller restarts; home again after it.
     public func softReset() {
         _ = dropHold()
+        cancelQueuedJogs()
         if realtime(0x18, "0x18 soft reset") { post(.resetSent) }
+    }
+
+    private func cancelQueuedJogs() {
+        jogGeneration.withLock { $0 &+= 1 }
+        wake.signal()
     }
 
     /// Stops whatever moves, the gentlest way that is safe:
@@ -239,11 +250,20 @@ public final class MillSession: @unchecked Sendable {
     /// Starts a hold-to-jog: the axis moves toward `direction` (its sign) at `feed` until
     /// `endHold`, the end of the travel, or `holdTimeout` without `renewHold`. Same gates as a jog.
     @discardableResult public func startHold(_ axis: Axis, direction: Double, feed: Double) -> MillRefusal? {
+        let request = JogRequest(axis: axis, distance: direction, feed: feed)
+        return startHold(x: request.x, y: request.y, z: request.z, feed: feed)
+    }
+
+    /// Holds one coordinated direction. The vector is normalized so diagonals have the
+    /// same path speed as single-axis motion at the same feed.
+    @discardableResult public func startHold(x: Double = 0, y: Double = 0, z: Double = 0, feed: Double) -> MillRefusal? {
         // In Jog (the last jog still stopping) the hold waits for Idle.
         if let refusal = snapshot.gates.jog, refusal != .wrongState("Jog") { return refusal }
+        let request = JogRequest(x: x, y: y, z: z, feed: feed)
+        guard request.isValid else { return .blocked("Choose a finite jog direction and a feed of at least 1 mm/min.") }
         holdControl.withLock { h in
             h.generation += 1
-            h.request = JogRequest(axis: axis, distance: direction < 0 ? -1 : 1, feed: feed)
+            h.request = request
             h.renewed = monotonicNow()
         }
         wake.signal()
@@ -350,7 +370,7 @@ public final class MillSession: @unchecked Sendable {
 
     private enum Request: Sendable {
         case home
-        case jog(JogRequest)
+        case jog(JogRequest, generation: Int)
         case console(String)
         /// Work offsets, the active work offset, the spindle on.
         case setup(String)
@@ -419,7 +439,7 @@ public final class MillSession: @unchecked Sendable {
         var generation: Int
         var request: JogRequest
         /// Where the jogs sent so far end (machine coordinates); nil before the first.
-        var target: Double?
+        var target: Point3?
     }
 
     private struct ProgramRun {
@@ -440,6 +460,7 @@ public final class MillSession: @unchecked Sendable {
         var kind: PendingKind
         var deadline: TimeInterval
         var replies: [String] = []
+        var jogGeneration: Int?
     }
 
     /// State owned by the I/O thread only.
@@ -460,11 +481,16 @@ public final class MillSession: @unchecked Sendable {
         var lastPortCheck: TimeInterval = 0
         var hold: IOHold?
         var lastHoldGeneration = 0
+        var jogGeneration = 0
+        var lastJogGeneration: Int?
+        /// Repeat cancellation after an already-written jog has been parsed/acknowledged.
+        var cancelAfterJogAck: Int?
     }
 
     private func run(_ session: Link) {
         var io = IOState()
         io.s = published.current
+        io.jogGeneration = jogGeneration.current
         do {
             try session.transport.open()
         } catch {
@@ -552,9 +578,10 @@ public final class MillSession: @unchecked Sendable {
     private func handle(_ request: Request, _ io: inout IOState, _ session: Link, _ now: TimeInterval) {
         switch request {
         case .home: io.queue.append(("$H", .home))
-        case .jog(let jog):
+        case .jog(let jog, let generation):
             // The target is worked out just before the line is sent, from a fresh status.
-            io.queue.append((Self.encode(jog), .jog))
+            guard generation == jogGeneration.current else { return }
+            io.queue.append((Self.encode(jog, generation: generation), .jog))
         case .console(let line): io.queue.append((line, .console))
         case .setup(let line): io.queue.append((line, .setup))
         case .program(let name, let lines, let homesFirst):
@@ -581,8 +608,10 @@ public final class MillSession: @unchecked Sendable {
         }
     }
 
-    // A queued jog keeps its request until send time: "JOG <axis> <distance> <feed>".
-    private static func encode(_ jog: JogRequest) -> String { "JOG \(jog.axis.rawValue) \(jog.distance) \(jog.feed)" }
+    // A queued jog keeps its vector until send time, when a fresh position is available.
+    private static func encode(_ jog: JogRequest, generation: Int) -> String {
+        "JOGV \(generation) \(jog.x) \(jog.y) \(jog.z) \(jog.feed)"
+    }
 
     private func handle(line: String, _ io: inout IOState, _ session: Link, _ now: TimeInterval) {
         let isStatus = line.hasPrefix("<") && line.hasSuffix(">")
@@ -786,6 +815,7 @@ public final class MillSession: @unchecked Sendable {
     }
 
     private func tick(_ io: inout IOState, _ session: Link, _ now: TimeInterval) {
+        cancelStaleJogs(&io, session)
         switch io.phase {
         case .waitingForBanner:
             if now > io.phaseDeadline {
@@ -901,6 +931,30 @@ public final class MillSession: @unchecked Sendable {
         }
     }
 
+    /// The immediate real-time byte can race a line already being written or still waiting
+    /// in the controller's receive buffer. Cancel again here, after reading its replies,
+    /// and once more after its acknowledgement if necessary. New-generation jogs survive.
+    private func cancelStaleJogs(_ io: inout IOState, _ session: Link) {
+        let generation = jogGeneration.current
+        if generation != io.jogGeneration {
+            io.jogGeneration = generation
+            io.queue.removeAll { line, kind in
+                kind == .jog && Self.decode(line)?.generation != generation
+            }
+            if let sent = io.lastJogGeneration, sent != generation {
+                writeByte(0x85, session)
+                log(.realtime, "0x85 jog cancel (discarded queued jogs)")
+                if io.pending?.jogGeneration == sent { io.cancelAfterJogAck = sent }
+                io.lastJogGeneration = nil
+            }
+        }
+        if let cancelled = io.cancelAfterJogAck, io.pending?.jogGeneration != cancelled {
+            io.cancelAfterJogAck = nil
+            writeByte(0x85, session)
+            log(.realtime, "0x85 jog cancel (last jog acknowledged)")
+        }
+    }
+
     private func write(_ text: String, _ session: Link, realtime: Bool) {
         do { try session.transport.write(Array(text.utf8)) } catch { log(.error, "Could not send \(text): \(error)") }
     }
@@ -939,27 +993,30 @@ public final class MillSession: @unchecked Sendable {
             if hold.target == nil { return }
         }
         guard let mpos = io.s.status?.machinePosition, let envelope = io.s.envelope else { return }
-        let axis = request.axis, sign = request.distance < 0 ? -1.0 : 1.0
-        let index = Axis.allCases.firstIndex(of: axis)!
-        let feed = min(request.feed, io.s.settings.values[110 + index] ?? request.feed)
-        let segment = max(0.01, feed / 60 * Self.holdSegment)
-        let planned = hold.target ?? mpos[axis]
-        guard (planned - mpos[axis]) * sign < 2 * segment else { return }  // enough planned ahead
-        let range = envelope[axis]
-        let next = min(max(planned + sign * segment, range.lowerBound), range.upperBound)
-        let delta = ((next - planned) * 1000).rounded() / 1000
-        guard abs(delta) >= 0.001 else {
+        let length = request.length
+        let unit = Point3(x: request.x / length, y: request.y / length, z: request.z / length)
+        guard let feed = Self.jogFeed(request, settings: io.s.settings) else {
+            return endHoldIO(&io, session, "the jog feed is not valid.")
+        }
+        let segment = feed / 60 * Self.holdSegment
+        let planned = hold.target ?? mpos
+        let ahead = (planned.x - mpos.x) * unit.x + (planned.y - mpos.y) * unit.y + (planned.z - mpos.z) * unit.z
+        guard ahead < 2 * segment else { return }  // enough planned ahead
+        let next = JogRequest(x: unit.x * segment, y: unit.y * segment, z: unit.z * segment, feed: feed)
+        guard let move = Self.jogMove(next, from: planned, envelope: envelope, settings: io.s.settings) else {
             // At the end of the travel: the machine stops there and waits for the operator to let go.
             if hold.target == nil { endHoldIO(&io, session, MillRefusal.atLimit.text) }
             return
         }
+        let generation = jogGeneration.current
         let current = holdControl.current
         guard current.request != nil, current.generation == hold.generation else { return }
-        let text = String(format: "$J=G21 G91 %@%.3f F%.0f", axis.rawValue, delta, feed)
+        let text = Self.jogLine(move.delta, feed: move.feed)
         log(.sent, text)
         write(text, session)
-        io.pending = Pending(line: text, kind: .holdJog, deadline: now + 3)
-        hold.target = planned + delta
+        io.lastJogGeneration = generation
+        io.pending = Pending(line: text, kind: .holdJog, deadline: now + 3, jogGeneration: generation)
+        hold.target = Point3(x: planned.x + move.delta.x, y: planned.y + move.delta.y, z: planned.z + move.delta.z)
         io.hold = hold
     }
 
@@ -991,6 +1048,7 @@ public final class MillSession: @unchecked Sendable {
     private func send(_ line: String, _ kind: PendingKind, _ io: inout IOState, _ session: Link, _ now: TimeInterval) {
         io.s.gates = gates(io, now)
         var text = line
+        var generation: Int?
         switch kind {
         case .query, .program, .macro: break
         case .home:
@@ -1002,14 +1060,15 @@ public final class MillSession: @unchecked Sendable {
             io.s.lastAlarm = nil
         case .jog:
             if let refusal = io.s.gates.jog { refuse("Jog", refusal); return }
-            guard let jog = Self.decode(line), let mpos = io.s.status?.machinePosition, let envelope = io.s.envelope else { return }
-            let range = envelope[jog.axis]
-            let target = min(max(mpos[jog.axis] + jog.distance, range.lowerBound), range.upperBound)
-            let delta = target - mpos[jog.axis]
-            guard abs(delta) >= 0.001 else { refuse("Jog", .atLimit); return }
-            let index = Axis.allCases.firstIndex(of: jog.axis)!
-            let feed = min(jog.feed, io.s.settings.values[110 + index] ?? jog.feed)
-            text = String(format: "$J=G21 G91 %@%.3f F%.0f", jog.axis.rawValue, delta, feed)
+            guard let queued = Self.decode(line), queued.generation == jogGeneration.current,
+                  let mpos = io.s.status?.machinePosition, let envelope = io.s.envelope else { return }
+            let jog = queued.request
+            generation = queued.generation
+            guard let move = Self.jogMove(jog, from: mpos, envelope: envelope, settings: io.s.settings) else {
+                refuse("Jog", .atLimit)
+                return
+            }
+            text = Self.jogLine(move.delta, feed: move.feed)
             io.s.lastError = nil
         case .console:
             let upper = line.uppercased().replacingOccurrences(of: " ", with: "")
@@ -1020,10 +1079,12 @@ public final class MillSession: @unchecked Sendable {
             io.s.lastError = nil
         case .holdJog: break
         }
+        if let generation, generation != jogGeneration.current { return }
         log(.sent, text)
         write(text, session)
+        if let generation { io.lastJogGeneration = generation }
         let timeout: TimeInterval = kind == .home ? Self.homingLimit + 5 : (kind == .console ? 30 : 3)
-        io.pending = Pending(line: text, kind: kind, deadline: now + timeout)
+        io.pending = Pending(line: text, kind: kind, deadline: now + timeout, jogGeneration: generation)
     }
 
     private func sendMacro(_ line: String, _ io: inout IOState, _ session: Link, _ now: TimeInterval) {
@@ -1117,11 +1178,49 @@ public final class MillSession: @unchecked Sendable {
         log(.error, "\(what) was not sent: \(refusal.text)")
     }
 
-    private static func decode(_ line: String) -> JogRequest? {
+    private static func decode(_ line: String) -> (request: JogRequest, generation: Int)? {
         let parts = line.split(separator: " ")
-        guard parts.count == 4, parts[0] == "JOG", let axis = Axis(letter: parts[1].first ?? " "),
-              let distance = Double(parts[2]), let feed = Double(parts[3]) else { return nil }
-        return JogRequest(axis: axis, distance: distance, feed: feed)
+        guard parts.count == 6, parts[0] == "JOGV", let generation = Int(parts[1]),
+              let x = Double(parts[2]), let y = Double(parts[3]),
+              let z = Double(parts[4]), let feed = Double(parts[5]) else { return nil }
+        let request = JogRequest(x: x, y: y, z: z, feed: feed)
+        return request.isValid ? (request, generation) : nil
+    }
+
+    /// GRBL's F is path speed. Limit each component's speed rather than treating a
+    /// diagonal's feed as the speed of every participating axis.
+    private static func jogFeed(_ request: JogRequest, settings: MillSettings) -> Double? {
+        guard request.isValid else { return nil }
+        var feed = request.feed
+        for (index, axis) in Axis.allCases.enumerated() where request[axis] != 0 {
+            guard let limit = settings.values[110 + index], limit.isFinite, limit > 0 else { return nil }
+            feed = min(feed, limit / (abs(request[axis]) / request.length))
+        }
+        feed = feed.rounded(.down)
+        return feed >= 1 ? feed : nil
+    }
+
+    /// Clip the entire vector to the first boundary. Rounding toward zero cannot carry a
+    /// component past that boundary, and never creates motion on an unrequested axis.
+    private static func jogMove(_ request: JogRequest, from position: Point3, envelope: MillEnvelope,
+                                settings: MillSettings) -> (delta: Point3, feed: Double)? {
+        guard request.isValid, [position.x, position.y, position.z].allSatisfy(\.isFinite) else { return nil }
+        var fraction = 1.0
+        for axis in Axis.allCases where request[axis] != 0 {
+            let range = envelope[axis]
+            let available = request[axis] > 0 ? range.upperBound - position[axis] : position[axis] - range.lowerBound
+            fraction = min(fraction, max(0, available) / abs(request[axis]))
+        }
+        func component(_ value: Double) -> Double { (value * fraction * 1000).rounded(.towardZero) / 1000 }
+        let delta = Point3(x: component(request.x), y: component(request.y), z: component(request.z))
+        let rounded = JogRequest(x: delta.x, y: delta.y, z: delta.z, feed: request.feed)
+        guard let feed = jogFeed(rounded, settings: settings) else { return nil }
+        return (delta, feed)
+    }
+
+    private static func jogLine(_ delta: Point3, feed: Double) -> String {
+        let words = Axis.allCases.filter { delta[$0] != 0 }.map { String(format: "%@%.3f", $0.rawValue, delta[$0]) }
+        return "$J=G21 G91 " + words.joined(separator: " ") + String(format: " F%.0f", feed)
     }
 
     // MARK: Gates
@@ -1168,6 +1267,9 @@ public final class MillSession: @unchecked Sendable {
         if v[22] != 1 { return "Homing is off ($22=0). Coastline needs it on." }
         for n in [110, 111, 112, 130, 131, 132] where (v[n] ?? 0) <= 0 {
             return "Setting $\(n) is missing."
+        }
+        guard MillEnvelope.from(settings) != nil else {
+            return "The travel and homing pull-off do not leave a valid working range. Check $130–$132 and $27."
         }
         return nil
     }

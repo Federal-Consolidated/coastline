@@ -54,7 +54,7 @@ final class AppModel {
     let renderer: ViewportRenderer
 
     // Navigation
-    var page: SidebarItem = .workspace
+    var page: SidebarItem = ProcessInfo.processInfo.environment["COASTLINE_DEV"] == "1" ? .control : .workspace
     var showInspector = true
     /// Section the inspector should scroll to ("tuner").
     var inspectorScrollTarget: String?
@@ -118,7 +118,7 @@ final class AppModel {
     @ObservationIgnored var clearanceRecheck: Task<Void, Never>?
     @ObservationIgnored var partMeshData: (positions: [Float], normals: [Float], indices: [UInt32])?
     /// The welcome guide: once on first launch (never in automation runs), then from Help.
-    var showWelcome = ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil && !UserDefaults.standard.bool(forKey: "seenWelcome")
+    var showWelcome = ProcessInfo.processInfo.environment["COASTLINE_DEV"] != "1" && ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil && !UserDefaults.standard.bool(forKey: "seenWelcome")
     /// The start sheet (StartView): continue, open, import or pick an example. At launch (after
     /// the welcome the first time), and from File ▸ Start….
     var showStart = false

@@ -41,8 +41,14 @@ public struct MillEnvelope: Equatable, Sendable {
     /// GRBL's own soft limit is `-travel … 0`; this stays a pull-off inside both ends.
     static func from(_ settings: MillSettings) -> MillEnvelope? {
         let v = settings.values
-        guard let tx = v[130], let ty = v[131], let tz = v[132], tx > 1, ty > 1, tz > 1 else { return nil }
-        let m = max(0.5, v[27] ?? 0.5)
+        guard let tx = v[130], let ty = v[131], let tz = v[132],
+              [tx, ty, tz].allSatisfy({ $0.isFinite && $0 > 1 }) else { return nil }
+        let pullOff = v[27] ?? 0.5
+        guard pullOff.isFinite else { return nil }
+        let m = max(0.5, pullOff)
+        // A large pull-off can leave no travel between the two margins. Validate it before
+        // constructing ClosedRange, which traps when the lower bound exceeds the upper.
+        guard m <= min(tx, ty, tz) / 2 else { return nil }
         return MillEnvelope(x: (-tx + m)...(-m), y: (-ty + m)...(-m), z: (-tz + m)...(-m))
     }
 }
@@ -222,16 +228,59 @@ public struct MillProgramStatus: Equatable, Sendable {
 }
 
 public struct JogRequest: Equatable, Sendable {
-    public var axis: Axis
-    /// Signed distance in mm. The session shortens it to stay inside the envelope.
-    public var distance: Double
-    /// mm/min. Capped by `$110`–`$112`.
+    /// Signed relative distances in mm. A diagonal is one coordinated motion, shortened
+    /// proportionally if any requested axis reaches the envelope first.
+    public var x, y, z: Double
+    /// A zero-distance legacy request still remembers which axis a later distance edit uses.
+    private var emptyAxis: Axis
+    /// Path speed in mm/min. Each axis's component is capped by `$110`–`$112`.
     public var feed: Double
 
     public init(axis: Axis, distance: Double, feed: Double) {
-        self.axis = axis
-        self.distance = distance
+        x = axis == .x ? distance : 0
+        y = axis == .y ? distance : 0
+        z = axis == .z ? distance : 0
+        emptyAxis = axis
         self.feed = feed
+    }
+
+    public init(x: Double = 0, y: Double = 0, z: Double = 0, feed: Double) {
+        self.x = x
+        self.y = y
+        self.z = z
+        emptyAxis = x != 0 ? .x : y != 0 ? .y : z != 0 ? .z : .x
+        self.feed = feed
+    }
+
+    /// Compatibility for single-axis clients. For a vector, the first nonzero axis.
+    public var axis: Axis {
+        get { x != 0 ? .x : y != 0 ? .y : z != 0 ? .z : emptyAxis }
+        set { self = JogRequest(axis: newValue, distance: distance, feed: feed) }
+    }
+
+    public var distance: Double {
+        get { self[axis] }
+        set {
+            switch axis {
+            case .x: x = newValue
+            case .y: y = newValue
+            case .z: z = newValue
+            }
+        }
+    }
+
+    subscript(axis: Axis) -> Double {
+        switch axis {
+        case .x: x
+        case .y: y
+        case .z: z
+        }
+    }
+
+    var length: Double { hypot(hypot(x, y), z) }
+
+    var isValid: Bool {
+        [x, y, z, feed].allSatisfy(\.isFinite) && feed >= 1 && length.isFinite && length > 0
     }
 }
 

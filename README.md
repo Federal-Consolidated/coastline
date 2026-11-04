@@ -19,7 +19,7 @@ in the same guided flow.
 - Generates 2.5D and 3D toolpaths (facing, adaptive roughing, contour, pockets, drilling, helical boring, 3D finishing, engraving).
 - Feeds and speeds for the machine profile's spindle and frame, across 30+ materials.
 - Simulates material removal and checks for collisions with the machine and fixtures.
-- **Machine Control:** connect over USB, live position and state, homing, jogging (steps or hold-to-jog, buttons or arrow keys), work zero and G54–G59, go-to moves, spindle on/off, feed/rapid/spindle overrides, feed hold, resume, stop, console.
+- **Machine Control:** the actual machine assembly with live position and a compact native control inspector. Connect over USB, home, unlock the eight-direction jog pad (including diagonals), use steps or hold-to-jog, set work zero and G54–G59, go to positions, control the spindle and overrides, feed hold, resume, stop and open the console. Arrow keys also jog; locking cancels current and queued pad/key jogs.
 - **Projects:** one list for planned projects (made in Coastline from CAD) and G-code projects (guided jobs around G-code that already exists). Import takes a shared `.zip`, a `.coastline` file, an older `.dd` or `.crproj` job, a job folder or G-code files; Export saves a project as one `.zip` to share.
 
 ## Machines
@@ -46,6 +46,13 @@ Coastline/.build/debug/Coastline           # start it
 
 Set `BUNDLE_ID` when you package a branded build (`scripts/make-app.sh`). Check a job folder before you
 ship it with `COASTLINE_JOB=/path/to/job` and the self-tests.
+
+For local UI iteration, run `python3 scripts/dev-app.py --watch`. It opens Machine Control
+with Digital Machine, watches Swift sources and package manifests, then incrementally builds
+and relaunches after saves. Failed builds leave the current app open. This is an automatic
+relaunch rather than in-process hot reload; simulator position and unsaved in-memory state
+reset on relaunch. Physical-machine connections are disabled in this development mode.
+Stop the watcher with Ctrl-C. Launch the app normally to use hardware.
 
 ## Viewport navigation
 

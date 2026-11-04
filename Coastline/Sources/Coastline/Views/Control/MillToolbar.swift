@@ -12,15 +12,17 @@ struct MillToolbar: ToolbarContent {
                     .labelStyle(.titleAndIcon)
             }
             .help("Open Machine Control (⇧⌘M)")
-            if app.mill.isOpen {
+            if app.mill.isOpen || app.page == .control {
                 Button("Feed Hold", systemImage: "pause.fill") { app.mill.feedHold() }
                     .tint(Theme.warning)
+                    .disabled(!app.mill.isOpen)
                     .help("Feed hold (⇧⌘H)")
                 Button("Resume", systemImage: "play.fill") { app.mill.resume() }
                     .disabled(app.mill.snapshot.gates.resume != nil)
                     .help("Resume after a feed hold")
                 Button("Stop", systemImage: "stop.fill") { app.mill.stop() }
                     .tint(Theme.danger)
+                    .disabled(!app.mill.isOpen)
                     .help("Stop the machine (⇧⌘.)")
             }
         }

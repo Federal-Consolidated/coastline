@@ -45,7 +45,7 @@ struct WorkZeroRow: View {
 }
 
 /// Typed work coordinates for the current position (G10 L20). Blank axes keep their offset.
-private struct SetWorkPopover: View {
+struct SetWorkPopover: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var x: Double?
@@ -265,7 +265,7 @@ struct GoToSheet: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if !mill.allowJog {
-                Text("Turn on Allow Jog first.").font(.caption).foregroundStyle(Theme.warning)
+                Text("Unlock jogging first.").font(.caption).foregroundStyle(Theme.warning)
             } else if let why = s.gates.run {
                 Text(why.text).font(.caption).foregroundStyle(Theme.warning)
             } else if let message = mill.message {

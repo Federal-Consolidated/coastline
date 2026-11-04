@@ -139,7 +139,8 @@ struct StockInspector: View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                        PreviewCard(key: "\(stock.id)-\(stock.envelope)-\(stock.materialID)", build: { [stock] d in stock.sceneMeshes(device: d) }) {
+                        PreviewCard(itemID: stock.id, key: "\(stock.id)-\(stock.shape)-\(stock.envelope)-\(stock.materialID)-\(stock.extrusionAxis ?? -1)",
+                                    name: stock.material?.name ?? "Stock", build: { [stock] d in stock.sceneMeshes(device: d) }) {
                             StockPreview(stock: stock)
                         }
                         if let m = stock.material {
@@ -152,6 +153,8 @@ struct StockInspector: View {
                 }
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
+            } footer: {
+                Text("Drag to orbit · Pinch to zoom · Double-click to fit")
             }
             Section("Material & shape") {
                 MaterialPicker(materialID: $stock.materialID)

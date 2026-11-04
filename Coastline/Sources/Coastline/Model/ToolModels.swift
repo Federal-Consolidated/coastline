@@ -4,6 +4,13 @@ import Metal
 import Viewport
 
 extension Tool {
+    /// Include every shape and finish input so inspector edits refresh the preview immediately.
+    var inventoryPreviewKey: String {
+        let geometry = [diameter, shankDiameter, fluteLength, stickout, overallLength, cornerRadius, tipDiameter]
+        return ([id.uuidString, kind.rawValue, coating.rawValue, toolMaterial.rawValue, String(flutes), String(describing: angle)]
+                + geometry.map { String($0) }).joined(separator: "|")
+    }
+
     /// The cutter's real shape from its numbers (flutes, helix, tip), for the 3D views.
     var cutterShape: CutterShape {
         let tip: CutterShape.Tip = switch kind {

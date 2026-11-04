@@ -29,13 +29,23 @@ final class MillControl {
     }
     var jogStep = 1.0
     var jogFeed = 1000.0
-    /// Hold-to-jog (the Step picker's "Hold"): the jog buttons and keys move an axis while held.
-    var jogHold = false
+    /// Hold-to-jog: the pad and keys move while held.
+    var jogHold = false {
+        didSet { if jogHold != oldValue { endHold() } }
+    }
     /// The jog the operator holds now (a button or a key, in hold-to-jog).
     private(set) var heldJog: HeldJog?
     /// Off by default, and off again after anything that makes the position doubtful. Also arms
     /// Go To.
-    var allowJog = false
+    var allowJog = false {
+        didSet {
+            if oldValue && !allowJog {
+                heldJog = nil
+                holdStartedAt = nil
+                session.jogCancel()
+            }
+        }
+    }
     /// The last refused request, shown under the motion controls.
     var message: String?
     /// The Home confirmation sheet (opened from the page, the toolbar or the Machine menu).
@@ -47,6 +57,8 @@ final class MillControl {
     /// The spindle speed for Spindle On (RPM).
     var spindleRPM = 5000.0
     var showSpindleConfirm = false
+    /// Console is a separate utility sheet, leaving the control inspector available.
+    var showConsole = false
     /// The last work-offset change, for Undo.
     private(set) var offsetUndo: OffsetChange?
 
@@ -62,6 +74,7 @@ final class MillControl {
     @ObservationIgnored private var lastConsoleID = 0
     @ObservationIgnored private var terminateSignal: DispatchSourceSignal?
     @ObservationIgnored private var lastScan = Date.distantPast
+    @ObservationIgnored private var holdStartedAt: Date?
     /// Ports not to connect to by themselves until they are unplugged: connected once already
     /// (the operator may have disconnected), or the connect failed.
     @ObservationIgnored private var autoSkip: Set<String> = []
@@ -84,6 +97,9 @@ final class MillControl {
         source.setEventHandler { NSApplication.shared.terminate(nil) }
         source.resume()
         terminateSignal = source
+        if ProcessInfo.processInfo.environment["COASTLINE_DEV"] == "1" {
+            connectSimulator()
+        }
     }
 
     var isOpen: Bool { snapshot.isOpen }
@@ -125,8 +141,8 @@ final class MillControl {
             }
             port = .device(ports[0])
         }
-        if ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] != nil, !port.isSimulated {
-            message = "Scripted runs use the Simulated Mill only."
+        if (ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] != nil || ProcessInfo.processInfo.environment["COASTLINE_DEV"] == "1"), !port.isSimulated {
+            message = "UI development and scripted runs use Digital Machine only."
             return
         }
         console.removeAll()
@@ -160,32 +176,59 @@ final class MillControl {
     /// App quit: stop the machine if it moves, then close the port.
     func shutdown() { session.shutdown() }
 
-    func home() { report(session.home()) }
+    /// Digital homing needs no physical-clearance confirmation.
+    func requestHome() {
+        if isSimulated { home() } else { showHomeConfirm = true }
+    }
+
+    func home() {
+        allowJog = false
+        report(session.home())
+    }
 
     func jog(_ axis: MillCore.Axis, _ direction: Double) {
+        let vector = HeldJog(axis: axis, direction: direction)
+        jog(x: vector.x, y: vector.y, z: vector.z)
+    }
+
+    /// The pad's physical directions; diagonal axes travel together in one jog.
+    func jog(x: Double = 0, y: Double = 0, z: Double = 0) {
         guard allowJog else {
-            message = "Turn on Allow Jog first."
+            message = "Unlock jogging first."
             return
         }
-        report(session.jog(JogRequest(axis: axis, distance: direction * jogStep, feed: jogFeed)))
+        report(session.jog(JogRequest(x: x * jogStep, y: y * jogStep, z: z * jogStep, feed: jogFeed)))
     }
 
     /// Hold-to-jog: starts when the operator presses a jog button or key.
     func startHold(_ axis: MillCore.Axis, _ direction: Double) {
+        let vector = HeldJog(axis: axis, direction: direction)
+        startHold(x: vector.x, y: vector.y, z: vector.z)
+    }
+
+    func startHold(x: Double = 0, y: Double = 0, z: Double = 0) {
         guard heldJog == nil else { return }
         guard allowJog else {
-            message = "Turn on Allow Jog first."
+            message = "Unlock jogging first."
             return
         }
-        let refusal = session.startHold(axis, direction: direction, feed: jogFeed)
+        let refusal = session.startHold(x: x, y: y, z: z, feed: jogFeed)
         report(refusal)
-        if refusal == nil { heldJog = HeldJog(axis: axis, direction: direction) }
+        if refusal == nil {
+            heldJog = HeldJog(x: x, y: y, z: z)
+            holdStartedAt = Date()
+        }
+    }
+
+    func isHolding(x: Double = 0, y: Double = 0, z: Double = 0) -> Bool {
+        heldJog == HeldJog(x: x, y: y, z: z)
     }
 
     /// Hold-to-jog: the operator let go (or the window lost the keys). Stops the jog at once.
     func endHold() {
         guard heldJog != nil else { return }
         heldJog = nil
+        holdStartedAt = nil
         session.endHold()
     }
 
@@ -226,10 +269,10 @@ final class MillControl {
                           envelope: envelope, retractFirst: request.retractFirst)
     }
 
-    /// Runs a confirmed go-to (a checked program, like a test program). Needs Allow Jog.
+    /// Runs a confirmed go-to (a checked program, like a test program). Needs jogging unlocked.
     @discardableResult func go(_ request: GoToRequest) -> Bool {
         guard allowJog else {
-            message = "Turn on Allow Jog first."
+            message = "Unlock jogging first."
             return false
         }
         switch lines(for: request) {
@@ -297,6 +340,10 @@ final class MillControl {
             let doubt = !next.homed || next.restarts != snapshot.restarts || next.silentSince != nil
                 || next.link != .connected || (next.lastAlarm != nil && next.lastAlarm != snapshot.lastAlarm)
             if doubt { allowJog = false }
+            if heldJog != nil, !next.holding,
+               snapshot.holding || next.lastError != snapshot.lastError {
+                endHold()
+            }
             if next.link == .disconnected, snapshot.link != .disconnected { refreshPorts() }
             snapshot = next
             if isPortOpen != next.isOpen { isPortOpen = next.isOpen }
@@ -307,7 +354,14 @@ final class MillControl {
         // A hold lasts while it is renewed: if this timer stops (the app hangs), the session
         // cancels the jog by itself.
         if heldJog != nil {
-            if allowJog, isOpen { session.renewHold() } else { endHold() }
+            if !next.holding, let started = holdStartedAt, Date().timeIntervalSince(started) > 0.5 {
+                // A hold can be refused at a boundary before an active snapshot is published.
+                endHold()
+            } else if allowJog, isOpen {
+                session.renewHold()
+            } else {
+                endHold()
+            }
         }
         autoConnectIfPluggedIn()
         let lines = session.console(after: lastConsoleID)
@@ -322,7 +376,8 @@ final class MillControl {
     /// one with Automatic) is connected. Never in scripts, never to the Simulated Mill.
     private func autoConnectIfPluggedIn() {
         let now = Date()
-        guard now.timeIntervalSince(lastScan) >= 1, ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil else { return }
+        guard now.timeIntervalSince(lastScan) >= 1, ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil,
+              ProcessInfo.processInfo.environment["COASTLINE_DEV"] != "1" else { return }
         lastScan = now
         guard !isOpen else { return }
         let found = MillSession.availablePorts()
@@ -351,8 +406,21 @@ final class MillControl {
 }
 
 struct HeldJog: Equatable {
-    var axis: MillCore.Axis
-    var direction: Double
+    var x: Double = 0
+    var y: Double = 0
+    var z: Double = 0
+
+    init(x: Double = 0, y: Double = 0, z: Double = 0) {
+        self.x = x
+        self.y = y
+        self.z = z
+    }
+
+    init(axis: MillCore.Axis, direction: Double) {
+        x = axis == .x ? direction : 0
+        y = axis == .y ? direction : 0
+        z = axis == .z ? direction : 0
+    }
 }
 
 /// A work-offset change that Undo writes back.

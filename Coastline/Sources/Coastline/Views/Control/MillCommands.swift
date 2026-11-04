@@ -12,7 +12,7 @@ struct MachineCommands: Commands {
                 .keyboardShortcut("m", modifiers: [.command, .shift])
             Button("Show Console") {
                 model.page = .control
-                model.showInspector = true
+                mill.showConsole = true
             }
             Divider()
             if mill.isPortOpen {
@@ -25,7 +25,7 @@ struct MachineCommands: Commands {
             }
             Button("Home…") {
                 model.page = .control
-                mill.showHomeConfirm = true
+                mill.requestHome()
             }
             .disabled(!mill.canHome)
             Menu("Test Programs") {
