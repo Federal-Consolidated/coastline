@@ -3,21 +3,17 @@ import SwiftUI
 
 /// One step of the whole job, in the order it happens at the machine.
 struct JobStep: Identifiable {
-    enum Kind { case prepSetup, setup, program, flip, measure, finish }
+    enum Kind { case setup, program, flip, measure, finish }
     /// The job's four phases, in the order they happen at the machine.
     enum Phase: Int, CaseIterable {
-        case stock, prep, sideA, sideB, finish
+        case sideA, sideB, finish
         var title: String {
             switch self {
-            case .stock: "Your stock"
-            case .prep: "Flat on the bed"
             case .sideA: "Machining · side A"
             case .sideB: "Machining · side B"
             case .finish: "Finish"
             }
         }
-        /// Path B: the job runs on the bed, not in the clamp kit.
-        func title(onBed: Bool) -> String { onBed && self == .sideA ? "On the bed" : title }
     }
     var id: String
     var kind: Kind
@@ -26,7 +22,6 @@ struct JobStep: Identifiable {
     var detail: String
     var symbol: String
     var side: Int
-    /// The prep clamping it belongs to (side −1).
     var stage: Int = 0
     var program: Int?
     var minutes: Double?
@@ -35,7 +30,6 @@ struct JobStep: Identifiable {
     /// Your time for a step done by hand (an estimate), minutes; machining steps use `minutes`.
     var handMinutes: Double {
         switch kind {
-        case .prepSetup: return stage < 0 ? 2 : 3
         case .setup: return minutes ?? 5
         case .flip: return 4
         case .measure: return 1.5
@@ -51,7 +45,7 @@ struct JobStep: Identifiable {
         switch kind {
         case .finish: .finish
         default:
-            side == -1 ? (stage < 0 ? .stock : .prep) : side == 0 ? .sideA : .sideB
+            side == 0 ? .sideA : .sideB
         }
     }
 }
@@ -67,7 +61,7 @@ struct JobChapter: Hashable, Identifiable {
 extension AppModel {
     /// The job as the user runs it: each clamping (with edge finding and a touch-off after it),
     /// each tool program (a tool change and touch-off before each), turning the stock over, side
-    /// B, then freeing the part. The same order as the guided .crproj.
+    /// B, then freeing the part. The same order as the guided job.
     var jobSteps: [JobStep] {
         if setup.planFromFixtureLibrary, libraryWorkholdingPlan?.complete == true, !programs.isEmpty {
             return libraryJobSteps
@@ -86,43 +80,12 @@ extension AppModel {
                                side: side, stage: stage, program: program, minutes: minutes))
         }
         // After every clamping: the edge finder finds X/Y, then each tool is touched off on the face.
-        let electrical = setup.usesClampKit && AppSettings.shared.clampKitProbing == .electrical
         let reach = stock.map { probing(stockSize: setup.stockSize($0)) }
         func edgeFind(side: Int, stage: Int) {
-            let probe = electrical && side >= 0
             let both = side < 0 || ((reach?.lowerXReachable[min(side, 1)] ?? true) && (reach?.upperXReachable[min(side, 1)] ?? true))
             let edges = both ? "lower, upper, left and right edge" : "one X edge (the other is out of reach: X0 from it and the stock's height), left and right edge"
-            let detail = probe
-                ? "Electrical probing with the first tool (wire on the clamp, G38.2): \(edges) → X0 Y0 at the face's centre; each tool touches down on the face (Z0)"
-                : "edge finder: \(edges) → X0 Y0 at the face's centre; then touch off each tool on the face (Z0)"
-            add(.program, "e\(side).\(stage)", probe ? "Probe the stock" : "Edge-find", detail,
-                probe ? "bolt.horizontal" : "scope", side: side, stage: stage, program: Self.edgeFindProgram(side: side, stage: stage))
-        }
-        if let plan = flatPrepPlan, !prepPrograms.isEmpty || (isGenerating && hasPrep) {
-            let saw = plan.sawLength.map { "Saw a \(Length.mm($0)) mm piece off first · " } ?? ""
-            add(.prepSetup, "prep", "Your stock",
-                "As bought, \(Length.mm(plan.width)) × \(Length.mm(plan.length)) × \(Length.mm(plan.thickness)) mm · " + saw + "one acetal stop across both T-slots, squared; the riser just behind its face; two 3\" C-clamps over the table's back edge",
-                "shippingbox", side: -1, stage: -1)
-            for k in plan.stages.indices {
-                let p = prepPrograms.indices.contains(k) ? prepPrograms[k] : nil
-                let st = plan.stages[k]
-                let (title, detail, symbol): (String, String, String) = switch st.kind {
-                case .faceEnd(0): ("Mount · end A", "Length toward the spindle, a long side on the stop, \(Length.mm(st.protrusion)) mm proud", "arrow.down.to.line")
-                case .faceEnd: ("Turn end for end", "End B toward the spindle, the same side on the stop", "arrow.triangle.2.circlepath")
-                case .edge(0, _): ("Quarter turn · edge", "Faced end A on the stop, the long edge \(Length.mm(st.protrusion)) mm past it", "rotate.3d")
-                case .edge(let r, _): ("Slide out · round \(r + 1)", "Slide the bar \(Length.mm(st.cut)) mm toward the spindle, end A on the stop", "arrow.up.to.line")
-                }
-                add(.prepSetup, "m\(k)", title, detail + " · clamp it", symbol, side: -1, stage: k)
-                edgeFind(side: -1, stage: k)
-                add(.program, "p\(p?.index ?? 1000 + k)", p?.title ?? st.title, p?.tool.name ?? "Mills the bar on the bed", st.isEdge ? "square.3.layers.3d.top.filled" : "square.split.bottomrightquarter",
-                    side: -1, stage: k, program: p?.index, minutes: p.map { $0.seconds / 60 })
-                if k == plan.stages.count - 1, let p {
-                    let c = GuidedJobBuilder.Checkpoint(afterProgram: p.index, what: "Bar width", expected: plan.target, tolerance: 0.1)
-                    out.append(JobStep(id: "c\(p.index)", kind: .measure, number: out.count + 1, title: "Measure the bar",
-                                       detail: "\(setup.shoulders == nil ? "Width" : "Shoulder height") \(Length.mm(plan.target)) ± 0.1 mm before it goes into the clamp kit", symbol: "ruler",
-                                       side: -1, stage: k, program: p.index, checkpoint: c))
-                }
-            }
+            let detail = "edge finder: \(edges) → X0 Y0 at the face's centre; then touch off each tool on the face (Z0)"
+            add(.program, "e\(side).\(stage)", "Edge-find", detail, "scope", side: side, stage: stage, program: Self.edgeFindProgram(side: side, stage: stage))
         }
         // The setups from the other sides come first, on the whole block.
         let turnedChecks = checkpoints()
@@ -145,7 +108,6 @@ extension AppModel {
                 }
             }
         }
-        let clamps = stock.flatMap { clampPlacement(stockSize: setup.stockSize($0))?.clamps.count } ?? 1
         if !turned.isEmpty {
             add(.setup, "setup", "Turn: front to the spindle", "Turn the stock back so its front faces the spindle · secure it in the fixture shown · find the X/Y centre · touch off",
                 "rotate.3d", side: 0)
@@ -153,12 +115,8 @@ extension AppModel {
             add(.setup, "setup", "Secure in your fixture & edge-find",
                 "\(setup.customFixture.name) · check fixture clearance · find the X/Y centre · touch off",
                 "square.and.arrow.down.on.square", side: 0)
-        } else if setup.onBed {
-            add(.setup, "setup", "Clamp on the bed & edge-find",
-                "Flat on the riser against the stop, two C-clamps · find the X/Y centre · touch off", "square.and.arrow.down.on.square", side: 0)
         } else {
-            add(.setup, "setup", prepPrograms.isEmpty ? "Clamp & edge-find" : "Into the clamp kit",
-                "\(clamps == 1 ? "Universal clamp" : "\(clamps) universal clamps") in the T-slots · find the X/Y centre · touch off",
+            add(.setup, "setup", "Secure the stock & edge-find", "Secure the stock · find the X/Y centre · touch off",
                 "square.and.arrow.down.on.square", side: 0)
         }
         edgeFind(side: 0, stage: 0)
@@ -180,7 +138,7 @@ extension AppModel {
             add(.flip, "flip", "Turn over & re-clamp",
                 setup.holding == .custom
                     ? "Front-to-back about the vertical axis · secure in your fixture · edge-find and touch off again"
-                    : "Front-to-back about the vertical axis · same bottom edge and parallels · edge-find and touch off again",
+                    : "Front-to-back about the vertical axis · secure it again · edge-find and touch off again",
                 "arrow.triangle.2.circlepath", side: 1)
             edgeFind(side: 1, stage: 0)
             for p in progs where p.side == 1 {
@@ -190,9 +148,9 @@ extension AppModel {
                 measures(after: p)
                 if p.operations.contains(where: { $0.reference == .windows }) {
                     add(.setup, "bores", "Find the reference bores",
-                        (electrical ? "The tool touches each bore's wall four times (G38.2)" : "The edge finder finds each bore's four walls")
+                        "The edge finder finds each bore's four walls"
                             + " · X0 Y0 from the two centres · checks their size, spacing and squareness",
-                        "circle.circle", side: 1, program: p.index, minutes: electrical ? 3 : 15)
+                        "circle.circle", side: 1, program: p.index, minutes: 15)
                 }
             }
         }
@@ -221,13 +179,9 @@ extension AppModel {
             switch st.kind {
             case .finish: (key, title) = ("finish", st.title)
             case .measure: (key, title) = last.map { ($0.key, $0.chapter.title) } ?? ("measure", "Measure")
-            case .prepSetup where st.stage < 0: (key, title) = ("bed0", "Bed 1 · " + (flatPrepPlan?.stages.first?.title ?? "Prep"))
             case .setup, .flip: (key, title) = ("s\(st.side).setup", sideName(st.side) + (st.kind == .flip || st.side == 1 ? "Turn over & edge-find" : st.side >= 2 || (st.side == 0 && !turned.isEmpty) ? "Turn & edge-find" : "Clamp & edge-find"))
             default:
-                if st.side == -1 {
-                    let n = max(st.stage, 0)
-                    (key, title) = ("bed\(n)", "Bed \(n + 1) · " + (flatPrepPlan.map { $0.stages.indices.contains(n) ? $0.stages[n].title : "Prep" } ?? "Prep"))
-                } else if st.program == Self.edgeFindProgram(side: st.side, stage: 0)
+                if st.program == Self.edgeFindProgram(side: st.side, stage: 0)
                             || (st.program.flatMap { opsOf[$0] }?.contains { $0.reference == .windows } ?? false) {
                     (key, title) = ("s\(st.side).setup", sideName(st.side) + (st.side == 1 ? "Turn over & edge-find" : "Clamp & edge-find"))
                 } else {
@@ -237,7 +191,7 @@ extension AppModel {
             }
             if last?.key != key {
                 runs += 1
-                last = (key, JobChapter(id: "\(key)#\(runs)", title: title, side: st.side == -1 || key.hasPrefix("bed") ? -1 : st.side))
+                last = (key, JobChapter(id: "\(key)#\(runs)", title: title, side: st.side))
             }
             out[k].chapter = last!.chapter
         }
@@ -248,7 +202,6 @@ extension AppModel {
     var phaseOnScrubber: JobStep.Phase? {
         guard !timeline.entries.isEmpty else { return nil }
         switch viewSide {
-        case -1: return .prep
         case 1: return .sideB
         default: return .sideA
         }
@@ -264,7 +217,7 @@ extension AppModel {
             let done = sideResults.first { $0.side == planned.side }?.operationProgram.filter { $0 == p }.count ?? 0
             return done >= planned.operations.count
         }
-        return !prepResults.isEmpty  // the prep's (made first)
+        return false
     }
 
     /// A chapter can be opened once its programs are all there; a clamping's setup once its
@@ -274,7 +227,7 @@ extension AppModel {
         let progs = group.compactMap(\.program).filter { $0 < 2000 }
         if progs.isEmpty {
             let side = group.first?.side ?? 0
-            return side == -1 ? !prepResults.isEmpty : sideResults.contains { $0.side == side && !$0.planned.isEmpty }
+            return sideResults.contains { $0.side == side && !$0.planned.isEmpty }
         }
         return progs.allSatisfy(programReady)
     }
@@ -304,7 +257,7 @@ extension AppModel {
 
     /// A machining step's stretch of the timeline on screen (nil: by hand, or another clamping).
     func stepSpan(_ step: JobStep) -> ClosedRange<Double>? {
-        guard step.kind == .program, let p = step.program, step.side == viewSide, step.side != -1 || step.stage == prepStage,
+        guard step.kind == .program, let p = step.program, step.side == viewSide,
               let a = timeline.entries.first(where: { $0.program == p }), let b = timeline.entries.last(where: { $0.program == p }) else { return nil }
         return a.tStart...b.tEnd
     }
@@ -330,8 +283,7 @@ extension AppModel {
         if let sel = selectedStep, abs(playhead - sel.time) < 1e-6 { return step.id == sel.id }
         let atStart = playhead <= 1e-6
         switch step.kind {
-        case .program: return step.program == currentProgram && (step.side != -1 || prepStage == step.stage)
-        case .prepSetup: return viewSide == -1 && prepStage == step.stage && atStart
+        case .program: return step.program == currentProgram
         case .setup:
             if setup.planFromFixtureLibrary {
                 return step.id == "library.\(currentLibraryStep?.id.uuidString ?? "")" && atStart
@@ -356,7 +308,7 @@ extension AppModel {
         let seekTo: () -> Void = { [weak self] in
             guard let self else { return }
             switch step.kind {
-            case .prepSetup, .setup, .flip: self.seek(0)
+            case .setup, .flip: self.seek(0)
             case .finish: self.seek(self.timeline.duration)
             case .measure:
                 if let p = step.program, let e = self.timeline.entries.last(where: { $0.program == p }) { self.seek(e.tEnd) }
@@ -365,10 +317,9 @@ extension AppModel {
             }
             self.selectedStep = (step.id, self.playhead)
         }
-        let stage = step.side == -1 ? step.stage : prepStage
-        if step.side != viewSide || stage != prepStage {
+        if step.side != viewSide {
             pendingSeek = seekTo
-            show(side: step.side, stage: stage)
+            show(side: step.side)
         } else if stockAnimating {
             // The stock is still moving to this clamping: its timeline isn't on screen yet.
             // The step is taken when it lands (the last one clicked wins).
@@ -560,8 +511,8 @@ struct JobStrip: View {
             if !compact {
             VStack(alignment: .leading, spacing: 0) {
                 Text(step.title).font(.caption.weight(.semibold)).lineLimit(1)
-                Text(step.minutes.map { "\(step.side == -1 ? "Prep · " : step.side >= 2 ? SetupSide.words(step.side).capitalized + " · " : model.twoSided ? (step.side == 0 ? "A · " : "B · ") : "")≈ \(AppModel.duration($0 * 60))" }
-                     ?? (step.kind == .program ? "being generated…" : step.kind == .flip ? "Side B" : step.kind == .prepSetup ? "Prep" : step.kind == .setup ? (model.twoSided ? "Side A" : "Setup") : "By hand"))
+                Text(step.minutes.map { "\(step.side >= 2 ? SetupSide.words(step.side).capitalized + " · " : model.twoSided ? (step.side == 0 ? "A · " : "B · ") : "")≈ \(AppModel.duration($0 * 60))" }
+                     ?? (step.kind == .program ? "being generated…" : step.kind == .flip ? "Side B" : step.kind == .setup ? (model.twoSided ? "Side A" : "Setup") : "By hand"))
                     .font(.caption).foregroundStyle(active ? Color.white : .secondary).lineLimit(1)
             }
             }

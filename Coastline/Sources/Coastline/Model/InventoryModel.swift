@@ -72,38 +72,10 @@ final class InventoryModel {
         scheduleSave()
     }
 
-    func saveMaterial(_ material: Material) throws {
-        guard MaterialLibrary.material(id: material.id) == nil else {
-            throw ResourceLibraryImport.ImportError.invalid(["Make a copy to edit a built-in material."])
-        }
-        guard material.validationIssues.isEmpty else {
-            throw ResourceLibraryImport.ImportError.invalid(material.validationIssues)
-        }
-        var next = inventory
-        var materials = next.customMaterials ?? []
-        materials.removeAll { $0.id == material.id }
-        materials.append(material)
-        next.customMaterials = materials
-        next.stock = next.stock.map { next.resolvedStock($0) }
-        try commitLibrary(next)
-    }
-
     /// Customize one block without changing a shared material or a saved job's data.
     func customizeStockMaterial(_ material: Material, stockID: UUID, expectedMaterialID: String) throws {
         let next = try inventory.customizingStockMaterial(material, stockID: stockID,
                                                           expectedMaterialID: expectedMaterialID)
-        try commitLibrary(next)
-    }
-
-    func removeMaterial(id: String) throws {
-        guard MaterialLibrary.material(id: id) == nil else {
-            throw ResourceLibraryImport.ImportError.invalid(["Built-in materials cannot be deleted."])
-        }
-        guard !inventory.stock.contains(where: { $0.materialID == id }) else {
-            throw ResourceLibraryImport.ImportError.invalid(["This material is used by stock in your library. Change that stock's material before deleting it."])
-        }
-        var next = inventory
-        next.customMaterials?.removeAll { $0.id == id }
         try commitLibrary(next)
     }
 
@@ -145,24 +117,6 @@ final class InventoryModel {
         guard var copy = inventory[keyPath: list].first(where: { $0.id == id }) else { return }
         newID(&copy)
         add(copy, to: list)
-    }
-
-    /// Imports a Fusion `.tools` / `.json` library. Returns a summary for the alert.
-    func importToolLibrary(_ url: URL) -> String {
-        let access = url.startAccessingSecurityScopedResource()
-        defer { if access { url.stopAccessingSecurityScopedResource() } }
-        do {
-            let result = try ToolLibraryImport.load(url)
-            let known = Set(inventory.tools.map { "\($0.vendor)|\($0.partNumber)|\($0.diameter)" })
-            let fresh = result.tools.filter { $0.partNumber.isEmpty || !known.contains("\($0.vendor)|\($0.partNumber)|\($0.diameter)") }
-            update { $0.tools += fresh }
-            var message = "Imported \(fresh.count) tool\(fresh.count == 1 ? "" : "s") from \(url.lastPathComponent)."
-            if fresh.count < result.tools.count { message += " \(result.tools.count - fresh.count) were already in your inventory." }
-            if !result.skipped.isEmpty { message += "\n\nSkipped:\n" + result.skipped.joined(separator: "\n") }
-            return message
-        } catch {
-            return "\(error)"
-        }
     }
 
     func resetToStarter() {

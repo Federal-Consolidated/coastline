@@ -32,17 +32,6 @@ struct PlaybackBar: View {
                 .frame(maxWidth: .infinity, alignment: .leading)  // transport on the left, what's shown on the right
                 Scrubber()
                 }
-                if model.showDeviation, let d = model.deviationStats {
-                    HStack(spacing: 14) {
-                        Label("\(Int((d.within * 100).rounded())) % within ±\(Int(d.tolerance * 1000)) µm", systemImage: "circle.fill").foregroundStyle(Theme.ok)
-                        Label("most left \(Length.mm(d.maxLeft)) mm", systemImage: "circle.fill").foregroundStyle(Color(white: 0.55))
-                        Label(d.maxGouge > d.tolerance ? "gouge \(Length.mm(d.maxGouge)) mm" : "no gouges", systemImage: "circle.fill")
-                            .foregroundStyle(d.maxGouge > d.tolerance ? Theme.danger : .secondary)
-                        Spacer()
-                        Text("at the playhead · simulation cell ≈ \(Length.mm(model.heightmap?.cell ?? 0)) mm").foregroundStyle(.secondary)
-                    }
-                    .font(.caption)
-                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -148,11 +137,6 @@ struct PlaybackBar: View {
                           help: "Show the stock being cut away as it plays.")
                 BarToggle(title: "Pick a Toolpath", symbol: "scope", isOn: $model.inspecting,
                           help: "Click a toolpath line to see its G-code line, feed and position.")
-                if level < 3 {
-                    BarToggle(title: "Compare with the CAD", symbol: "chart.bar.xaxis", isOn: $model.showDeviation,
-                              help: "Colour the simulated stock against the part: green within ±20 µm, blue where material is left, red where it would gouge.")
-                        .disabled(!model.simulate)
-                }
             }
         }
         .frame(height: 32)
@@ -306,15 +290,6 @@ extension AppModel {
     static func clock(_ s: Double) -> String {
         let t = Int(s.rounded())
         return t >= 3600 ? String(format: "%d:%02d:%02d", t / 3600, t / 60 % 60, t % 60) : String(format: "%d:%02d", t / 60, t % 60)
-    }
-}
-
-extension AppModel {
-    /// "Adaptive roughing · 1/4\" flat end mill · 3:20–14:05" for a scrubber segment.
-    func segmentDescription(operation k: Int, from a: Double, to b: Double) -> String {
-        let title = timelineTitles.indices.contains(k) ? timelineTitles[k] : "Operation"
-        let tool = plannedTools.indices.contains(k) ? plannedTools[k].name.components(separatedBy: " · ").first ?? "" : ""
-        return "\(title) · \(tool) · \(AppModel.clock(a))–\(AppModel.clock(b))"
     }
 }
 

@@ -10,7 +10,7 @@ struct MachinabilitySection: View {
     @Environment(InventoryModel.self) private var inventory
     var title = "Machinability"
     /// Plan: rows numbered like the pins on the part, details in the card beside the pin.
-    /// Elsewhere (the clamp-kit sheet, no pins): details and ways forward in the row.
+    /// Elsewhere (the setups sheet, no pins): details and ways forward in the row.
     var numbered = false
     @State private var showPassed = false
 
@@ -137,7 +137,7 @@ struct MachinabilitySection: View {
         case .buyTool: "cart"
         case .addTool: "cart.badge.plus"
         case .addCollet: "plus.circle"
-        case .reviewSetups: JobStage.clampKit.symbol
+        case .reviewSetups: JobStage.setups.symbol
         case .setStickout: "ruler"
         }
     }

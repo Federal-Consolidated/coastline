@@ -37,7 +37,7 @@ struct LibraryWorkholdingSection: View {
                     Text("Build the plan to see its setups here.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Button("Change Workholding", systemImage: "arrow.left") { model.enter(.clampKit) }
+                Button("Change Workholding", systemImage: "arrow.left") { model.enter(.setups) }
             }
         }
     }

@@ -238,28 +238,3 @@ def test_thread_milling_climbs_one_pitch_a_turn_on_the_thread_radius():
     # Never below the thread's bottom; the feed at the centre is scaled to the edge's.
     assert rows[:, 4].min() >= -6.0 - 1e-6
     assert abs(cuts[0, 7] - 300 * r_full / 1.5) < 1e-3
-
-
-def test_nest_is_a_closed_block_with_the_parts_face_as_its_cavity():
-    """The first-cut coupon (34 × 24 × 6, flat back) face-down in its nest: a watertight block
-    tall enough for the clamp kit's jaw, its cavity floor the clearance below the part's back,
-    the rim below the part's top so it stands free."""
-    import io
-
-    import trimesh
-
-    from coastline_engine.server import _nest
-
-    PARTS["coupon"] = import_part(RES / "examples/first_cut.step")
-    meta, blobs = _nest({"part_id": "coupon", "transform": np.eye(4).ravel().tolist(), "clearance": 0.1, "wall": 4.0}, [])
-    m = trimesh.load(io.BytesIO(blobs[0]), file_type="stl")
-    assert m.is_watertight and m.is_winding_consistent and m.volume > 0
-    assert meta["size"][0] >= 24.0 - 1e-6, "tall enough for the jaw"
-    assert abs(meta["base"] - (0.0 - 0.1 - 3.0)) < 1e-6, "3 mm floor under the cavity, 0.1 below the back"
-    assert 0.5 < meta["proud"] < meta["part_height"], meta
-    # The cavity is the coupon's outline: at its centre the floor is at the back (−0.1), outside
-    # the outline (+ clearance + a cell) the rim.
-    z = m.vertices[:, 2]
-    centre = m.vertices[(np.abs(m.vertices[:, 0]) < 1) & (np.abs(m.vertices[:, 1]) < 1) & (z > meta["base"] + 1)]
-    assert np.allclose(centre[:, 2], -0.1, atol=1e-4)
-    assert abs(z.max() - meta["rim"]) < 1e-6

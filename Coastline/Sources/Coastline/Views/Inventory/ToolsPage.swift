@@ -402,7 +402,7 @@ struct StarterBanner: View {
                 Image(systemName: "sparkles").font(.title2).foregroundStyle(Theme.accent)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Starter inventory").font(.headline)
-                    Text("Coastline filled your inventory from the maker's tool libraries, the clamp kit and your dimensions model. Set each quantity to what you actually own; the planner only uses items with a quantity above 0.")
+                    Text("Coastline filled your inventory from the maker's tool libraries and your dimensions model. Set each quantity to what you actually own; the planner only uses items with a quantity above 0.")
                         .font(.callout).foregroundStyle(.secondary)
                         .lineLimit(4)
                 }

@@ -89,24 +89,7 @@ final class AppModel {
     var setup = Setup() {
         didSet {
             guard setup != oldValue else { return }
-            if setup.bedJobOverride != oldValue.bedJobOverride, ProcessInfo.processInfo.environment["COASTLINE_DEBUG_BED"] != nil {
-                print("DEBUG bed override \(oldValue.bedJobOverride) -> \(setup.bedJobOverride)\n" + Thread.callStackSymbols.prefix(14).joined(separator: "\n"))
-            }
-            var a = setup, b = oldValue
-            a.prepOverrides = []
-            b.prepOverrides = []
-            // The kit's clamps along the slots and the stock's stand-out: the toolpaths are
-            // relative to the stock face, so they stay (and are checked again; KitEditor).
-            a.kitClampShift = []; b.kitClampShift = []
-            a.clampProtrusion = 0; b.clampProtrusion = 0
-            if a == b {
-                // Only fixtures moved (BedEditor, KitEditor): the part's toolpaths stay valid.
-                layoutScene(); saveSession(); noteProjectChange()
-                if setup.kitClampShift != oldValue.kitClampShift || setup.clampProtrusion != oldValue.clampProtrusion,
-                   gumballDrag == nil { recheckClearance() }
-                return
-            }
-            clearToolpathResults(); layoutScene(); saveSession(); scheduleAnalysis(); keepStockWorkable(); autoPlanPrep(); noteProjectChange()
+            clearToolpathResults(); layoutScene(); saveSession(); scheduleAnalysis(); keepStockWorkable(); noteProjectChange()
         }
     }
     /// Collision engine results for what's on the bed now (CollisionCheck.swift).
@@ -127,18 +110,9 @@ final class AppModel {
     @ObservationIgnored var opCache: [String: ([OperationToolpath], [PlacedTab])] = [:]
     @ObservationIgnored var opCacheOrder: [String] = []
     @ObservationIgnored var cachedOps = 0
-    /// Shoulders Coastline planned itself (undone when the stock fits another way).
-    var shouldersAuto = false
-    @ObservationIgnored var prepProgramCache: (key: String, items: [GuidedJobBuilder.MillDown.Item])?
     @ObservationIgnored var clampFieldCache: (key: String, field: FixtureField?)?
-    @ObservationIgnored var cClampFrameCache: (Double, Double)?
     @ObservationIgnored var clearanceRecheck: Task<Void, Never>?
     @ObservationIgnored var partMeshData: (positions: [Float], normals: [Float], indices: [UInt32])?
-    /// The welcome guide: once on first launch (never in automation runs), then from Help.
-    var showWelcome = ProcessInfo.processInfo.environment["COASTLINE_DEV"] != "1" && ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil && !UserDefaults.standard.bool(forKey: "seenWelcome")
-    /// The start sheet (StartView): continue, open, import or pick an example. At launch (after
-    /// the welcome the first time), and from File ▸ Start….
-    var showStart = false
     /// The job journal.
     let journal = JournalModel()
     /// The live connection to the machine (Control page).
@@ -147,11 +121,9 @@ final class AppModel {
     let jobs = JobsModel()
     /// A typed move waiting for its value (GumballTyping.swift).
     var gumballPrompt: GumballPrompt?
-    /// The fixture picked on the bed (stage 3).
-    var bedSelection: BedObject? { didSet { if bedSelection != oldValue { layoutGumball() } } }
     var stockID: StockItem.ID? { didSet { if stockID != oldValue {
         if stockSnapshot?.id != stockID { stockSnapshot = stockID.flatMap(stockLookup) }
-        clearToolpathResults(); layoutScene(); saveSession(); keepStockWorkable(); autoPlanPrep(); noteProjectChange()
+        clearToolpathResults(); layoutScene(); saveSession(); keepStockWorkable(); noteProjectChange()
     } } }
     // The job as a document: its file, unsaved changes, and undo history (ProjectDocument.swift).
     var projectURL: URL?
@@ -221,9 +193,6 @@ final class AppModel {
     /// toolpaths were generated with, rates for the cost, and the batch size.
     var tuning = Tuning()
     var generatedTuning = Tuning()
-    var costModel = AppModel.loadCostModel() {
-        didSet { if let d = try? JSONEncoder().encode(costModel) { UserDefaults.standard.set(d, forKey: "costModel") } }
-    }
     var batchQuantity = 1
     var features: PartFeatures?
     /// The part and work transform `features` were found for: reused only when both match.
@@ -248,22 +217,13 @@ final class AppModel {
     /// Set once the user picks one or two sides themselves; until then the analysis decides (two
     /// sides when the back has shape, one when it is flat).
     var twoSidedChosen = false
-    /// How far generation stood the stock face out past the clamp jaws so every tool clears them
-    /// (more than the setup's own value); nil until it had to.
-    var autoProtrusion: Double?
-    /// Set when finishing had to leave bridges to keep clamping stock (GripZones).
-    var bridgeNote: String?
     /// The job step last chosen (strip, step card or tour) and the playhead it set.
     var selectedStep: (id: String, time: Double)?
-    /// The guided tour is running.
-    var touring = false
     /// The instruction card over the 3D view (toggle in the view options).
     var showStepCard = true
-    /// What the Projects page selects when it opens: "firstCut", "project:<path>" or
+    /// What the Projects page selects when it opens: "project:<path>" or
     /// "job:<folder path>" (imports, automation and links).
     var projectsPick: String?
-    /// The Print a Nest sheet.
-    var showNestSheet = false
     /// The operation just added from the menu: its row opens, ready to set up.
     @ObservationIgnored var justAddedOperation: UUID?
     /// The tint on the stock face the next cut works on (view options; off unless you want it).
@@ -301,13 +261,9 @@ final class AppModel {
     /// The stock is moving between clampings (overlays wait for it to land).
     /// The finding highlight sits on the part, which hides while it moves.
     var stockAnimating = false { didSet { if stockAnimating != oldValue { showDFMHighlight() } } }
-    /// "Your stock" arriving: only the first n prep cuts are drawn (nil: all).
-    var prepReveal: Int?
-    var prepRevealTask: Task<Void, Never>?
-    /// Numbers drawn over the 3D view (prep steps on the bar), model coordinates.
+    /// Numbers drawn over the 3D view, model coordinates.
     var sceneLabels: [SceneLabel] = []
     @ObservationIgnored var measuringToolNames: [String] = []
-    @ObservationIgnored var tourTask: Task<Void, Never>?
     /// The cutter's turn while playing (radians).
     @ObservationIgnored var toolSpin: Float = 0
     @ObservationIgnored var pendingPlay = false
@@ -319,20 +275,11 @@ final class AppModel {
     /// Set while playback or a tool change moves the playhead (not you).
     @ObservationIgnored var internalSeek = false
     @ObservationIgnored var gumballDrag: GumballDrag?
-    /// The stick-out the clamps are set for.
-    var effectiveProtrusion: Double { max(setup.clampProtrusion, autoProtrusion ?? 0) }
     /// Which side the viewport shows.
     var viewSide = 0 {
         didSet {
             guard viewSide != oldValue, !switchingView else { return }
-            transition(from: ViewKey(side: oldValue, stage: prepStage))
-        }
-    }
-    /// Which prep stage (clamping on the squaring stop) is shown while `viewSide` is −1.
-    var prepStage = 0 {
-        didSet {
-            guard prepStage != oldValue, !switchingView, viewSide == -1 else { return }
-            transition(from: ViewKey(side: viewSide, stage: oldValue))
+            transition(from: oldValue)
         }
     }
     @ObservationIgnored var switchingView = false
@@ -354,17 +301,7 @@ final class AppModel {
     var placedTabZ: ClosedRange<Double>?
     /// The job's tool-change spot (ToolChange.swift), for the setup, stock and tools it was found for.
     @ObservationIgnored var toolChangeSpotCache: (key: String, spot: ToolChangeSpot)?
-    /// How far the clamp kit sits left of the travel's middle (≤ 0, mm), for the setup it was
-    /// found for (ToolChange.swift, `updateKitShift`).
-    @ObservationIgnored var kitShiftCache: (key: String, shift: Double)?
-    var kitShiftY: Double { kitShiftCache?.shift ?? 0 }
-    @ObservationIgnored var sideResults: [SideResult] = [] { didSet { tunerBaselineCache = nil } }
-    /// Prep on the side clamps (square, mill down) when the stock is too big for the clamp kit.
-    var prepPrograms: [ToolProgram] = []
-    @ObservationIgnored var prepResults: [SideResult] = [] { didSet { tunerBaselineCache = nil } }
-    @ObservationIgnored var tunerBaselineCache: [(op: Operation, tool: Tool, minutes: Double, side: Int)]?
-    /// The prep was planned automatically (the stock didn't fit the clamp kit).
-    var prepAuto = false
+    @ObservationIgnored var sideResults: [SideResult] = []
 
     // Toolpath viewer
     var timeline = ToolpathTimeline()
@@ -448,8 +385,6 @@ final class AppModel {
     @ObservationIgnored var addToInventory: ([Tool], [StockItem]) -> Void = { _, _ in }
     @ObservationIgnored private(set) var engine: EngineClient?
     @ObservationIgnored var machineModel: MachineModel?
-    /// The clamp kit's parts (kit-local frames, see `UniversalClamp` and `fixture_kit.py`).
-    @ObservationIgnored var kitParts: [FixturePart] = []
     /// Turning the stock over on screen when switching to side B.
     @ObservationIgnored var flipTask: Task<Void, Never>?
     /// Realistic (physically based) shading or the flat CAD look; remembered.
@@ -465,12 +400,6 @@ final class AppModel {
     var isolateWork = false { didSet { applyMachineDisplay() } }
     /// Show the toolpaths (off: just the solid stock being cut and the tool).
     var pathsVisible = true { didSet { renderer.scene.lineSet("toolpath")?.isVisible = pathsVisible } }
-    /// Colour the simulated stock by its distance from the CAD (Deviation.swift).
-    var showDeviation = false { didSet { Task { await updateDeviation() } } }
-    var deviationStats: DeviationStats?
-    @ObservationIgnored var partHeights: (key: String, heights: [Float])?
-    /// Show the mill-down setup (side clamps, raw stock) in the viewport.
-    var previewMillDown = false { didSet { if previewMillDown != oldValue { layoutScene() } } }
     @ObservationIgnored var cutFaceKey = ""
     /// Where to seek once a side switch has finished (job strip clicks).
     @ObservationIgnored var pendingSeek: (() -> Void)?
@@ -648,71 +577,36 @@ final class AppModel {
     func workOrigin(stockSize: SIMD3<Double>) -> SIMD3<Double> { workToModel(stockSize: stockSize) }
 
     /// Where the work origin (centre of the stock face toward the spindle) sits in the model,
-    /// with the table at the model's pose: in the universal clamp's throat (on its lower jaw,
-    /// face proud of the jaws), centred on the Y travel.
+    /// with the table at the model's pose: in the job's fixture, centred on the Y travel.
     func workToModel(stockSize: SIMD3<Double>) -> SIMD3<Double> {
         if let fixture = fixturePlacement?.fixture { return libraryOrigin(fixture: fixture, stock: stockSize) }
-        if showingMillDown, let stage = currentPrepStage {
-            let p = prepPlacement(stage)
-            // As bought it just lies on the bed (nothing clamps it yet).
-            let bottom = prepStage < 0 ? prepTable.topX : p.stockBottomX
-            return SIMD3(bottom + stockSize.x / 2, prepCentreY(stage), p.stockFaceZ)
-        }
-        if setup.onBed, !showingStockOnly, let p = bedJobPlacement {
-            return SIMD3(p.stockBottomX + stockSize.x / 2, bedJobCentreY, p.stockFaceZ)
-        }
-        if setup.holding == .custom { return customWorkOrigin(stockSize: stockSize) }
-        guard let p = clampPlacement(stockSize: stockSize) else { return .zero }
-        return SIMD3(p.stockBottomX + stockSize.x / 2, kitCentreY, p.stockFaceZ)
+        return customWorkOrigin(stockSize: stockSize)
     }
 
     func customWorkOrigin(stockSize s: SIMD3<Double>) -> SIMD3<Double> {
         let fixture = displayedJobFixture
-        return SIMD3(prepTable.topX + (fixture?.height ?? setup.customFixture.height) + s.x / 2,
-              travelCentreY, prepTable.northZ + (fixture?.planning?.facePastTable ?? setup.customFixture.faceProtrusion))
+        return SIMD3(tableGeometry.topX + (fixture?.height ?? setup.customFixture.height) + s.x / 2,
+              travelCentreY, tableGeometry.northZ + (fixture?.planning?.facePastTable ?? setup.customFixture.faceProtrusion))
     }
 
-    /// In the clamp kit (or on the bed for path B): where work X0 Y0 Z0 is in machine
-    /// coordinates for a tool sticking out `stickout`, whatever is on screen.
-    func kitMachineOrigin(stickout: Double) -> SIMD3<Double>? {
+    /// Where work X0 Y0 Z0 is in machine coordinates for a tool sticking out `stickout`,
+    /// whatever is on screen (the job's fixture or the custom one).
+    func machineOrigin(stickout: Double) -> SIMD3<Double>? {
         guard let mm = machineModel, let stock else { return nil }
-        let size = setup.stockSize(stock)
-        let o: SIMD3<Double>
-        if setup.holding == .custom {
-            o = customWorkOrigin(stockSize: size)
-        } else if setup.onBed, let p = bedJobPlacement {
-            o = SIMD3(p.stockBottomX + size.x / 2, bedJobCentreY, p.stockFaceZ)
-        } else if let p = clampPlacement(stockSize: size) {
-            o = SIMD3(p.stockBottomX + size.x / 2, kitCentreY, p.stockFaceZ)
-        } else { return nil }
+        let o = customWorkOrigin(stockSize: setup.stockSize(stock))
         let t = tipAtModelPose(stickout: stickout), m = mm.modelPose
         return SIMD3(m.x - t.x + o.x, m.y + o.y - t.y, m.z + o.z - t.z)
     }
 
-    /// In the clamp kit: the work X (up) the machine can reach, with 0.05 mm to spare. Moves are
-    /// kept inside it (at the bar's outer edge only the frame is cut, never the part).
-    var kitWorkXRange: ClosedRange<Double>? {
-        guard !setup.onBed, let mm = machineModel, let stock, let p = clampPlacement(stockSize: setup.stockSize(stock)) else { return nil }
-        let ox = p.stockBottomX + setup.stockSize(stock).x / 2
-        let x0 = mm.modelPose.x - (mm.spindleNose.x - ox)  // machine X of work X0
-        let e = machine.machineEnvelope.x
-        let lo = e.lowerBound - x0 + 0.05, hi = e.upperBound - x0 - 0.05
-        return lo < hi ? lo...hi : nil
-    }
 
     /// Machining and Review show toolpaths and the simulated stock; the setup steps before
     /// them show the stock as it is going in.
     var showsMachiningResults: Bool { fixturePlacement == nil && (stage == .machining || stage == .review) }
 
-    /// Showing the mill-down setup (raw stock on the side clamps) instead of the part setup.
-    var showingMillDown: Bool { fixturePlacement == nil && (previewMillDown || viewSide == -1) && hasPrep && !showingStockOnly }
-    /// The stock drawn with its shoulders (path D, once it's in the clamp kit).
-    var showingShoulders: Bool { fixturePlacement == nil && setup.shoulders != nil && !showingMillDown && !showingStockOnly }
 
-    /// The stock as the viewport shows it: as bought on the side clamps (prep), else as clamped.
+    /// The stock as the viewport shows it.
     var displayStockSize: SIMD3<Double>? {
         if fixturePlacement != nil { return placementStockSize }
-        if showingMillDown, let stage = currentPrepStage { return stage.stock }
         if showingStockOnly, let stock { return setup.rawStockSize(stock) }  // stage 1: as bought
         return stock.map { setupFor(side: viewSide >= 2 ? viewSide : 0).stockSize($0) }
     }
@@ -727,36 +621,17 @@ final class AppModel {
         return mm.spindleNose.y + ((e.lowerBound + e.upperBound) / 2 - mm.modelPose.y)
     }
 
-    /// Where the clamp kit's stock is centred along the table (model y): the travel's middle, or
-    /// to the left of it so the tools can be changed on the right (`kitShiftY`, ToolChange.swift).
-    var kitCentreY: Double { travelCentreY + kitShiftY }
 
-    /// The universal clamps bolted across both T-slots, and the stock in them.
-    func clampPlacement(stockSize: SIMD3<Double>) -> UniversalClamp.Placement? {
-        guard setup.usesClampKit, let mm = machineModel else { return nil }
-        // Path D: the clamps grip the shoulders, so it's their height that sits in the jaws;
-        // the bar's bottom hangs lower by what was milled off the shoulders' bottom.
-        var grip = stockSize
-        if let sh = setup.shoulders { grip.x = min(sh.height, stockSize.x - sh.bottom) }
-        var p = UniversalClamp.place(stock: grip, tableTopX: mm.tableTopX, frontSlotZ: mm.tSlotZ.max() ?? -13.4,
-                                    centreY: kitCentreY, protrusion: effectiveProtrusion, softJaw: setup.clampSoftJaw,
-                                    shifts: setup.kitClampShift,
-                                    count: setup.shoulders != nil ? 2 : setup.kitClampCount)  // shoulders: one clamp per end
-        if let sh = setup.shoulders { p.stockBottomX -= sh.bottom }
-        return p
-    }
 
     /// Re-places the part, stock and markers after any setup change.
     func layoutScene() {
         let scene = renderer.scene
-        let millDown = showingMillDown
         let stockSize = displayStockSize ?? SIMD3(0, 0, 0)
         var origin = workToModel(stockSize: stockSize)
-        // Mill-down preview: the raw stock; the part where it will be once the top is milled off.
-        let partOrigin = millDown || showingStockOnly ? origin - SIMD3(stockSize.x - (stock.map { setup.stockSize($0).x } ?? stockSize.x), 0, 0) / 2 : origin
+        let partOrigin = origin
         let originT = simd_double4x4(columns: (SIMD4(1, 0, 0, 0), SIMD4(0, 1, 0, 0), SIMD4(0, 0, 1, 0), SIMD4(partOrigin, 1)))
 
-        scene.mesh("part")?.isVisible = !millDown  // the prep shows the bar on its own
+        scene.mesh("part")?.isVisible = true
         if let part, let mesh = scene.mesh("part") {
             var t = originT * setupFor(side: twoSided || viewSide >= 2 ? viewSide : 0).partToWork(partMin: part.boundsMin, partMax: part.boundsMax)
             if stage == .partStock && fixturePlacement == nil {
@@ -769,56 +644,18 @@ final class AppModel {
                 mesh.group = nil
             } else { mesh.group = "x" }
             mesh.transform = t.float
-            layoutCopies(partTransform: t, visible: !millDown && (stage != .partStock || fixturePlacement != nil))
         }
-        // Prep is shown on its own (the part's paths hide); otherwise the Paths toggle decides.
-        if viewSide != -1 {
-            for id in ["toolpath", "simstock", "simstock.back", "simstock.walls", "simstock.loose", "tabs"] { scene.lineSet(id)?.isVisible = !millDown; scene.mesh(id)?.isVisible = !millDown }
+        if true {
+            for id in ["toolpath", "simstock", "simstock.back", "simstock.walls", "simstock.loose", "tabs"] { scene.lineSet(id)?.isVisible = true; scene.mesh(id)?.isVisible = true }
         }
-        scene.lineSet("toolpath")?.isVisible = pathsVisible && (viewSide == -1 || !millDown)
-        // The bar as bought: nothing cut yet. Whatever another view left (side A's simulation
-        // standing in the clamp kit, its paths, the tool, the next-cut tint) goes.
-        // They're removed, not hidden (the stock display would show them again); going to a
-        // step that cuts builds its own (showSide).
-        if viewSide == -1 && prepStage < 0 {
-            for id in ["toolpath", "simstock", "simstock.back", "simstock.walls", "simstock.loose", "tabs", "tool", "tool.shank",
-                       "cutface", "cutface.edges", "clearance"] {
-                scene.remove(id: id)
-            }
-            cutFaceKey = ""
-            // No program moves the machine here: it stands as for loading the stock, the table
-            // down and the spindle back (not wherever another view's toolpath left it, which
-            // mapped into this clamping can be past the travel).
-            let tc = machine.toolChangePose, env = machine.machineEnvelope
-            setMachinePosition(SIMD3(tc.x, tc.y, env.z.upperBound))
-        }
+        scene.lineSet("toolpath")?.isVisible = pathsVisible
         scene.remove(id: "stock")
         scene.remove(id: "stock.edges")
-        clearPrepBar()
         if let stock {
             let box = (min: SIMD3(-stockSize.x / 2, -stockSize.y / 2, -stockSize.z), max: SIMD3(stockSize.x / 2, stockSize.y / 2, 0))
             _ = stock
             let lo = SIMD3<Float>(box.min + origin), hi = SIMD3<Float>(box.max + origin)
             let c = stock.material?.linearSwatch ?? SIMD3(0.5, 0.5, 0.5)
-            if millDown, let plan = flatPrepPlan, !plan.stages.isEmpty {
-                // The prep on the bed: the bar as it is at this step, what it mills off, numbered.
-                layoutPrepBar(plan: plan, stage: min(prepStage, plan.stages.count - 1), origin: origin, color: c)
-            } else if showingShoulders {
-                // Path D: the bar with its two shoulders (stepped solid).
-                let tris = setup.stockTriangles(stockSize: stockSize).map { SIMD3<Float>($0 + origin) }
-                var p: [Float] = [], n: [Float] = [], ix: [UInt32] = []
-                for k in stride(from: 0, to: tris.count, by: 3) {
-                    let nn = simd_normalize(simd_cross(tris[k + 1] - tris[k], tris[k + 2] - tris[k]))
-                    for j in 0..<3 { p += [tris[k + j].x, tris[k + j].y, tris[k + j].z]; n += [nn.x, nn.y, nn.z]; ix.append(UInt32(k + j)) }
-                }
-                if let m = SceneMesh(device: renderer.device, id: "stock", positions: p, normals: n, indices: ix, color: SIMD4(c, 0.22)) {
-                    scene.setMesh(m)
-                }
-                if let edges = SceneLines(device: renderer.device, id: "stock.edges",
-                                          segments: shoulderEdges(stockSize: stockSize, origin: origin, color: SceneColor.edge)) {
-                    scene.setLines(edges)
-                }
-            } else {
                 if let m = SceneMesh.box(device: renderer.device, id: "stock", min: lo, max: hi, color: SIMD4(c, 0.22)) {
                     scene.setMesh(m)
                 }
@@ -826,18 +663,6 @@ final class AppModel {
                                           segments: LineSegment.box(min: lo, max: hi, color: SceneColor.edge)) {
                     scene.setLines(edges)
                 }
-            }
-        }
-        // Stage 1: what's left after the prep, drawn inside the stock as bought (the part
-        // must sit inside it).
-        scene.remove(id: "stock.final")
-        if showingStockOnly, let stock, setup.stockSize(stock) != stockSize {
-            let f = setup.stockSize(stock)
-            let lo = SIMD3<Float>(SIMD3(-stockSize.x / 2, -f.y / 2, -f.z) + origin), hi = SIMD3<Float>(SIMD3(-stockSize.x / 2 + f.x, f.y / 2, 0) + origin)
-            if let l = SceneLines(device: renderer.device, id: "stock.final", segments: LineSegment.box(min: lo, max: hi, color: SceneColor.highlight)) {
-                l.group = "x"
-                scene.setLines(l)
-            }
         }
         layoutClamps(stockSize: stockSize)
         origin = partOrigin
@@ -846,8 +671,8 @@ final class AppModel {
         if showingStockOnly || fixturePlacement != nil { for id in ["workarea", "workarea.edges"] { scene.mesh(id)?.isVisible = false; scene.lineSet(id)?.isVisible = false } }
         cutFaceKey = ""
         layoutCutFace()
-        if (viewSide == -1 && prepStage < 0) || showingStockOnly || !showsMachiningResults {
-            // The stock as bought, or a setup step (part & stock, holding, prep, clamp kit): the
+        if showingStockOnly || !showsMachiningResults {
+            // The stock as bought, or a setup step: the
             // plain stock, never a simulated (cut) one, no paths or tool. Machining and Review
             // bring the simulation back (enter → showSide).
             for id in ["toolpath", "clearance"] { scene.lineSet(id)?.isVisible = false }
@@ -862,13 +687,11 @@ final class AppModel {
         if timeline.entries.isEmpty { parkMachine() }
         updatePivot()
         layoutGumball()
-        layoutGripStrips()
         layoutEngravingPreview()
     }
 
-    /// The fixtures on the table (they move with X): the universal clamps with their spacers and
-    /// parallels, or, for the mill-down setup, the acetal brick and eccentric clamps. Meshes are
-    /// made once per part and instance and then only moved.
+    /// The fixture on the table (it moves with X): the job's library fixture, drawn where the
+    /// stock sits in it. Meshes are made once per fixture and then only moved.
     private func layoutClamps(stockSize: SIMD3<Double>) {
         if fixturePlacement != nil { layoutFixturePlacement(stockSize: stockSize); return }
         let scene = renderer.scene
@@ -876,39 +699,6 @@ final class AppModel {
         // Everything placed here, for the collision check (CollisionCheck.swift).
         var bodies: [BedBody] = []
         defer { scheduleCollisionCheck(bodies, stockSize: stockSize) }
-        func place(kit: String, instance: Int, transform: simd_double4x4, screwSlide: Double = 0) {
-            let parts = kitPartTransforms(kit: kit, transform: transform, screwSlide: screwSlide)
-            bodies.append(BedBody(name: Self.fixtureName(kit: kit, instance: instance), meshPrefix: "fixture.\(kit).\(instance).",
-                                  shape: .mesh(parts)))
-            for (j, t) in parts {
-                let p = kitParts[j]
-                let id = "fixture.\(kit).\(instance).\(j)"
-                // The insulating feet and washers are clear plastic (they isolate the clamp from
-                // the bed so conductive probing works).
-                let clear = p.role == "insulator"
-                let look = Self.kitAppearance(p)
-                // Pickable: on the bed they're clicked and dragged (BedEditor).
-                if scene.mesh(id) == nil, let m = SceneMesh(device: renderer.device, id: id, positions: p.mesh.vertices,
-                                                            normals: p.mesh.normals, indices: p.mesh.indices, color: look.color,
-                                                            pickable: kit == "brick" || kit == "cclamp" || kit == "clamp") {
-                    if clear { m.material = look.material }
-                    scene.setMesh(m)
-                }
-                guard let m = scene.mesh(id) else { continue }
-                m.transform = t.float
-                m.isVisible = true
-                used.insert(id)
-            }
-        }
-        func box(_ id: String, _ lo: SIMD3<Double>, _ hi: SIMD3<Double>) {
-            bodies.append(BedBody(name: Self.fixtureName(box: id), meshPrefix: id, shape: .box(lo, hi)))
-            scene.remove(id: id)
-            if let m = SceneMesh.box(device: renderer.device, id: id, min: SIMD3<Float>(lo), max: SIMD3<Float>(hi),
-                                     color: SceneColor.dark) {
-                scene.setMesh(m)
-                used.insert(id)
-            }
-        }
         if stock != nil {
             if setup.planFromFixtureLibrary, !showingStockOnly, automaticWorkholding, libraryWorkholdingPlan == nil,
                fixturePlacement == nil, let fixture = displayedJobFixture, libraryFixtureMeshes[fixtureStateKey(fixture)] == nil,
@@ -931,111 +721,10 @@ final class AppModel {
                     bodies.append(BedBody(name: fixture.name, meshPrefix: id, shape: .triangles(local.map { $0 + origin })))
                 }
             }
-            // On the bed: a prep clamping, or the whole job (path B).
-            let bed: (p: SideClamps.Placement, asBought: Bool)? = showingMillDown
-                ? currentPrepStage.map { (prepPlacement($0), prepStage < 0) }
-                : (setup.onBed && !showingStockOnly ? bedJobPlacement.map { ($0, false) } : nil)
-            if let bed {
-                let p = bed.p
-                place(kit: "brick", instance: 0, transform: p.brick)
-                if bed.asBought {  // as bought: only the squaring stop is on the table yet
-                    for m in scene.meshes where m.id.hasPrefix("fixture.") && !used.contains(m.id) { m.isVisible = false }
-                    applyFixtureDisplay()
-                    return
-                }
-                box("fixture.riser", p.riserMin, p.riserMax)
-                if let b = p.bridge { box("fixture.bridge", b.min, b.max) }  // the parallel across an overhanging bar
-                let under = prepTable.topX - prepTable.thickness
-                for (i, c) in p.clampPoints.enumerated() {
-                    if kitParts.contains(where: { $0.kit == "cclamp" }) {
-                        // The 3" C-clamp: fixed jaw under the table, screw down onto the bar,
-                        // spine behind the table's back edge (kit x → up, y → away from the
-                        // spindle, z → across).
-                        // Turned about its screw (vertical) when the bar reaches past the bed.
-                        let a = i < p.clampAngles.count ? p.clampAngles[i] : 0
-                        place(kit: "cclamp", instance: i, transform: cClampTransform(pad: c, angle: a), screwSlide: (c.x - under) - Self.cClampPadAt)
-                    } else {
-                        for m in CClampMesh.meshes(device: renderer.device, id: "fixture.cclamp.\(i)", clampPoint: c,
-                                                   tableUnderX: under, spineZ: prepTable.clampSpineZ) {
-                            scene.setMesh(m)
-                            used.insert(m.id)
-                        }
-                    }
-                }
-            } else if let k = clampKitLayout(stockSize: stockSize) {
-                for (kit, i, t) in k.instances { place(kit: kit, instance: i, transform: t) }
-                for b in k.boxes { box(b.id, b.lo, b.hi) }
-            }
         }
         for m in scene.meshes where m.id.hasPrefix("fixture.") && !used.contains(m.id) { m.isVisible = false }
         applyFixtureDisplay()
     }
-
-    /// The universal clamps (kit instances, kit-local → model) and the parallels (boxes) for
-    /// stock of this size, as the viewport shows them and the clearance check sees them.
-    func clampKitLayout(stockSize: SIMD3<Double>) -> (instances: [(String, Int, simd_double4x4)], boxes: [(id: String, lo: SIMD3<Double>, hi: SIMD3<Double>)], jawDrop: Double)? {
-        guard let p = clampPlacement(stockSize: stockSize) else { return nil }
-        // As modelled the jaw's underside is 56.67 mm up; bring it to the stock's top edge
-        // (the shoulders', on path D).
-        let top = p.seat.z + (setup.shoulders?.height ?? stockSize.x)
-        let press = UniversalClamp.pressRange(softJaw: setup.clampSoftJaw)
-        let drop = min(max(top, press.lowerBound), press.upperBound) - (setup.clampSoftJaw ? 56.67 : UniversalClamp.screwTipZ)
-        var instances: [(String, Int, simd_double4x4)] = []
-        for (i, t) in p.clamps.enumerated() { instances.append(("clamp", i, t)) }
-        for (i, t) in p.spacers.enumerated() { instances.append(("spacer_u", i, t)) }
-        // Parallels: behind the stock (to push its face out) and under it (between the spacer's
-        // range and the jaw's).
-        var boxes: [(id: String, lo: SIMD3<Double>, hi: SIMD3<Double>)] = []
-        let y0 = kitCentreY - stockSize.y / 2, y1 = kitCentreY + stockSize.y / 2
-        let back = p.stockFaceZ - stockSize.z
-        if p.parallels > 0.05 {
-            // On the lower jaw, where the bar's grip (its shoulders, on path D) sits: one block in
-            // each clamp, as wide as its jaw (as in the kit's Rhino model), not a bar along the
-            // stock.
-            let seatX = p.stockBottomX + (setup.shoulders?.bottom ?? 0)
-            let h = UniversalClamp.clampHalfWidth
-            for (i, t) in p.clamps.enumerated() {
-                let yc = t.columns.3.y
-                let lo = max(yc - h, y0), hi = min(yc + h, y1)
-                guard hi > lo + 1 else { continue }
-                boxes.append(("fixture.parallel.behind.\(i)", SIMD3(seatX, lo, back - p.parallels),
-                              SIMD3(seatX + min((setup.shoulders?.height ?? stockSize.x) * 0.6, 12), hi, back)))
-            }
-        }
-        if p.seat.kind == .parallel, let mm = machineModel {
-            boxes.append(("fixture.parallel.under", SIMD3(mm.tableTopX + UniversalClamp.jawTopZ, y0, back),
-                          SIMD3(p.stockBottomX, y1, p.stockFaceZ - 1)))
-        }
-        return (instances, boxes, drop)
-    }
-
-    /// Each kit part of one instance with its transform: the soft jaw and its two M4x35 screws
-    /// come down onto the stock (without the soft jaw, the screw tips do).
-    func kitPartTransforms(kit: String, transform: simd_double4x4, screwSlide: Double = 0) -> [(Int, simd_double4x4)] {
-        let drop = stock.flatMap { clampKitLayout(stockSize: setup.stockSize($0))?.jawDrop } ?? 0
-        var out: [(Int, simd_double4x4)] = []
-        for (j, p) in kitParts.enumerated() where p.kit == kit {
-            if kit == "cclamp" {  // the screw, pad and handle run down to the work
-                let slide = p.role == "screw" ? screwSlide : 0
-                var t = transform * simd_double4x4(columns: (SIMD4(1, 0, 0, 0), SIMD4(0, 1, 0, 0), SIMD4(0, 0, 1, 0), SIMD4(slide, 0, 0, 1)))
-                if p.name.hasSuffix("T-handle") {
-                    // Turned 45° about the screw (both the same way): clamps side by side keep
-                    // their handles parallel instead of crossing.
-                    let a = Double.pi / 4, c = cos(a), s = sin(a)
-                    t = t * simd_double4x4(columns: (SIMD4(1, 0, 0, 0), SIMD4(0, c, s, 0), SIMD4(0, -s, c, 0), SIMD4(0, 0, 0, 1)))
-                }
-                out.append((j, t))
-                continue
-            }
-            if p.role == "soft_jaw" && !setup.clampSoftJaw { continue }
-            let moves = kit == "clamp" && (p.role == "soft_jaw" || p.name.hasPrefix("M4x35"))
-            out.append((j, moves ? transform * simd_double4x4(columns: (SIMD4(1, 0, 0, 0), SIMD4(0, 1, 0, 0), SIMD4(0, 0, 1, 0), SIMD4(0, 0, drop, 1))) : transform))
-        }
-        return out
-    }
-
-    /// Where the C-clamp model's swivel pad face sits from its fixed jaw (fixture_kit.py).
-    static let cClampPadAt = 62.4
 
     /// Fixtures follow the machine display: see-through when the machine is ghosted.
     private func applyFixtureDisplay() {
@@ -1070,7 +759,7 @@ final class AppModel {
     /// Another tool came into the spindle (playback): only what its stick-out moves, the work
     /// area (the tip's reach), not the whole scene. The previews that shift the part re-lay all.
     func toolChanged() {
-        guard !showingMillDown && !showingStockOnly else { layoutScene(); return }
+        guard !showingStockOnly else { layoutScene(); return }
         let size = displayStockSize ?? SIMD3(0, 0, 0)
         layoutWorkArea(stockSize: size, origin: workToModel(stockSize: size))
     }
@@ -1225,7 +914,7 @@ final class AppModel {
             // Suggest an orientation: thinnest dimension toward the spindle.
             var s = setup
             if newPart && !restoringProject {
-                // A new part starts a new proposal, rather than inheriting clamp-kit prep,
+                // A new part starts a new proposal, rather than inheriting the old job's
                 // scale, offsets and cutting operations from the previous part.
                 let stockAxes = s.stockAxes
                 s = Setup().selectingHolding(.custom)
@@ -1322,7 +1011,6 @@ final class AppModel {
         stockSnapshot = item
         var s = setup
         s.stockAxes = bestStockAxes(item) ?? Setup.defaultStockAxes(item)
-        s.downsizeHeight = nil
         if let part {
             let (lo, hi) = s.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
             s.topAllowance = min(max(s.topAllowance, 0), max(s.stockSize(item).z - (hi.z - lo.z), 0))
@@ -1343,18 +1031,16 @@ final class AppModel {
         clearToolpathResults()
         var s = setup
         if !keep { s.stockAxes = bestStockAxes(item) ?? Setup.defaultStockAxes(item) }
-        s.downsizeHeight = nil
-        if s != setup { setup = s } else { layoutScene(); saveSession(); keepStockWorkable(); autoPlanPrep(); noteProjectChange() }
+        if s != setup { setup = s } else { layoutScene(); saveSession(); keepStockWorkable(); noteProjectChange() }
         focusWork()
     }
 
-    /// Standard sizes to buy (StockCatalog, in the inventory as not owned) that hold the part in
-    /// the clamp kit as they are (no milling down), the least material first; the current
-    /// stock's material family first.
+    /// Standard sizes to buy (StockCatalog, in the inventory as not owned) that hold the part, the
+    /// least material first; the current stock's material family first.
     func standardStockThatFits(in inventory: Inventory, limit: Int = 3) -> [StockItem] {
         let family = stock?.material?.family
         return inventory.stock.filter { s in
-            s.isSuggestion && s.id != stockID && stockOptions(s, forClampKit: setup.usesClampKit).contains { $0.workable && $0.prepHeight == nil && !$0.viaShoulders }
+            s.isSuggestion && s.id != stockID && stockOptions(s).contains(where: \.workable)
         }
             .sorted { a, b in
                 let fa = a.material?.family == family ? 0 : 1, fb = b.material?.family == family ? 0 : 1
@@ -1364,13 +1050,10 @@ final class AppModel {
     }
 
     /// The ways the stock can sit for this part, best first (StockOrientation).
-    func stockOptions(_ item: StockItem? = nil, forClampKit: Bool = false) -> [StockOrientation.Option] {
+    func stockOptions(_ item: StockItem? = nil) -> [StockOrientation.Option] {
         guard let part, let stock = item ?? stock else { return [] }
         let (lo, hi) = setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
-        let rough = 6.35  // the 1/4" end mill that roughs
-        return StockOrientation.options(stock: stock, part: hi - lo, twoSided: twoSided, topAllowance: setup.topAllowance,
-                                        softJaw: setup.clampSoftJaw, toolDiameter: rough, requiresClampFrame: forClampKit,
-                                        preferredAxes: setup.stockAxes)
+        return StockOrientation.options(stock: stock, part: hi - lo, preferredAxes: setup.stockAxes)
     }
 
     func bestStockAxes(_ item: StockItem) -> [Int]? {
@@ -1381,8 +1064,6 @@ final class AppModel {
     func useStockAxes(_ axes: [Int]) {
         var s = setup
         s.stockAxes = axes
-        s.downsizeHeight = nil
-        prepAuto = false
         setup = s
     }
 
@@ -1404,10 +1085,8 @@ final class AppModel {
     }
 
     var setupIssues: [Issue] {
-        guard let stock else { return [] }
-        let fixture = setup.onBed ? (bedJobPlacement?.issues ?? []) : (clampPlacement(stockSize: setup.stockSize(stock))?.issues ?? [])
-        return stockContainmentIssues + fixture + (showingMillDown ? [] : collisionIssues)
-            + (batchIssue.map { [$0] } ?? [])
+        guard stock != nil else { return [] }
+        return stockContainmentIssues + collisionIssues
     }
 
     var stockContainmentIssues: [Issue] {
@@ -1464,7 +1143,7 @@ final class AppModel {
     /// Handles a click in the viewport while measuring.
     func handleClick(at point: CGPoint, viewSize: CGSize) {
         if fixturePlacement != nil { handlePlacementClick(point, size: viewSize); return }
-        guard measuring else { selectBedObject(at: point, viewSize: viewSize); return }
+        guard measuring else { return }
         let ray = renderer.ray(at: point, viewSize: viewSize)
         guard let hit = renderer.scene.pick(origin: ray.origin, direction: ray.direction), hit.id == "part" else {
             status = "Click on the part to measure"
@@ -1561,8 +1240,6 @@ final class AppModel {
             await importPart(URL(fileURLWithPath: path))
         }
         setup = s.setup
-        // A stock that needs prep starts where the job starts: as bought, on the bed.
-        if hasPrep { show(side: -1, stage: -1) }
         await reloadSavedLibraryGeometry()
     }
 
@@ -1610,13 +1287,6 @@ final class AppModel {
         libraryWorkholdingPlan = nil
         selectedLibraryStep = nil
         sideResults = []
-        prepPrograms = []
-        prepResults = []
-        autoProtrusion = nil
-        bridgeNote = nil
-        // The prep's views stay valid without toolpaths (the stock on the bed); only leave them
-        // when there's no prep any more.
-        if viewSide == -1 && !hasPrep { viewSide = 0 }
         placedTabs = []
         placedTabZ = nil
         renderer.scene.remove(id: "tabs")
@@ -1632,10 +1302,6 @@ final class AppModel {
         toolpathSegments = 0
     }
 
-    func clearToolpath() {
-        renderer.scene.remove(id: "toolpath")
-        toolpathSegments = 0
-    }
 }
 
 extension Material {

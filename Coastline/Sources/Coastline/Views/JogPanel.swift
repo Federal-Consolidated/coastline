@@ -51,7 +51,7 @@ struct JogPanel: View {
             }
             .font(.caption)
             if model.jogTouchesClamp {
-                Label("The tool touches the clamp kit here", systemImage: "exclamationmark.triangle.fill")
+                Label("The tool touches the fixture here", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(Theme.danger)
             }
             Menu("Go To") {

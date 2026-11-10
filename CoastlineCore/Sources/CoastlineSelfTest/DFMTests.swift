@@ -216,20 +216,13 @@ let dfmTests: [TestCase] = [
     },
     TestCase(name: "neverScalesOrClaimsAFlipSolvesAccess") {
         let inv = realInventory()
-        var texts = [allText(DFM.assess(couponInput()), inv), allText(DFM.assess(couponInput(stock: plate)), inv),
+        let texts = [allText(DFM.assess(couponInput()), inv), allText(DFM.assess(couponInput(stock: plate)), inv),
                      allText(DFM.assess(couponInput(twoSided: true)), inv), allText(DFM.assess(couponInput(stock: nil)), inv)]
-        let legacy = Feasibility.assess(PartAnalysis(undercutArea: 50, depth: 50.8), inventory: inv,
-                                        partSize: SIMD3(50.8, 203.2, 50.8), stockSize: SIMD3(80, 150, 20))
-        texts.append(legacy.map(\.message).joined(separator: "\n"))
-        let big = Feasibility.assess(PartAnalysis(), inventory: inv, partSize: SIMD3(500, 500, 500), stockSize: SIMD3(600, 600, 600))
-        texts.append(big.map(\.message).joined(separator: "\n"))
         for t in texts {
             try expect(!t.localizedCaseInsensitiveContains("scale"), t)
             try expect(!t.localizedCaseInsensitiveContains("flip"), t)
             try expect(!t.contains("resiz"), t)
         }
-        try expect(legacy.contains { $0.message.contains("doesn't fit this stock") && $0.message.contains("too small") })
-        try expect(big.contains { $0.message.contains("machine is too small") })
     },
     TestCase(name: "smallStockOffersOwnedStockThatFits") {
         let inv = realInventory()

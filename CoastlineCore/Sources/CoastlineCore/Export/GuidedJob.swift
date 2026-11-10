@@ -1,9 +1,8 @@
 import MillCore
 import Foundation
 
-/// Builds a guided `.crproj` for the sender: the same step-by-step structure as the maker's own
-/// cutcodes (`setup_stock → edgefinder → edgefind → install tool → touch off → cut`), plus
-/// Coastline's air cuts, measuring checkpoints and the stock-squaring job.
+/// Builds the guided job the native runner steps through: mount the stock → edge-find → install
+/// each tool → touch off → cut, with air cuts and measuring checkpoints.
 public enum GuidedJobBuilder {
     public struct Program: Sendable {
         public var tool: Tool
@@ -32,9 +31,6 @@ public enum GuidedJobBuilder {
 
     /// How the guided job finds the stock's position after each clamping.
     public struct Probing: Sendable {
-        /// The clamp kit is electrically isolated: the tool itself finds edges, bores and the
-        /// face (G38.2, the probe wire on the clamp). Otherwise the edge finder and paper.
-        public var electrical = false
         /// Which X edges (lower, upper) the machine reaches in this clamping, per side. An edge out
         /// of reach is replaced by the other edge and the stock's height.
         public var lowerXReachable = [true, true]
@@ -70,43 +66,25 @@ public enum GuidedJobBuilder {
         public var measuring: [MeasuringTool]
         /// PNG of the setup (stock and part in the machine), shown on the mounting steps.
         public var setupImage: Data?
-        /// Prepend the stock-squaring job (sawn stock).
-        public var squareStockFirst: Bool
         public var faceAllowance: Double
-        /// Workholding: universal clamps in the table's rear T-slot, and where each one's centre
-        /// is from the stock's left end (mm; empty: Coastline's places, 12 mm in from each end).
-        public var clampCount = 1
-        public var clampFromLeft: [Double] = []
-        /// How far the stock face sticks out past the jaws, and the parallels behind it, mm.
-        public var protrusion = 2.0
-        public var parallels = 0.0
         /// Holding tabs on the side that cuts through (nil: a web holds the part, or one side).
         public var tabs: HoldingTabs?
         /// PNG of side B's setup, shown on the flip step.
         public var flipImage: Data?
-        /// Mill oversized stock down to a height the clamp kit holds, on the side clamps first.
-        public var millDown: MillDown?
-        /// Holding path B: the whole job flat on the bed instead of the clamp kit.
-        public var bed: BedHolding?
-        /// User-supplied workholding; the built-in clamp kit is not part of this setup.
+        /// User-supplied workholding (outside the fixture library).
         public var customHolding: Setup.CustomFixture?
-        /// Holding path D: the clamps grip shoulders at the ends (height, length).
-        public var shoulders: Setup.Shoulders?
         public var probing = Probing()
         /// How far the spindle comes out at the tool-change position (machine Z), when Coast
         /// Runner's own Z would touch the clamps, parallels or stock of this job (worked out
-        /// from the clamp kit's and bed's geometry); nil: The maker's.
+        /// from the fixture's geometry); nil: the maker's.
         public var toolChangeZ: Double?
         /// Where along Y it stops (machine Y), when the maker's Y would put the spindle right
         /// beside the clamps; nil: The maker's.
         public var toolChangeY: Double?
-        /// The clamp kit sits left of the middle so the tools are changed on its right: the
-        /// stock's right end this far left of the spindle's centre at the tool-change position, mm.
-        public var stockRightOfToolChange: Double?
 
         public init(partName: String, material: Material, stock: StockItem, stockSize: SIMD3<Double>, setupName: String,
                     programs: [Program], checkpoints: [Checkpoint], measuring: [MeasuringTool], setupImage: Data?,
-                    squareStockFirst: Bool, faceAllowance: Double = 0.5) {
+                    faceAllowance: Double = 0.5) {
             self.partName = partName
             self.material = material
             self.stock = stock
@@ -116,104 +94,11 @@ public enum GuidedJobBuilder {
             self.checkpoints = checkpoints
             self.measuring = measuring
             self.setupImage = setupImage
-            self.squareStockFirst = squareStockFirst
             self.faceAllowance = faceAllowance
         }
     }
 
-    public struct MillDown: Sendable {
-        /// The stock as bought (work X height, Y, Z thickness) and the height to mill it to.
-        public var raw: SIMD3<Double>
-        public var target: Double
-        public var tool: Tool
-        public var image: Data?
-        /// How long a bar the part setup needs (a long sawn bar is cut to this first).
-        public var neededLength: Double?
-        /// The machine's table and the stop's face, from the machine model.
-        public var table = SideClamps.table(topX: -31, frontSlotZ: -13.4)
-        public var frontSlotZ = -13.4
-        /// The work axis the bar was extruded along (FlatPrep.plan).
-        public var extrudedAlong: Int?
-        /// The user's adjustments per clamping, and the prep steps chosen by hand.
-        public var overrides: [PrepOverride] = []
-        public var faceEnd: Bool?
-        public var rounds: Int?
-        /// Holding path D: only the two ends are milled down (shoulders this long), not the edge.
-        public var shoulderLength: Double?
-        public var shoulderBottom = 0.0
-        public init(raw: SIMD3<Double>, target: Double, tool: Tool, image: Data? = nil, neededLength: Double? = nil) {
-            self.raw = raw
-            self.target = target
-            self.tool = tool
-            self.image = image
-            self.neededLength = neededLength
-        }
-
-        public struct Item: Sendable {
-            public var stage: FlatPrep.Stage
-            public var title: String
-            public var gcode: String
-            public var moves: [Move]
-            public var report: GCodeValidator.Report
-            public var placement: SideClamps.Placement
-            public var hits: [FixtureClearance.Hit] = []
-        }
-
-        public func plan(sawn: Bool) -> FlatPrep.Plan {
-            FlatPrep.plan(raw: raw, target: target, sawn: sawn, neededLength: neededLength, table: table, extrudedAlong: extrudedAlong,
-                          faceEnd: faceEnd, rounds: rounds, shoulderLength: shoulderLength, shoulderBottom: shoulderBottom)
-        }
-
-        /// The prep programs, each checked like any program plus against the stop, riser,
-        /// C-clamps and table as they sit for that stage (the edge cut runs out below the bar on
-        /// purpose, so through-cuts are allowed).
-        public func programs(material: Material, sawn: Bool, machine: MachineProfile = .standard) -> (plan: FlatPrep.Plan, items: [Item]) {
-            var plan = plan(sawn: sawn)
-            var items: [Item] = []
-            for (k, p) in FlatPrep.programs(plan, tool: tool, material: material, machine: machine).enumerated() {
-                let kind: OperationKind = p.stage.isEdge ? .adaptive : .facing
-                let data = FeedsEngine.compute(tool: tool, material: material, kind: kind, machine: machine)
-                let g = GRBLPost.program(header: .init(programName: p.title, setupName: "Flat on the squaring stop", tool: tool,
-                                                      operationNames: [p.title], stockDescription: "\(material.name)"),
-                                        rpm: data.rpm, paths: [OperationToolpath(operationID: UUID(), moves: p.moves)], machine: machine)
-                var ctx = GCodeValidator.Context(stockMin: SIMD3(-p.stock.x / 2, -p.stock.y / 2, -p.stock.z),
-                                                 stockMax: SIMD3(p.stock.x / 2, p.stock.y / 2, 0), tool: tool)
-                ctx.allowThroughCut = true
-                var report = GCodeValidator(machine: machine).validate(g, context: ctx)
-                let o = k < overrides.count ? overrides[k] : nil
-                let placement = SideClamps.place(stage: p.stage, table: table, frontSlotZ: frontSlotZ, centreY: 0, override: o)
-                for issue in placement.issues where !plan.issues.contains(issue) { plan.issues.append(issue) }
-                let hits = Self.clearance(p.moves, stage: p.stage, placement: placement, table: table, tool: tool, centreY: o?.stopShiftY ?? 0)
-                if let text = FixtureClearance.describe(hits) { report.issues.append(Issue(.error, text)) }
-                items.append(Item(stage: p.stage, title: p.title, gcode: g, moves: p.moves, report: report, placement: placement, hits: hits))
-            }
-            return (plan, items)
-        }
-
-        /// The tool against this stage's fixtures, in the stage's work frame.
-        public static func clearance(_ moves: [Move], stage: FlatPrep.Stage, placement p: SideClamps.Placement, table: FlatPrep.Table,
-                              tool: Tool, centreY: Double = 0) -> [FixtureClearance.Hit] {
-            let origin = SIMD3(p.stockBottomX + stage.stock.x / 2, centreY, p.stockFaceZ)
-            let tris = SideClamps.solids(p, table: table, centreY: centreY).flatMap { FixtureField.boxTriangles(min: $0.min - origin, max: $0.max - origin) }
-            let pad = FixtureClearance.nutRadius + 15
-            var field = FixtureField(triangles: tris, regionMin: SIMD2(-stage.stock.x / 2 - pad, -stage.stock.y / 2 - pad),
-                                     regionMax: SIMD2(stage.stock.x / 2 + pad, stage.stock.y / 2 + pad))
-            return FixtureClearance.check(moves, tool: tool, field: &field)
-        }
-    }
-
     // MARK: Fixed helper programs (the maker's conventions [UC])
-
-    /// The tool-change moves, the spindle's last move out stopping at `z` when given.
-    /// Where along the table the kit goes: roughly centred, or left of the middle so the tools
-    /// are changed on its right (with a measure to set it by).
-    static func kitPlace(_ i: Input, machine: MachineProfile) -> String {
-        guard let d = i.stockRightOfToolChange else {
-            return "Just keep it roughly centred left to right so the whole cut stays within the machine's travel."
-        }
-        let y = i.toolChangeY ?? machine.toolChangePose.y
-        return "**Keep it left of the middle**, so the tools are changed on its right: before snugging the T-slot bolts, jog Y to **Y\(ReferenceBores.n(y))** in Machine Control (where tools are changed) and place the kit so the stock's **right end is about \(Length.mm((d * 2).rounded() / 2)) mm left of the spindle's centre**. Your hands and both wrenches then have room at every tool change."
-    }
 
     static func toolChangeMoves(machine: MachineProfile, z: Double?, y: Double? = nil) -> [String] {
         var moves = machine.toolChangeMoves
@@ -347,19 +232,8 @@ public enum GuidedJobBuilder {
         if let img = input.setupImage { files["Image/setup.png"] = img }
         if let img = input.flipImage { files["Image/flip.png"] = img }
         var jobs: [Job] = []
-        if let m = input.millDown { jobs.append(millDownJob(input, m, machine: machine, files: &files)) }
-        // Squaring happens on the side clamps as part of milling down, when that's needed.
-        if input.squareStockFirst && input.millDown == nil { jobs.append(squaringJob(input, machine: machine, files: &files)) }
         jobs.append(partJob(input, machine: machine, files: &files))
         return (jobs, files)
-    }
-
-    /// Writes the guided project. MillCore's writer re-reads its own manifest before saving.
-    public static func write(_ input: Input, to url: URL, machine: MachineProfile = .standard) throws {
-        try validateWorkholding(input)
-        let (jobs, files) = build(input, machine: machine)
-        try? FileManager.default.removeItem(at: url)
-        try ProjectWriter.save(jobs: jobs, extraFiles: files, from: MemoryProjectSource([:]), to: url)
     }
 
     public static func validateWorkholding(_ input: Input) throws {
@@ -372,39 +246,6 @@ public enum GuidedJobBuilder {
     }
 
     // MARK: The part job
-
-    /// The bar flat on the riser against the squaring stop, two C-clamps over it (path B).
-    public struct BedHolding: Sendable {
-        /// How far the face sticks out past the stop, mm.
-        public var protrusion: Double
-        /// Each C-clamp's turn about its screw, radians.
-        public var clampAngles: [Double]
-        public init(protrusion: Double, clampAngles: [Double]) {
-            self.protrusion = protrusion
-            self.clampAngles = clampAngles
-        }
-    }
-
-    static func mountOnBed(_ i: Input, _ b: BedHolding) -> String {
-        let size = i.stockSize
-        let turned = b.clampAngles.contains { abs($0) > 0.05 }
-            ? " Turn each clamp about its screw as in the picture (about \(b.clampAngles.map { "\(Int((abs($0) * 180 / .pi).rounded()))°" }.joined(separator: " and "))) so its frame passes beside the bar."
-            : ""
-        return """
-        This job runs with the stock **flat on the bed**, not in the clamp kit. Take the clamp kit off the table. Bolt **one acetal squaring stop** across both T-slots (M4x25 bolts into T-slot nuts) and lay the **riser plate** on the table behind it.
-
-        Lay the stock on the riser with its **\(Length.mm(size.y)) × \(Length.mm(size.x)) mm face toward the spindle**, one end against the stop, the face **\(Length.mm(b.protrusion)) mm** past the stop's front.
-
-        Clamp it down with **two 3\" C-clamps**: the fixed jaw under the table, the frame behind the table's back edge, the screw pad on the stock behind the area that gets cut.\(turned) Tighten both evenly, then check the stock hasn't lifted off the riser.
-
-        The face toward the spindle becomes **Z0**; the middle of that face becomes **X0 Y0**. It doesn't have to sit exactly where Coastline drew it: the next steps find the real edges and face.
-
-        \(bedFindingNote)
-        """
-    }
-
-    /// Why the bed needs the edge finder and paper: nothing there is insulated.
-    static let bedFindingNote = "**Finding the stock here is by hand.** Only the clamp kit sits on an insulating sheet; the stop and the steel C-clamps touch the table, so the machine's electrical probing can't work (its circuit would always be closed). X and Y come from the clicking edge finder, Z from paper touch-off, both jogged in Machine Control. After the first clamping the machine can drive the finder close to each edge (the stop puts the stock back in a known place), but the last millimetres are always yours."
 
     static func partJob(_ i: Input, machine: MachineProfile, files: inout [String: Data]) -> Job {
         var job = Job(title: "\(i.setupName) · \(i.partName)",
@@ -427,10 +268,6 @@ public enum GuidedJobBuilder {
         Stay with the machine while it cuts, and keep a hand near the E-stop. Never use compressed air on the machine; vacuum chips instead.
         """))
         steps.append(step("Home the Machine", text: "Click Next to home all axes.", gcode: "Code/home.nc", timeout: 60))
-        let clamps = i.clampCount == 1 ? "the universal clamp" : "\(i.clampCount) universal clamps"
-        let parallels = i.parallels > 0.05
-            ? "Put **about \(Length.mm(i.parallels)) mm of parallels** behind the stock so its face sticks out **\(Length.mm(i.protrusion)) mm** past the jaws."
-            : "Its face sticks out **\(Length.mm(i.protrusion)) mm** past the jaws."
         if let custom = i.customHolding {
             steps.append(step("Mount the Stock", markdown: """
             Secure the stock in **\(custom.name)** with its \(Length.mm(size.x)) × \(Length.mm(size.y)) mm face toward the spindle.
@@ -444,44 +281,29 @@ public enum GuidedJobBuilder {
             **Custom fixture geometry is not included in collision checks.** Check cutter, shank and holder clearance to your jaws and fasteners. Keep the part secured independently of material removed by these programs.
             """, image: i.setupImage == nil ? "" : "Image/setup.png",
                               popup: ("Stock secured?", "Is the stock secured in your fixture, with cutter and holder clearance checked?")))
-        } else if let b = i.bed {
-            steps.append(step("Mount the Stock", markdown: mountOnBed(i, b), image: i.setupImage == nil ? "" : "Image/setup.png",
-                              popup: ("Stock clamped?", "Is the stock flat on the riser, against the stop and clamped tight?")))
+        } else if let holding = i.programs.first?.workholding {
+            steps.append(step("Mount the Stock · \(holding.title)", markdown: """
+            \(holding.instructions)
+
+            The face toward the spindle is **Z0**; its centre is **X0 Y0**. The next steps establish work zero.
+            """, image: i.setupImage == nil ? "" : "Image/setup.png",
+                              popup: ("Stock secured?", "Is the stock secured in \(holding.fixture.name), with the defined grip patches intact?")))
         } else {
-        steps.append(step("Mount the Stock", markdown: """
-        Bolt \(clamps) into the table's **rear T-slot** (M4 bolt into a T-slot nut), throat toward the spindle\(i.clampFromLeft.isEmpty ? (i.clampCount > 1 ? ", one near each end of the stock" : ", centred left to right") : ", their middles **\(i.clampFromLeft.map { Length.mm($0) + " mm" }.joined(separator: " and ")) from the stock's left end** (as placed in Coastline)"). Snug the bolts.
+            steps.append(step("Mount the Stock", markdown: """
+            Secure the stock with its **\(Length.mm(size.y)) × \(Length.mm(size.x)) mm face toward the spindle**, square to the spindle.
 
-        Stand the stock on the lower jaw with its **\(Length.mm(size.y)) × \(Length.mm(size.x)) mm face toward the spindle** and its \(Length.mm(size.y)) mm side running left to right\(i.shoulders.map { ", the milled shoulders up: each clamp goes over a shoulder (\(Length.mm($0.height)) mm tall there), the full-height middle stands up between them" } ?? ""). \(parallels)
-
-        The stock goes in **from the side**: the spindle is in front of the throat and the clamps' top arms are above it. If the spindle is in the way, loosen the clamps' T-slot bolts, slide the kit along the slots clear of it, slide the stock in through the throat\(i.clampCount > 1 ? "s of both clamps" : ""), then slide everything back to its place and snug the bolts.
-
-        Tighten the clamp screw onto the stock's top edge. The face toward the spindle becomes **Z0**; the middle of that face becomes **X0 Y0**.
-
-        It doesn't have to sit exactly where Coastline drew it: the next steps find the stock's real edges and face, and every program follows them. \(kitPlace(i, machine: machine))
-        """, image: i.setupImage == nil ? "" : "Image/setup.png",
-        popup: ("Stock clamped?", "Is the stock clamped tight and square to the spindle?")))
+            The face toward the spindle becomes **Z0**; the middle of that face becomes **X0 Y0**. The next steps find the stock's real edges and face, and every program follows them.
+            """, image: i.setupImage == nil ? "" : "Image/setup.png",
+                              popup: ("Stock clamped?", "Is the stock clamped tight and square to the spindle?")))
         }
         let pr = i.probing
-        if pr.electrical {
-            steps.append(step("Connect the Probe Wire", markdown: """
-            Coastline finds the stock with **electrical probing**: the clamp kit sits on its insulating pad, so when the tool touches the stock it closes a circuit and the machine stops right there (G38.2). No edge finder, no paper.
-
-            1. Plug the red probe wire's barrel jack into the port on the left side of the mill's LED board.
-            2. Bolt the other end to the top of the clamp (the tapped M5 hole) or tape it on firmly. The stock touches the clamp, so it's in the circuit too.
-            3. Wipe the stock where it will be touched, and the tool's tip: chips, oil or anodising stop the contact.
-
-            Coated tools (dark AlTiN, TiAlN, DLC) don't conduct well; uncoated carbide does.
-            """, popup: ("Wire connected?", "Is the probe wire plugged into the LED board and fixed to the clamp?")))
-        }
         // The tool in the spindle with its Z set (nil after the edge finder or a flip), and
         // the last one fitted (for the tool change: which collet it had, how long it was).
         var spindle: Tool?
         var fitted: Tool?
-        func touchZFile(_ z: Double, electrical: Bool) -> String {
-            let name = "Code/\(electrical ? "probe_top" : "store_z")\(abs(z) < 1e-9 ? "" : "_" + ReferenceBores.n(z).replacingOccurrences(of: "-", with: "m").replacingOccurrences(of: ".", with: "_")).nc"
-            if electrical {
-                files[name] = Data(ReferenceBores.topProgram(z: z).utf8)
-            } else if abs(z) > 1e-9 {
+        func touchZFile(_ z: Double) -> String {
+            let name = "Code/store_z\(abs(z) < 1e-9 ? "" : "_" + ReferenceBores.n(z).replacingOccurrences(of: "-", with: "m").replacingOccurrences(of: ".", with: "_")).nc"
+            if abs(z) > 1e-9 {
                 files[name] = Data("G10 L20 P1 Z\(ReferenceBores.n(z))\nG4 P0.5\nG54\n".utf8)
             }
             return name
@@ -491,23 +313,15 @@ public enum GuidedJobBuilder {
             steps += toolChangeSteps("Change to Tool \(n)", tool: p.tool, previous: fitted)
             fitted = p.tool
             let faced = p.touchZ < -1e-6 ? " The face was milled \(Length.mm(-p.touchZ)) mm down by an earlier program: touch off anywhere on the milled face (Coastline stores it as Z\(ReferenceBores.n(p.touchZ)))." : ""
-            if pr.electrical {
-                steps.append(step("Touch Off Tool \(n)", markdown: """
-                In **Machine Control**, jog the tool **2–5 mm above a solid spot of the face** (the frame, not over a cut).\(faced) Then close Machine Control and click Next: the tool turns slowly backwards and creeps down until it touches.
-                """, popup: ("Above the face?", "Is the tool 2–5 mm above solid stock?"), noStep: "-0"))
-                steps.append(step("Probe Z for Tool \(n)", text: "Click Next to probe the face and store Z.", gcode: touchZFile(p.touchZ, electrical: true), timeout: 120))
-            } else {
                 steps.append(step("Touch Off Tool \(n) on the Face", markdown: """
                 Touch off the face by hand with paper for this setup.
 
                 \(paperTouchOff("a solid spot of the stock face (the frame, not over a cut)", extra: faced.isEmpty ? "" : "\n\n" + faced))
                 """, popup: ("Paper pinched?", "Is the paper just pinched between the tool and the stock face?"), noStep: "-0"))
-                steps.append(step("Record Z0 for Tool \(n)", text: "Click Next to store this height\(abs(p.touchZ) < 1e-9 ? " as Z0" : "") .", gcode: touchZFile(p.touchZ, electrical: false)))
-            }
+                steps.append(step("Record Z0 for Tool \(n)", text: "Click Next to store this height\(abs(p.touchZ) < 1e-9 ? " as Z0" : "") .", gcode: touchZFile(p.touchZ)))
             spindle = p.tool
         }
-        /// X0 Y0 after a clamping: the edges (electrically with the tool in the spindle, or
-        /// with the edge finder).
+        /// X0 Y0 after a clamping: the edges, with the edge finder.
         func findEdges(side: Int, first k: Int) {
             if let holding = i.programs[k].workholding {
                 steps.append(step("Establish Work Zero · \(holding.title)", markdown: """
@@ -524,18 +338,11 @@ public enum GuidedJobBuilder {
             // Side B: turned about the vertical in the same clamps, so it sits where side A
             // did. The machine can bring the tool or finder close; the edges are still found.
             let lastZ = side == 1 && i.customHolding == nil ? i.programs[..<k].last?.tool : nil
-            if pr.electrical {
-                installTool(k + 1, i.programs[k])
-                // Z0 was just probed on this face with this tool.
-                let near = side == 1 ? Approach(centre: .zero, size: size, zShift: 0) : nil
-                steps += electricalEdgeSteps(i, side: side, lower: lower, upper: upper, tool: i.programs[k].tool, approach: near, files: &files)
-            } else {
                 let near = lastZ.map { Approach(centre: .zero, size: size, zShift: EdgeFinding.tool.stickout - $0.stickout) }
                 steps += edgeFindSteps(machine: machine, lower: lower, upper: upper, height: size.x, previous: fitted, approach: near,
                                        tag: "s\(side)p\(k)", files: &files)
                 spindle = nil
                 fitted = EdgeFinding.tool
-            }
         }
 
         findEdges(side: 0, first: 0)
@@ -568,15 +375,13 @@ public enum GuidedJobBuilder {
                                       popup: ("Stock secured for side B?", "Is the stock turned front-to-back and secured in your fixture with clearance checked?")))
                 } else {
                 steps.append(step("Flip the Stock", markdown: """
-                Side A is done. Vacuum the chips from the stock, clamps and table\(pr.bores != nil ? ", and out of the two reference bores in the frame" : "").
+                Side A is done. Vacuum the chips from the stock, the fixture and the table\(pr.bores != nil ? ", and out of the two reference bores in the frame" : "").
 
-                1. Loosen the clamp screw and slide the stock out sideways (slide the kit along the T-slots, clear of the spindle, if it's in the way).
-                2. **Turn the stock front-to-back** about its vertical axis. The face that was against the parallels now faces the spindle, and the end that was on the left is now on the right.
-                3. Slide it back in from the side, on the same bottom edge on the lower jaw, with the same parallels behind it, face \(Length.mm(i.protrusion)) mm past the jaws. Slide the kit back if you moved it, and tighten the clamp screw.
+                Release the stock and **turn it front-to-back** about its vertical axis: the face that was at the back now faces the spindle, and the end that was on the left is now on the right. Secure it again.
 
-                The part is still joined to the uncut frame between the sides, so the frame stays rigid and clamps exactly like before.\(pr.bores != nil ? " Side B's edges give a first zero; the reference bores then set the exact one." : "")
+                The next steps find the stock's edges and face afresh.\(pr.bores != nil ? " Side B's edges give a first zero; the reference bores then set it exactly." : "")
                 """, image: i.flipImage == nil ? "" : "Image/flip.png", gcode: "Code/tool_change_position.nc", timeout: 90,
-                popup: ("Flipped and clamped?", "Is the stock turned front-to-back, on the same bottom edge, and clamped tight?")))
+                popup: ("Flipped and secured?", "Is the stock turned front-to-back and secured again?")))
                 }
                 spindle = nil
                 findEdges(side: 1, first: k)
@@ -591,11 +396,11 @@ public enum GuidedJobBuilder {
                 files[probePath] = Data(probe.utf8)
                 let count = probe.components(separatedBy: "M111").count - 1
                 steps.append(step("Probe the Surface", markdown: """
-                The engraving follows the real face, not the CAD: the tool feels it at **\(count) points** over the text. It turns slowly backwards and creeps down at each one until it touches (the stock is insulated in the clamp kit; the probe wire stays on the clamp).
+                The engraving follows the real face, not the CAD: the tool feels it at **\(count) points** over the text. It turns slowly backwards and creeps down at each one until it touches (the stock is insulated in the fixture; the probe wire stays on the fixture).
 
                 The points go into the sender's contour map (M111); the engraving turns the compensation on (M112), so its depth stays the same everywhere, even on a face that isn't quite flat or square.
                 """, gcode: probePath, timeout: 240,
-                popup: ("Wire on the clamp?", "Is the probe wire plugged in and fixed to the clamp, and the tool clean?")))
+                popup: ("Wire on the fixture?", "Is the probe wire plugged in and fixed to the fixture, and the tool clean?")))
             }
             steps.append(step("Air Cut First?", markdown: """
             The first time you run a program, run it **10 mm above the stock with the spindle off**. Watch that every move goes where you expect.
@@ -615,8 +420,8 @@ public enum GuidedJobBuilder {
             Vacuum the chips from the stock, clamps and table\(p.reference == .windows ? ", and out of both reference bores (a chip in a bore throws the probing off)" : ""). Never use compressed air: it drives chips into the machine's bearings.
             """))
             if p.reference == .windows, let plan = pr.bores {
-                steps += borePickupSteps(plan, tool: p.tool, electrical: pr.electrical, files: &files)
-                if !pr.electrical { spindle = nil }
+                steps += borePickupSteps(plan, tool: p.tool, electrical: false, files: &files)
+                spindle = nil
             }
             for c in i.checkpoints where c.afterProgram == k {
                 steps += checkpointSteps(c, measuring: i.measuring)
@@ -696,52 +501,6 @@ public enum GuidedJobBuilder {
     static func edgeFindSteps(machine: MachineProfile, note: String = "", previous: Tool? = nil) -> [Step] {
         var unused: [String: Data] = [:]
         return edgeFindSteps(machine: machine, note: note, previous: previous, files: &unused)
-    }
-
-    /// The same with electrical probing: jog the tool beside each edge, Next probes toward it.
-    static func electricalEdgeSteps(_ i: Input, side: Int, lower: Bool, upper: Bool, tool: Tool, approach: Approach? = nil,
-                                    files: inout [String: Data]) -> [Step] {
-        var s: [Step] = []
-        let d = max(min(1.0, i.protrusion - 0.6), 0.3)
-        let depth = ReferenceBores.n(d)
-        func edge(_ title: String, _ where_: String, axis: String, toward: Double, file: String, program: String) {
-            files[file] = Data(program.utf8)
-            if let a = approach {
-                // The stock is where it was: the machine brings the tool beside the edge itself.
-                let near = file.replacingOccurrences(of: ".nc", with: "_near.nc")
-                files[near] = Data(a.probeProgram(axis: axis == "X" ? 0 : 1, side: -toward, radius: tool.diameter / 2, depth: d).utf8)
-                s.append(step("Move Beside the \(title)", markdown: "Click Next: the machine brings the tool to about 3 mm outside \(where_) and creeps down to \(depth) mm below the face. It stops if it touches the stock on the way.",
-                              gcode: near, timeout: 60))
-                s.append(step("Check the Position", markdown: "The probe light should be **off** and the tool beside the edge, not on the face.",
-                              popup: ("In position?", "Is the tool about 3 mm from the edge, \(depth) mm below the face, not touching? (No: jog it there by hand, then answer again.)"), noStep: "-0"))
-            } else {
-                s.append(step("Beside the \(title)", markdown: """
-                In **Machine Control**, with the spindle stopped, jog the tool to about **3 mm outside \(where_)**, about **\(depth) mm below the face** (so its side, not its tip, will touch): 1 mm steps, then 0.1 mm as you get close. Close Machine Control.
-                """, popup: ("In position?", "Is the tool about 3 mm from the edge, \(depth) mm below the face, not touching?"), noStep: "-0"))
-            }
-            s.append(step("Probe the \(title)", text: "Click Next: the tool turns slowly backwards and creeps toward the edge until it touches.", gcode: file, timeout: 120))
-        }
-        let sideTag = side == 0 ? "A" : "B"
-        if lower && upper {
-            edge("Lower Edge (X)", "the stock's **lower** edge", axis: "X", toward: 1, file: "Code/probe\(sideTag)_x_low.nc",
-                 program: ReferenceBores.edgeProgram(axis: "X", toward: 1, store: 2))
-            edge("Upper Edge (X)", "the stock's **upper** edge", axis: "X", toward: -1, file: "Code/probe\(sideTag)_x_high.nc",
-                 program: ReferenceBores.edgeProgram(axis: "X", toward: -1, store: 3))
-            s.append(step("Centre in X", text: "Click Next to set X0 halfway between the two edges.", gcode: "Code/set_x_centre.nc"))
-        } else {
-            let useLower = lower
-            edge("\(useLower ? "Lower" : "Upper") Edge (X)",
-                 "the stock's **\(useLower ? "lower" : "upper")** edge (the other one is out of the machine's reach: X0 comes from this edge and the stock's height, \(Length.mm(i.stockSize.x)) mm)",
-                 axis: "X", toward: useLower ? 1 : -1, file: "Code/probe\(sideTag)_x_single.nc",
-                 program: ReferenceBores.singleEdgeProgram(axis: "X", toward: useLower ? 1 : -1, edgeAt: (useLower ? -1 : 1) * i.stockSize.x / 2,
-                                                           radius: tool.diameter / 2, electrical: true))
-        }
-        edge("Left Edge (Y)", "the stock's **left** end", axis: "Y", toward: 1, file: "Code/probe\(sideTag)_y_left.nc",
-             program: ReferenceBores.edgeProgram(axis: "Y", toward: 1, store: 2))
-        edge("Right Edge (Y)", "the stock's **right** end", axis: "Y", toward: -1, file: "Code/probe\(sideTag)_y_right.nc",
-             program: ReferenceBores.edgeProgram(axis: "Y", toward: -1, store: 3))
-        s.append(step("Centre in Y", text: "Click Next to set Y0 halfway between the two ends.", gcode: "Code/set_y_centre.nc"))
-        return s
     }
 
     /// Side B's exact zero from side A's reference bores (after the windows are open).
@@ -840,186 +599,12 @@ public enum GuidedJobBuilder {
         ]
     }
 
-    // MARK: Stock squaring
-
-    /// Squares sawn stock before the part setup: face A, flip and face B to thickness, then the
-    /// two long edges. Each face is a facing program generated here (no part geometry needed).
-    static func squaringJob(_ i: Input, machine: MachineProfile, files: inout [String: Data]) -> Job {
-        var job = Job(title: "Square the Stock", prompt: "Sawn stock isn't flat or square. Face it on all sides first so every setup has true datums.")
-        let a = i.faceAllowance
-        let s = i.stockSize
-        let facer = i.programs.first?.tool
-        var steps: [Step] = [step("Why Square the Stock", markdown: """
-        Sawn faces are rough and not square. Facing them gives flat, parallel datums, so the part comes out true and measurements mean something.
-
-        Coastline faces \(Length.mm(a)) mm off each side: the stock becomes **\(Length.mm(s.x - 2 * a)) × \(Length.mm(s.y)) × \(Length.mm(s.z - 2 * a)) mm**.
-        """)]
-        guard let tool = facer else { job.steps = steps; return job }
-        let data = FeedsEngine.compute(tool: tool, material: i.material, kind: .facing, machine: machine)
-        let faces: [(String, SIMD2<Double>, String)] = [
-            ("Face A (front)", SIMD2(s.x, s.y), "Clamp the stock as it will sit for the part, sawn face toward the spindle."),
-            ("Face B (back, to thickness)", SIMD2(s.x, s.y), "Flip the stock front-to-back so face A sits against the table side of the clamp."),
-            ("Edge C (top edge)", SIMD2(s.z, s.y), "Turn the stock so its top edge faces the spindle, with face A against the clamp's fixed jaw."),
-            ("Edge D (bottom edge, to height)", SIMD2(s.z, s.y), "Flip it so edge C sits down in the clamp and edge D faces the spindle."),
-        ]
-        steps.append(step("Home the Machine", text: "Click Next to home all axes.", gcode: "Code/home.nc", timeout: 60))
-        for (k, f) in faces.enumerated() {
-            let path = "Code/square_\(k + 1).nc"
-            let g = FacingProgram.make(width: f.1.x, length: f.1.y, depth: a, tool: tool, data: data, machine: machine,
-                                       title: "Square the stock: \(f.0)")
-            files[path] = Data(g.utf8)
-            steps.append(step("Mount for \(f.0)", markdown: f.2 + "\n\nClean the clamp and table first: a chip under the stock tilts it.",
-                              popup: ("Mounted?", "Is the stock clamped with \(f.0.lowercased()) toward the spindle?")))
-            steps += edgeFindSteps(machine: machine, previous: k == 0 ? nil : tool)
-            steps += toolChangeSteps("Fit the Facing Tool", tool: tool, previous: EdgeFinding.tool)
-            steps.append(step("Touch Off on \(f.0)", markdown: paperTouchOff("the highest point of the face"),
-                              popup: ("Paper pinched?", "Is the paper just pinched at the highest point of the face?"), noStep: "-0"))
-            steps.append(step("Record Z0", text: "Click Next to store this height as Z0.", gcode: "Code/store_z.nc"))
-            steps.append(step("Face \(f.0)", text: "Faces \(Length.mm(a)) mm off.", gcode: path))
-            steps.append(step("Clear the Chips", text: "Vacuum the chips (never compressed air)."))
-        }
-        steps += checkpointSteps(Checkpoint(afterProgram: -1, what: "Stock thickness", expected: s.z - 2 * a, tolerance: 0.05), measuring: i.measuring)
-        steps.append(step("Squared", markdown: "Update the stock in Coastline's inventory to **milled square**, \(Length.mm(s.x - 2 * a)) × \(Length.mm(s.y)) × \(Length.mm(s.z - 2 * a)) mm, then continue with the part job."))
-        job.steps = steps
-        return job
-    }
-
-    /// Squares and sizes oversized bar stock flat on the squaring stop (FlatPrep), the way Coast
-    /// Runner's Universal Clamp cutcode does: riser plate, one acetal stop, two 3" C-clamps over
-    /// the table's back edge. Every time the bar is clamped differently, its edges are found and
-    /// the tool touched off again.
-    static func millDownJob(_ i: Input, _ m: MillDown, machine: MachineProfile, files: inout [String: Data]) -> Job {
-        let (plan, items) = m.programs(material: i.material, sawn: i.squareStockFirst, machine: machine)
-        let shoulders = m.shoulderLength
-        var job = Job(title: shoulders == nil ? "Square and Size the Stock" : "Mill the Shoulders",
-                      prompt: shoulders.map { "The part is taller than the clamp kit grips. Mill a \(Length.mm($0)) mm long shoulder at each end of the bar down to \(Length.mm(m.target)) mm, flat on the squaring stop: the clamps grip those." }
-                        ?? "The stock is too big for the clamp kit. Square it and mill it down to \(Length.mm(m.target)) mm, flat on the squaring stop.")
-        for (k, it) in items.enumerated() {
-            files["Code/prep_\(k + 1).nc"] = Data(it.gcode.utf8)
-            files["Code/prep_\(k + 1)_aircut.nc"] = Data(AirCut.make(from: it.gcode).utf8)
-        }
-        if let img = m.image { files["Image/mill_down.png"] = img }
-        let t = plan.thickness, w = plan.width
-        let notes = plan.issues.map { "- \($0.message)" }.joined(separator: "\n")
-        let why = shoulders.map { ls in "The clamp kit holds stock up to \(Length.mm(UniversalClamp.onJaw(softJaw: false).upperBound)) mm tall, and the part with its frame needs the bar's full \(Length.mm(w)) mm. So only the ends are milled down: a **\(Length.mm(ls)) mm shoulder at each end**, \(Length.mm(plan.cut)) mm off the edge there\(plan.faceEnds ? ", after facing one sawn end square so it can register against the stop" : ""). The universal clamps grip the shoulders; the full-height middle carries the part above the jaws." }
-            ?? "The clamp kit holds stock up to \(Length.mm(UniversalClamp.onJaw.upperBound)) mm tall. This bar is \(Length.mm(w)) mm, so \(Length.mm(plan.cut)) mm comes off one long edge\(plan.faceEnds ? ", after facing the sawn ends square so one of them can register against the stop" : "")."
-        var steps: [Step] = [step(shoulders == nil ? "Why Square and Size It" : "Why Shoulders", markdown: """
-        \(why)
-
-        The stop is bolted into the T-slots, so its spindle-side face can't move back. The bar always **sticks out past the stop's face** by the depth being cut plus \(Length.mm(FlatPrep.stopClearance)) mm: the tool never comes near the stop, the riser or the clamps.
-
-        \(notes)
-
-        **Next time, buy stock about \(Length.mm(m.target)) × \(Length.mm(plan.finalLength)) × \(Length.mm(t)) mm.** It is usually cheaper and much quicker than milling it down.
-        """)]
-        steps.append(step("Home the Machine", text: "Click Next to home all axes.", gcode: "Code/home.nc", timeout: 60))
-        if let saw = plan.sawLength {
-            steps.append(step("Saw to Length", markdown: """
-            Mark **\(Length.mm(saw)) mm** from one end of the bar and saw it off as squarely as you can (a mitre box helps). Deburr the cut and keep the offcut: add it back to Coastline's inventory.
-
-            Only a piece this short sits fully on the table with its end toward the spindle, where the C-clamps can reach around the table's back edge.
-            """, popup: ("Sawn?", "Is the \(Length.mm(saw)) mm piece cut off and deburred?")))
-        }
-        steps.append(step("Install the Squaring Stop", markdown: """
-        Take the clamp kit off the table. Put a T-slot nut in each T-slot near the left end and bolt **one acetal squaring stop** across both slots (M4x25 bolts), its notched hole toward the spindle. Slide it about 25 mm from the left wall.
-
-        Square it to the Y travel before tightening: jog the spindle (no tool) along the stop's right face, or check it with a square against the table's spindle-side edge. Then tighten both bolts.
-
-        Its spindle-side face sits level with the table's edge. The riser plate always goes **just behind that face** (0.5 mm back), so the bar overhangs the riser by the same amount it sticks out past the stop.
-        """))
-        for (k, it) in items.enumerated() {
-            let s = it.stage, p = it.placement
-            let behind = p.stockFaceZ - (p.clampPoints.first?.z ?? p.stockFaceZ)
-            let clamps = p.clampAngles.contains(where: { $0 != 0 })
-                ? "The bar reaches past the bed's back edge, so **turn the two 3\" C-clamps about 45° each way**: pads on the bar near its sides, about \(Length.mm(behind.rounded())) mm back from its spindle-side face, the frames swinging out beside the bar to the bed's back edge, fixed jaws under the bed. Snug, not crushing."
-                : "Two 3\" C-clamps over the table's back edge: the swivel pad on the bar **about \(Length.mm(behind.rounded())) mm back from its spindle-side face** (over the riser), the fixed jaw under the table plate. Snug, not crushing. Keep the clamp frames off the bar."
-            let mount: String
-            switch s.kind {
-            case .faceEnd(0):
-                mount = """
-                Lay the bar **flat on the riser with its length pointing at the spindle**, an extruded long side against the stop's right face (extruded sides are straight; sawn ends are not). End A sticks out **\(Length.mm(s.protrusion)) mm** past the stop's spindle-side face.
-
-                \(clamps)
-                """
-            case .faceEnd:
-                mount = """
-                Unclamp and **turn the bar end for end**: faced end A toward you, end B toward the spindle, the same long side against the stop. End B sticks out **\(Length.mm(s.protrusion)) mm** past the stop's face.
-
-                \(clamps)
-                """
-            case .edge(let round, let of):
-                if round == 0 && s.otherEdge {
-                    mount = """
-                    The top of the shoulders is done. Vacuum, loosen the C-clamps and **turn the bar over** so its **other long edge faces the spindle**, faced end A still against the stop. That edge's ends stick out **\(Length.mm(s.protrusion)) mm** past the stop's face: the bottom of the shoulders comes off now, so the middle hangs lower in the clamp kit.
-
-                    \(clamps)
-                    """
-                } else if round == 0 {
-                    mount = """
-                    Lay the bar **flat along the table** on the riser, \(plan.faceEnds ? "**faced end A**" : "its squarest end") pushed against the stop's right face. The long edge to cut faces the spindle and sticks out **\(Length.mm(s.protrusion)) mm** past the stop's face (that's \(Length.mm(s.cut)) mm to cut plus \(Length.mm(FlatPrep.stopClearance)) mm clearance).
-
-                    \(clamps)
-                    """
-                } else {
-                    // After the last round the face sits `stopClearance` past the stop.
-                    let slide = s.protrusion - FlatPrep.stopClearance
-                    mount = """
-                    Round \(round + 1) of \(of). Vacuum the chips, loosen the C-clamps and **slide the bar \(Length.mm(slide)) mm toward the spindle**, end A still against the stop, so the new edge sticks out **\(Length.mm(s.protrusion)) mm** past the stop's face again.
-
-                    \(clamps)
-                    """
-                }
-            }
-            steps.append(step("Mount · \(s.title)", markdown: mount + "\n\nThe exact position doesn't matter: the next steps find the bar's real edges and face.",
-                              image: m.image == nil ? "" : "Image/mill_down.png",
-                              popup: ("Clamped?", "Is the bar flat on the riser, against the stop, sticking out \(Length.mm(s.protrusion)) mm and clamped tight?")))
-            // After the first clamping the stop puts the bar back in a known place: relative to
-            // the last zero, its new face centre is the change in size (one end and the bottom
-            // stay on the stop and the riser) and in stand-out.
-            var near: Approach?
-            if k > 0 {
-                let q = items[k - 1].stage, oq = k - 1 < m.overrides.count ? m.overrides[k - 1].stopShiftY : 0
-                let o = k < m.overrides.count ? m.overrides[k].stopShiftY : 0
-                near = Approach(centre: SIMD3((s.stock.x - q.stock.x) / 2, (s.stock.y - q.stock.y) / 2 + o - oq, s.protrusion - q.protrusion),
-                                size: s.stock, zShift: EdgeFinding.tool.stickout - m.tool.stickout)
-            }
-            if k == 0 {
-                steps.append(step("Finding the Stock on the Bed", markdown: bedFindingNote))
-            }
-            var edgeFiles: [String: Data] = [:]
-            steps += edgeFindSteps(machine: machine, note: s.spans != nil && s.raised > 0.01
-                                   ? "Touch the edges and the face on an END (a shoulder): the uncut middle stands \(Length.mm(s.raised)) mm higher."
-                                   : "Touch the edges on the part that sticks out past the stop and the riser.",
-                                   previous: k == 0 ? nil : m.tool, approach: near, tag: "prep\(k + 1)", files: &edgeFiles)
-            files.merge(edgeFiles) { a, _ in a }
-            steps += toolChangeSteps("Fit the \(m.tool.name.components(separatedBy: " · ").first ?? "Tool")", tool: m.tool, previous: EdgeFinding.tool)
-            steps.append(step("Touch Off · \(s.title)", markdown: paperTouchOff("the highest point of the face toward the spindle"),
-                              popup: ("Paper pinched?", "Is the paper just pinched between the tool and the face?"), noStep: "-0"))
-            steps.append(step("Record Z0", text: "Click Next to store this height as Z0.", gcode: "Code/store_z.nc"))
-            steps.append(step("Air Cut First?", markdown: "Run the program 10 mm off the face with the spindle off first, and watch it clear the stop and clamps.",
-                              popup: ("Run an air cut?", "Run \(s.title.lowercased()) as an air cut first?"), noStep: "+2"))
-            steps.append(step("Air Cut · \(s.title)", text: "The tool moves 10 mm off the face with the spindle off.", gcode: "Code/prep_\(k + 1)_aircut.nc"))
-            let what = s.isEdge ? "Side-mills \(Length.mm(s.cut)) mm off the long edge in deep, light passes." : "Faces \(Length.mm(s.cut)) mm off the end, square to the long side."
-            steps.append(step(s.title, markdown: "\(what) \(i.material.chips)", gcode: "Code/prep_\(k + 1).nc"))
-            steps.append(step("Clear the Chips", text: "Vacuum the chips (never compressed air)."))
-        }
-        steps += checkpointSteps(Checkpoint(afterProgram: -1, what: m.shoulderLength == nil ? "Bar width" : "Height at each shoulder",
-                                            expected: m.target, tolerance: 0.1), measuring: i.measuring)
-        if let ls = shoulders {
-            steps.append(step("Ready for the Clamp Kit", markdown: "Unclamp and deburr the shoulders. The bar is now **\(Length.mm(w)) mm** tall in the middle and **\(Length.mm(m.target)) mm** at its two \(Length.mm(ls)) mm shoulders. Take the stop off and refit the clamp kit, then continue with the next job: the clamps go on the shoulders."))
-        } else {
-            steps.append(step("Ready for the Clamp Kit", markdown: "Unclamp, deburr the new edge and update the stock in Coastline's inventory to **\(Length.mm(m.target)) × \(Length.mm(plan.finalLength)) × \(Length.mm(t)) mm**. Take the stop off and refit the clamp kit, then continue with the next job."))
-        }
-        job.steps = steps
-        return job
-    }
-
     // MARK: Step helper
 
     static func step(_ title: String, text: String = "", markdown: String = "", image: String = "", gcode: String = "",
                      timeout: UInt = 0, popup: (String, String)? = nil, noStep: String = "", yesStep: String = "",
                      goTo: String = "") -> Step {
-        var s = Step(manifest: JobPackage.rootManifest)
+        var s = Step(manifest: "manifest.yml")
         s.title = clean(title)
         s.prompt = clean(text)
         s.markdown = safeMarkdown(markdown)

@@ -88,7 +88,7 @@ extension AppModel {
         guard let part, let stock, !programs.isEmpty else { return nil }
         // Recording may use the bar up: the project keeps its own copy to open again.
         stockSnapshot = stock
-        let runs = (prepPrograms + programs).map { p in
+        let runs = programs.map { p in
             JournalEntry.ProgramRun(title: p.title ?? p.operations.map(\.title).joined(separator: ", "), toolID: p.tool.id, toolName: p.tool.name,
                                     minutes: p.seconds / 60, distance: cuttingDistance(of: p))
         }
@@ -98,18 +98,16 @@ extension AppModel {
         e.materialSnapshot = stock.material
         e.projectPath = projectURL?.path
         e.stockID = stock.id
-        e.copies = max(setup.copies, 1)
-        // What's left of the bar: its length minus what the setup uses (the prep length, or the
-        // part's room), if a useful piece remains.
+        // What's left of the bar: its length minus what the setup uses, if a useful piece remains.
         let raw = setup.rawStockSize(stock)
-        let used = setup.prepLength ?? setup.stockSize(stock).y
+        let used = setup.stockSize(stock).y
         let left = max(raw.y, raw.z) - used - 3  // the saw kerf and a clean-up
         e.remnantLength = left >= 10 ? (left * 2).rounded(.down) / 2 : nil
         return e
     }
 
     private func cuttingDistance(of p: ToolProgram) -> Double {
-        let side = p.side == -1 ? prepResults : sideResults
+        let side = sideResults
         var d = 0.0
         for r in side {
             for (k, path) in r.paths.enumerated() where k < r.operationProgram.count && r.operationProgram[k] == p.index {

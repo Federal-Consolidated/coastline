@@ -15,12 +15,14 @@ import simd
 /// and the stock stands on the table with its X extent vertical.
 public struct Setup: Equatable, Sendable, Codable {
     public enum Workholding: String, CaseIterable, Identifiable, Sendable, Codable {
-        case clampKit, bedOnly, prepThenKit, shoulders, custom
+        /// A fixture of the user's own (`customFixture`): its geometry isn't modelled, so it is
+        /// outside the collision checks.
+        case custom
         public var id: Self { self }
     }
 
-    /// nil lets Coastline recommend a method; a user's explicit choice is never replaced
-    /// by automatic stock prep. Legacy documents infer their method from the setup below.
+    /// nil: Coastline plans the workholding from the fixture library. A user's explicit choice
+    /// is never replaced automatically.
     public var holding: Workholding?
     public var planFromFixtureLibrary = false
     public var customFixture = CustomFixture()
@@ -29,24 +31,16 @@ public struct Setup: Equatable, Sendable, Codable {
     /// Workholding explicitly available to this job. nil preserves older jobs' automatic
     /// library selection; an empty list deliberately allows no fixtures.
     public var selectedFixtureIDs: [UUID]? = nil
-    public var usesClampKit: Bool { !onBed && holding != .custom }
 
-    /// Replace the holding method as a single value, discarding prep and gripping geometry
-    /// belonging to the previous method. Unavailable methods may still be selected so the
-    /// user can edit them; their assessment blocks generation until they are workable.
-    public func selectingHolding(_ method: Workholding, shoulders proposal: Shoulders? = nil,
-                                 prepHeight: Double? = nil) -> Setup {
+    /// Replace the holding method as a single value.
+    public func selectingHolding(_ method: Workholding) -> Setup {
         var s = self
         s.planFromFixtureLibrary = false
         s.holding = method
-        s.onBed = method == .bedOnly
-        s.shoulders = method == .shoulders ? proposal : nil
-        s.downsizeHeight = method == .prepThenKit ? prepHeight : nil
-        s.prepLength = nil
         return s
     }
 
-    /// Placement and setup notes for workholding outside the built-in fixture kit.
+    /// Placement and setup notes for workholding outside the fixture library.
     /// Its detailed geometry is not modelled by the fixture clearance checker.
     public struct CustomFixture: Equatable, Sendable, Codable {
         public var name = "Vise / custom fixture"
@@ -82,130 +76,9 @@ public struct Setup: Equatable, Sendable, Codable {
     /// Part offset from the stock centre in work X and Y, mm.
     public var partOffsetX: Double = 0
     public var partOffsetY: Double = 0
-    /// How far the stock's face sticks out past the universal clamp's jaws, mm (parallels behind
-    /// the stock set it).
-    public var clampProtrusion: Double = 2
-    /// Mill oversized stock down to this height (work X) on the side clamps first, so it fits
-    /// the clamp kit. nil = use the stock as it is.
-    public var downsizeHeight: Double?
-    /// The bar's length after the prep sawed and faced it (its longer side across the work).
-    public var prepLength: Double?
     /// Uniform scale of the imported part (1 = as modelled), so a big design can be machined
     /// smaller from the stock there is.
     public var partScale: Double = 1
-    /// Adjustments to each prep clamping (stop along the slots, C-clamps), by stage.
-    public var prepOverrides: [PrepOverride] = []
-    /// Prep steps chosen by hand: face end A first (nil: when sawn), number of edge rounds
-    /// (nil: as few as the overhang allows).
-    public var prepFaceEnd: Bool?
-    public var prepRounds: Int?
-    /// Holding path B: the whole job flat on the bed (stop, riser, C-clamps) instead of the
-    /// clamp kit, with the user's adjustments to the stop and clamps.
-    public var onBed = false
-    public var bedJobOverride = PrepOverride()
-    /// Holding path D: a reduced-height shoulder at each end of the bar for the clamp kit to
-    /// grip; the full-height middle carries the part above the jaws.
-    public var shoulders: Shoulders?
-    /// The clamp kit: each universal clamp moved along the T-slots from where Coastline
-    /// put it (mm, model Y).
-    public var kitClampShift: [Double] = []
-    /// How many universal clamps hold the stock: nil lets Coastline choose
-    /// (`UniversalClamp.suggestedCount`), 1 or 2 is the user's override.
-    public var kitClampCount: Int?
-    /// Batching: this many copies of the part side by side along the bar (Y).
-    public var copies = 1
-
-    /// The copies' Y offsets from the part's place, centred: each copy's roughing band (one
-    /// roughing tool + 1 mm around it) plus a 3 mm web of frame between neighbours.
-    public static func copyOffsets(count n: Int, partY: Double, toolDiameter d: Double = 6.35) -> [Double] {
-        guard n > 1 else { return [0] }
-        let pitch = copyPitch(partY: partY, toolDiameter: d)
-        return (0..<n).map { (Double($0) - Double(n - 1) / 2) * pitch }
-    }
-
-    public static func copyPitch(partY: Double, toolDiameter d: Double = 6.35) -> Double {
-        partY + 2 * (d + 1) + GripZones.grip
-    }
-
-    /// How many copies fit along the stock (Y) with the frame's room at both ends.
-    public static func maxCopies(stockY: Double, partY: Double, toolDiameter d: Double = 6.35) -> Int {
-        let pitch = copyPitch(partY: partY, toolDiameter: d)
-        let room = stockY - 2 * (d + 1) - partY  // the first copy, centred with its band
-        return max(1 + Int((room / pitch).rounded(.down) + 0.0), 1)
-    }
-
-    public struct Shoulders: Codable, Equatable, Sendable {
-        /// Stock height at the shoulders (work X, what the clamps grip) and each one's length (Y).
-        public var height: Double
-        public var length: Double
-        /// Also milled off the bottom edge at the ends (four-corner shoulders): the full-height
-        /// middle then hangs this much lower, between the clamps, toward the bed.
-        public var bottom: Double = 0
-        public init(height: Double, length: Double = Shoulders.defaultLength, bottom: Double = 0) {
-            self.height = height
-            self.length = length
-            self.bottom = bottom
-        }
-        /// Centred under a universal clamp (19 mm wide, 12 mm in from the end) with room each side.
-        public static let defaultLength = 24.0
-
-        public init(from d: Decoder) throws {
-            let c = try d.container(keyedBy: CodingKeys.self)
-            height = try c.decode(Double.self, forKey: .height)
-            length = try c.decode(Double.self, forKey: .length)
-            bottom = try c.decodeIfPresent(Double.self, forKey: .bottom) ?? 0
-        }
-
-        /// What's milled off the top at the ends, for a bar this tall.
-        public func top(barHeight x: Double) -> Double { max(x - bottom - height, 0) }
-    }
-
-    /// The height the bed prep brings the stock to where the clamps grip (mill-down or shoulders).
-    public var prepHeight: Double? { downsizeHeight ?? shoulders?.height }
-
-    /// What the shoulders take off, as boxes in the work frame (stock centred, face at Z0).
-    public func shoulderCuts(stockSize s: SIMD3<Double>) -> [(min: SIMD3<Double>, max: SIMD3<Double>)] {
-        guard let sh = shoulders, sh.height + sh.bottom < s.x + 1e-9 else { return [] }
-        let xb = -s.x / 2 + sh.bottom, xt = xb + sh.height
-        var out: [(min: SIMD3<Double>, max: SIMD3<Double>)] = []
-        for (y0, y1) in [(-s.y / 2, -s.y / 2 + sh.length), (s.y / 2 - sh.length, s.y / 2)] {
-            if xt < s.x / 2 - 1e-9 { out.append((SIMD3(xt, y0, -s.z), SIMD3(s.x / 2, y1, 0))) }
-            if sh.bottom > 1e-9 { out.append((SIMD3(-s.x / 2, y0, -s.z), SIMD3(xb, y1, 0))) }
-        }
-        return out
-    }
-
-    /// The stock with its shoulders as triangles (work frame): a stepped profile in X–Y
-    /// extruded along Z. Without shoulders, the box.
-    public func stockTriangles(stockSize s: SIMD3<Double>) -> [SIMD3<Double>] {
-        let lo = SIMD3(-s.x / 2, -s.y / 2, -s.z), hi = SIMD3(s.x / 2, s.y / 2, 0)
-        guard let sh = shoulders, 2 * sh.length < s.y, sh.height + sh.bottom < s.x - 1e-9 || sh.bottom > 1e-9 else {
-            return Collision.boxTriangles(min: lo, max: hi)
-        }
-        let xb = lo.x + sh.bottom, xt = min(xb + sh.height, hi.x), y0 = lo.y + sh.length, y1 = hi.y - sh.length
-        // The profile (X–Y), counter-clockwise seen from +Z: the grip strip at each end, the
-        // full height in the middle.
-        let poly: [SIMD2<Double>] = [SIMD2(xb, lo.y), SIMD2(xt, lo.y), SIMD2(xt, y0), SIMD2(hi.x, y0), SIMD2(hi.x, y1), SIMD2(xt, y1),
-                                     SIMD2(xt, hi.y), SIMD2(xb, hi.y), SIMD2(xb, y1), SIMD2(lo.x, y1), SIMD2(lo.x, y0), SIMD2(xb, y0)]
-        var t: [SIMD3<Double>] = []
-        for k in poly.indices {
-            let a = poly[k], b = poly[(k + 1) % poly.count]
-            guard simd_distance(a, b) > 1e-9 else { continue }
-            let a0 = SIMD3(a.x, a.y, lo.z), b0 = SIMD3(b.x, b.y, lo.z), a1 = SIMD3(a.x, a.y, hi.z), b1 = SIMD3(b.x, b.y, hi.z)
-            t += [a0, b0, b1, a0, b1, a1]
-        }
-        // Caps: the middle (full height) and the two ends (grip strip).
-        for z in [lo.z, hi.z] {
-            for (p, q) in [(SIMD2(lo.x, y0), SIMD2(hi.x, y1)), (SIMD2(xb, lo.y), SIMD2(xt, y0)), (SIMD2(xb, y1), SIMD2(xt, hi.y))] {
-                let c = [SIMD3(p.x, p.y, z), SIMD3(q.x, p.y, z), SIMD3(q.x, q.y, z), SIMD3(p.x, q.y, z)]
-                t += z > lo.z ? [c[0], c[1], c[2], c[0], c[2], c[3]] : [c[0], c[2], c[1], c[0], c[3], c[2]]
-            }
-        }
-        return t
-    }
-    /// Clamp with the soft jaws (the blocks under the top screws). Off: the screws press the
-    /// stock directly, for 6.4 mm taller stock (a compromise; see UniversalClamp).
-    public var clampSoftJaw = true
     /// Side B of a two-sided job: the stock is turned front-to-back about the vertical (X) axis,
     /// so the back of the part faces the spindle.
     public var flipped = false
@@ -213,16 +86,17 @@ public struct Setup: Equatable, Sendable, Codable {
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case fixtureAssemblies, selectedFixtureIDs, planFromFixtureLibrary, holding, customFixture, facing, spin, stockAxes, topAllowance, partOffsetX, partOffsetY, clampProtrusion, flipped, downsizeHeight, clampSoftJaw, prepLength, partScale, prepOverrides, prepFaceEnd, prepRounds, onBed, bedJobOverride, shoulders, kitClampShift, kitClampCount, copies
+        case fixtureAssemblies, selectedFixtureIDs, planFromFixtureLibrary, holding, customFixture, facing, spin, stockAxes, topAllowance, partOffsetX, partOffsetY, flipped, partScale
     }
 
-    /// Tolerant decoding: sessions saved by older versions miss newer keys.
+    /// Tolerant decoding: sessions saved by older versions miss newer keys, and may name holding
+    /// methods that no longer exist (they fall back to the library).
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         planFromFixtureLibrary = try c.decodeIfPresent(Bool.self, forKey: .planFromFixtureLibrary) ?? false
         fixtureAssemblies = try c.decodeIfPresent([Fixture].self, forKey: .fixtureAssemblies)
         selectedFixtureIDs = try c.decodeIfPresent([UUID].self, forKey: .selectedFixtureIDs)
-        holding = try c.decodeIfPresent(Workholding.self, forKey: .holding)
+        holding = (try? c.decodeIfPresent(Workholding.self, forKey: .holding)) ?? nil
         customFixture = try c.decodeIfPresent(CustomFixture.self, forKey: .customFixture) ?? CustomFixture()
         facing = try c.decodeIfPresent(Facing.self, forKey: .facing) ?? .plusZ
         spin = try c.decodeIfPresent(Int.self, forKey: .spin) ?? 0
@@ -230,28 +104,8 @@ public struct Setup: Equatable, Sendable, Codable {
         topAllowance = try c.decodeIfPresent(Double.self, forKey: .topAllowance) ?? 0.5
         partOffsetX = try c.decodeIfPresent(Double.self, forKey: .partOffsetX) ?? 0
         partOffsetY = try c.decodeIfPresent(Double.self, forKey: .partOffsetY) ?? 0
-        clampProtrusion = try c.decodeIfPresent(Double.self, forKey: .clampProtrusion) ?? 2
         flipped = try c.decodeIfPresent(Bool.self, forKey: .flipped) ?? false
-        downsizeHeight = try c.decodeIfPresent(Double.self, forKey: .downsizeHeight)
-        prepLength = try c.decodeIfPresent(Double.self, forKey: .prepLength)
         partScale = try c.decodeIfPresent(Double.self, forKey: .partScale) ?? 1
-        prepOverrides = try c.decodeIfPresent([PrepOverride].self, forKey: .prepOverrides) ?? []
-        prepFaceEnd = try c.decodeIfPresent(Bool.self, forKey: .prepFaceEnd)
-        prepRounds = try c.decodeIfPresent(Int.self, forKey: .prepRounds)
-        onBed = try c.decodeIfPresent(Bool.self, forKey: .onBed) ?? false
-        bedJobOverride = try c.decodeIfPresent(PrepOverride.self, forKey: .bedJobOverride) ?? PrepOverride()
-        shoulders = try c.decodeIfPresent(Shoulders.self, forKey: .shoulders)
-        kitClampShift = try c.decodeIfPresent([Double].self, forKey: .kitClampShift) ?? []
-        kitClampCount = try c.decodeIfPresent(Int.self, forKey: .kitClampCount)
-        copies = max(try c.decodeIfPresent(Int.self, forKey: .copies) ?? 1, 1)
-        clampSoftJaw = try c.decodeIfPresent(Bool.self, forKey: .clampSoftJaw) ?? true
-        if let holding { onBed = holding == .bedOnly }
-        if !usesClampKit {
-            // Older bed setups could retain shoulders or a prep size from the clamp kit.
-            shoulders = nil
-            downsizeHeight = nil
-            prepLength = nil
-        }
     }
 
     // MARK: Part transform
@@ -352,15 +206,8 @@ public struct Setup: Equatable, Sendable, Codable {
 
     // MARK: Stock
 
-    /// Stock size along work X, Y, Z, after milling it down if that's planned.
-    public func stockSize(_ stock: StockItem) -> SIMD3<Double> {
-        var s = rawStockSize(stock)
-        if let h = downsizeHeight, h < s.x { s.x = h }
-        if let l = prepLength {
-            if s.y >= s.z { s.y = min(s.y, l) } else { s.z = min(s.z, l) }
-        }
-        return s
-    }
+    /// Stock size along work X, Y, Z.
+    public func stockSize(_ stock: StockItem) -> SIMD3<Double> { rawStockSize(stock) }
 
     /// The stock as bought, along work X, Y, Z.
     public func rawStockSize(_ stock: StockItem) -> SIMD3<Double> {
@@ -374,13 +221,17 @@ public struct Setup: Equatable, Sendable, Codable {
         return (SIMD3(-s.x / 2, -s.y / 2, -s.z), SIMD3(s.x / 2, s.y / 2, 0))
     }
 
+    /// The stock as triangles (work frame): the box.
+    public func stockTriangles(stockSize s: SIMD3<Double>) -> [SIMD3<Double>] {
+        Collision.boxTriangles(min: SIMD3(-s.x / 2, -s.y / 2, -s.z), max: SIMD3(s.x / 2, s.y / 2, 0))
+    }
+
     /// Physical placement inside the blank, without inventing a machining allowance on a
     /// face that is already to size. Workholding clearance is checked separately.
     public func placementLimits(partMin: SIMD3<Double>, partMax: SIMD3<Double>, stock: StockItem,
                                 toolDiameter: Double = 6.35) -> (x: ClosedRange<Double>, y: ClosedRange<Double>, depth: ClosedRange<Double>) {
         let (lo, hi) = rotatedPartBounds(min: partMin, max: partMax)
-        var size = hi - lo
-        if copies > 1 { size.y += Double(copies - 1) * Self.copyPitch(partY: size.y, toolDiameter: toolDiameter) }
+        let size = hi - lo
         let raw = stockSize(stock)
         let mx = max((raw.x - size.x) / 2, 0), my = max((raw.y - size.y) / 2, 0)
         return (-mx...mx, -my...my, 0...max(raw.z - size.z, 0))

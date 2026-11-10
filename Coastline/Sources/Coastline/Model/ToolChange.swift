@@ -134,7 +134,7 @@ extension AppModel {
     func bedTreeBuilt() -> TriangleTree? {
         if let b = bedTree, b.generation == collisionGeneration { return b.tree }
         guard !bedBodies.isEmpty else { return nil }
-        let t = TriangleTree(Self.triangles(bedBodies, meshes: kitParts.map(\.mesh)))
+        let t = TriangleTree(Self.triangles(bedBodies))
         bedTree = (collisionGeneration, t)
         return t
     }
@@ -227,18 +227,17 @@ extension AppModel {
     /// fully back inside the machine: the moves pass through it to travel, never stop there.)
     /// One spot for the whole job (the guided job's tool_change_position too).
     func toolChangeSpot() -> ToolChangeSpot {
-        let tools = (programs + prepPrograms).map(\.tool) + [EdgeFinding.tool]
+        let tools = programs.map(\.tool) + [EdgeFinding.tool]
         let longest = tools.max { $0.stickout < $1.stickout }
-        let key = "\(setup)|\(stockID?.uuidString ?? "")|\(tools.map(\.id))|\(twoSided)|\(kitShiftY)"
+        let key = "\(setup)|\(stockID?.uuidString ?? "")|\(tools.map(\.id))|\(twoSided)"
         if let c = toolChangeSpotCache, c.key == key { return c.spot }
         let env = machine.machineEnvelope, tc = machine.toolChangePose
-        var views: [(side: Int, stage: Int)] = [(0, 0)]
-        if twoSided { views.append((1, 0)) }
-        if hasPrep, let plan = flatPrepPlan { views += plan.stages.indices.map { (-1, $0) } }
-        let saved = (viewSide, prepStage)
+        var views = [0]
+        if twoSided { views.append(1) }
+        let saved = viewSide
         switchingView = true
         defer {
-            (viewSide, prepStage) = saved
+            viewSide = saved
             layoutScene()
             switchingView = false
         }
@@ -252,7 +251,7 @@ extension AppModel {
         // lets the spindle come all the way out with room in every one.
         var beds: [TriangleTree] = []
         for v in views {
-            (viewSide, prepStage) = (v.side, v.stage)
+            viewSide = v
             layoutScene()
             if let t = bedTreeBuilt() { beds.append(t) }
         }
@@ -296,44 +295,6 @@ extension AppModel {
         spot.note = notes.isEmpty ? nil : notes.joined(separator: " ")
         toolChangeSpotCache = (key, spot)
         return spot
-    }
-
-    /// The clamp kit to the left so the tools are changed on the right: with two clamps along a
-    /// long bar, the right-hand clamp sits right where the maker's tool-change position is.
-    /// The smallest shift left (5 mm steps) that leaves that position `toolChangeRoom` clear in
-    /// every clamping in the kit, with the whole bar still inside the Y travel. Toolpaths are
-    /// relative to the stock, so they don't change; only where the kit is bolted does. Found
-    /// before generating (the travel checks use it).
-    func updateKitShift() {
-        guard setup.usesClampKit, let stock, machineModel != nil else { kitShiftCache = nil; return }
-        let tools = operations.compactMap { $0.toolID.flatMap(jobTool) } + [EdgeFinding.tool]
-        let longest = tools.max { $0.stickout < $1.stickout }
-        let key = "\(setup)|\(stock.id)|\(tools.map(\.id))|\(twoSided)"
-        if let c = kitShiftCache, c.key == key { return }
-        kitShiftCache = (key, 0)
-        let env = machine.machineEnvelope, tc = machine.toolChangePose
-        var views: [(side: Int, stage: Int)] = [(0, 0)]
-        if twoSided { views.append((1, 0)) }
-        let saved = (viewSide, prepStage)
-        switchingView = true
-        var beds: [TriangleTree] = []
-        for v in views {
-            (viewSide, prepStage) = (v.side, v.stage)
-            layoutScene()
-            if let t = bedTreeBuilt() { beds.append(t) }
-        }
-        let length = setup.stockSize(stock).y
-        var shift = 0.0
-        for s in stride(from: 0.0, through: -80, by: -5) {
-            // The bar's left end (machine Y), with room for edge finding past it.
-            let leftEnd = (env.y.lowerBound + env.y.upperBound) / 2 + s - length / 2
-            guard leftEnd - 8 >= env.y.lowerBound else { break }
-            if beds.allSatisfy({ roomy(at: SIMD3(tc.x, tc.y - s, tc.z), tool: longest, bed: $0) }) { shift = s; break }
-        }
-        kitShiftCache = (key, shift)
-        (viewSide, prepStage) = saved
-        layoutScene()
-        switchingView = false
     }
 
     /// Finds the spot just after the job appears (not when opening waits for it, nor in the

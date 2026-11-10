@@ -40,8 +40,6 @@ extension AppModel {
             guard available.fixtures.contains(where: {
                 LibraryWorkholdingPlanner.eligibility($0, stock: setup.stockSize(stock)).isEmpty
             }) else { return "Choose workholding in Setups first." }
-        } else if !holdingAssessment(holdingPath).possible {
-            return holdingAssessment(holdingPath).why
         }
         return nil
     }

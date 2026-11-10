@@ -61,7 +61,7 @@ extension AppModel {
             await importPart(URL(fileURLWithPath: path))
         }
         jobResources = p.resources ?? JobResourceSnapshot(stock: p.stock,
-            tools: (p.results?.programs ?? []).map(\.tool) + (p.results?.prepPrograms ?? []).map(\.tool))
+            tools: (p.results?.programs ?? []).map(\.tool))
         if let s = p.resources?.stock ?? p.stock { stockSnapshot = s }
         // Older files have no copy: take it from the inventory while it's still there.
         if p.resources?.stock == nil && p.stock == nil, let id = p.stockID, let s = stockLookup(id) { stockSnapshot = s }
@@ -141,11 +141,7 @@ extension AppModel {
     static let setupFieldNames: [String: String] = [
         "facing": "the part's orientation", "spin": "the part's orientation", "stockAxes": "the stock's orientation",
         "topAllowance": "the part's height in the stock", "partOffsetX": "the part's placement", "partOffsetY": "the part's placement",
-        "clampProtrusion": "the stand-out", "downsizeHeight": "the stock prep", "prepLength": "the stock prep",
-        "partScale": "the part's scale", "prepOverrides": "a clamping on the bed", "prepFaceEnd": "the stock prep",
-        "prepRounds": "the stock prep", "onBed": "the holding", "bedJobOverride": "a clamping on the bed",
-        "shoulders": "the shoulders", "kitClampShift": "a kit clamp", "kitClampCount": "the clamp count", "copies": "the copies",
-        "clampSoftJaw": "the soft jaws", "flipped": "the flip", "holding": "the holding", "customFixture": "the custom fixture",
+        "partScale": "the part's scale", "flipped": "the flip", "holding": "the holding", "customFixture": "the custom fixture",
     ]
 
     /// ⌘Z: typing in a text field is undone there first (the field's own undo), otherwise the
@@ -221,7 +217,7 @@ extension AppModel {
                 enter(.machining)
                 restore(r)
             } else {
-                enter(hasPrep ? .prep : .partStock)
+                enter(.partStock)
                 status = p.results == nil ? "Opened \(url.lastPathComponent)" : "Opened \(url.lastPathComponent) · Regenerate toolpaths for this machine"
             }
         } catch {
@@ -234,7 +230,7 @@ extension AppModel {
     /// operations have their tools and the stock picker shows the bar.
     func adoptMissingItems(_ p: ProjectFile) {
         var tools: [Tool] = []
-        for t in (p.resources?.tools ?? []) + (p.results?.programs ?? []).map(\.tool) + (p.results?.prepPrograms ?? []).map(\.tool)
+        for t in (p.resources?.tools ?? []) + (p.results?.programs ?? []).map(\.tool)
             where toolLookup(t.id) == nil && !tools.contains(where: { $0.id == t.id }) {
             var copy = t
             copy.quantity = 0

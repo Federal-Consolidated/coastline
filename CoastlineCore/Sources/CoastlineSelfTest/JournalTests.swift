@@ -51,19 +51,6 @@ let journalTests: [TestCase] = [
         for _ in 0..<20 { learn.learn(from: e, tools: [ball]) }
         try expectEqual(learn.factor(materialID: "al-6061", kind: .ballEndMill), 0.6, "never below 60 %")
     },
-    TestCase(name: "batchCopiesAreSpacedWithTheirOwnBandsAndAWeb") {
-        let o = Setup.copyOffsets(count: 3, partY: 24)
-        let pitch = Setup.copyPitch(partY: 24)
-        try expect(abs(pitch - (24 + 2 * 7.35 + 3)) < 1e-9)
-        try expect(o.count == 3 && abs(o[0] + pitch) < 1e-9 && abs(o[1]) < 1e-9 && abs(o[2] - pitch) < 1e-9)
-        // 150 mm bar, 24 mm part: the first copy takes 24 + 14.7, each more one pitch.
-        try expectEqual(Setup.maxCopies(stockY: 150, partY: 24), 1 + Int(((150 - 14.7 - 24) / pitch).rounded(.down)))
-        try expectEqual(Setup.maxCopies(stockY: 30, partY: 24), 1)
-        var s = Setup()
-        s.copies = 3
-        let back = try JSONDecoder().decode(Setup.self, from: JSONEncoder().encode(s))
-        try expectEqual(back.copies, 3)
-    },
     TestCase(name: "engravingTextBecomesClosedOutlinesOfTheRightSize") {
         let e = Engraving(text: "HI", height: 4, x: 1, y: -2, depth: 0.15, font: "Helvetica-Bold")
         let loops = e.polylines()

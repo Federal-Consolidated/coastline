@@ -62,36 +62,6 @@ let programTests: [TestCase] = [
         try expect(p.issues.isEmpty, "\(p.issues)")
     },
 
-    TestCase(name: "inchesToMillimetresKeepsThePath") {
-        let source = """
-        G90 G94 G17
-        G20
-        G0 X0.0588 Y-2.0374 (a comment X1 stays)
-        Z0.25
-        G1 X0.0512 Y-2.0334 Z0.0249 F24.
-        G2 X-0.0155 Y-1.5748 I-0.031 J0.
-        G3 X0.031 Y-1.18 R0.2
-        G10 L20 P2 Y0.125 (zero Y)
-        G4 P0.5
-        G20 G0 G91 X-0.4
-        G21
-        G53 Z-1.
-        G90 G0 X5 Y5
-        """
-        let mm = GCodeConvert.toMillimetres(source)
-        try expect(!mm.contains("G20"))
-        try expect(mm.contains("(a comment X1 stays)"))
-        try expect(mm.contains("G10 L20 P2 Y3.175"), mm)
-        try expect(mm.contains("G4 P0.5"))
-        try expect(mm.contains("G53 Z-1."), "mm lines are unchanged")
-        try expect(mm.contains("G90 G0 X5 Y5"))
-        let a = GCodeReader.read(source), b = GCodeReader.read(mm)
-        try expect(!b.usesInches)
-        try samePath(a, b)
-        // A host macro's tolerance is mm (it reads `$#`), even in an inch program; `Z- 0.15` is Z-0.15.
-        let macro = GCodeConvert.toMillimetres("G20\nM101 G57 G58 G59 Z 0.076\nG0 Z- 0.15")
-        try expect(macro.contains("M101 G57 G58 G59 Z 0.076") && macro.contains("Z-3.81"), macro)
-    },
 
     TestCase(name: "optionsPickSetupsAndSteps") {
         var job = ProgramJob(id: "t", title: "Two setups", summary: "")
@@ -175,25 +145,5 @@ let programTests: [TestCase] = [
         print("      \(plans.count) different runs, all completed")
     },
 
-    TestCase(name: "ownGCodeBecomesAGuidedJob") {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("coastline-own-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let tool = ProgramJob.ToolSpec(id: "t1", name: "1/8\" end mill", kind: "End mill", diameter: 3.175, collet: "1/8\"")
-        let job = try ProgramJob.fromGCode([("plate.nc", "G20\nG0 Z0.2\nM3 S9000\nG1 Z-0.02 F5\nX1\nM30\n")],
-                                           title: "Name Plate", tool: tool, into: folder)
-        try expectEqual(job.problems(in: folder), [])
-        try expectEqual(job.plan([:]).map(\.setup.id), ["prepare", "zero", "cut"])
-        let cut = try String(contentsOf: folder.appendingPathComponent(job.programs[1].file), encoding: .utf8)
-        try expect(cut.contains("G21") && cut.contains("S8000") && cut.contains("M5") && !cut.contains("M30"), cut)
-        try expectEqual(job.programs[1].purpose, .cut)
-        let reloaded = try ProgramJob.load(folder)
-        try expectEqual(reloaded, job)
-    },
 
-    TestCase(name: "preparedForTheCR1") {
-        let r = GCodeConvert.prepare("G20\nM3 S10000\nG1 X1 F10\nM30\n", machine: .standard)
-        try expect(r.text.contains("S8000") && r.text.contains("M5") && !r.text.contains("M30"), r.text)
-        try expect(r.text.contains("X25.4") && r.text.contains("F254"), r.text)
-        try expectEqual(r.changes.count, 3)
-    },
 ]

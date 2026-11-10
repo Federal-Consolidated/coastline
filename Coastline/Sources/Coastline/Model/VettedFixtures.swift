@@ -50,10 +50,10 @@ extension AppModel {
             return geometry.bookendMountTable(centreY: travelCentreY)
         }
         guard let model = machineModel else { return nil }
-        guard model.tSlotZ.count == 2, let lower = prepTable.minimumY, let upper = prepTable.maximumY else { return nil }
+        guard model.tSlotZ.count == 2, let lower = tableGeometry.minimumY, let upper = tableGeometry.maximumY else { return nil }
         guard lower < upper else { return nil }
-        return BookendSetup.Table(topX: prepTable.topX, slotZ: model.tSlotZ, slotY: lower...upper,
-                                 frontZ: prepTable.northZ, centreY: travelCentreY)
+        return BookendSetup.Table(topX: tableGeometry.topX, slotZ: model.tSlotZ, slotY: lower...upper,
+                                 frontZ: tableGeometry.northZ, centreY: travelCentreY)
     }
 
     func fixtureStateKey(_ fixture: Fixture) -> String {

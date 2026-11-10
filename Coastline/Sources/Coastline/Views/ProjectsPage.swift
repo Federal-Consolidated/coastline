@@ -2,12 +2,9 @@ import AppKit
 import CoastlineCore
 import SwiftUI
 
-/// Projects: one list for both kinds. A planned project (a `.coastline` file: Coastline makes
-/// the toolpaths from a CAD part) opens in the Workspace; a G-code project (a job around G-code
-/// that already exists) shows its steps here and runs from here. Presets first (the examples
-/// and the preset jobs), then your own (saved, imported or made from G-code), then the Job
-/// Journal: what ran, how it went, what you measured. Import… and Export… share either kind as
-/// one .zip.
+/// Projects: planned projects (`.coastline` files: Coastline makes the toolpaths from a CAD part)
+/// open in the Workspace; a generated job run on the machine shows its steps here; then the Job
+/// Journal: what ran, how it went, what you measured.
 struct ProjectsPage: View {
     @Environment(AppModel.self) private var model
     @Environment(InventoryModel.self) private var inventory
@@ -17,9 +14,7 @@ struct ProjectsPage: View {
     @State private var pendingDelete: JournalEntry?
 
     enum ProjectsItem: Hashable {
-        case firstCut
         case project(URL)
-        case example(String)
         /// A G-code project: its job folder.
         case job(URL)
         case journal(JournalEntry.ID)
@@ -28,28 +23,10 @@ struct ProjectsPage: View {
     var body: some View {
         HSplitView {
             List(selection: $selection) {
-                Section("Getting Started") {
-                    ProjectRow(title: "First Cut on the Machine", detail: firstCutProgress, icon: NSImage(systemSymbolName: "checklist", accessibilityDescription: nil))
-                        .tag(ProjectsItem.firstCut)
-                }
-                Section("Presets") {
-                    ForEach(ExamplePart.all) { ex in
-                        ProjectRow(title: ex.title, detail: ex.shows.joined(separator: " · "), icon: NSImage(contentsOf: ex.thumbnailURL))
-                            .tag(ProjectsItem.example(ex.id))
-                            .contextMenu {
-                                Button("Open") { openExample(ex) }
-                                Button("Export…") { model.exportProjectInteractively(ex.projectURL) }
-                                    .disabled(!FileManager.default.fileExists(atPath: ex.projectURL.path))
-                            }
-                    }
-                    ForEach(model.jobs.entries.filter(\.preset)) { entry in
-                        jobRow(entry)
-                    }
-                }
                 Section("Your Projects") {
-                    let own = model.jobs.entries.filter { !$0.preset }
+                    let own = model.jobs.entries
                     if recents.isEmpty && own.isEmpty {
-                        Text("Projects you save, import or make from G-code show here. Import… takes a shared .zip, a .coastline file, an older .dd or .crproj job, a job folder or G-code files.")
+                        Text("Projects you save show here, with the jobs you ran on the machine.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     ForEach(recents, id: \.self) { url in
@@ -60,7 +37,6 @@ struct ProjectsPage: View {
                             .tag(ProjectsItem.project(url))
                             .contextMenu {
                                 Button("Open") { open(url) }
-                                Button("Export…") { model.exportProjectInteractively(url) }
                                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                                 Divider()
                                 Button("Remove from the List") { removeRecent(url) }
@@ -87,8 +63,7 @@ struct ProjectsPage: View {
                 guard let item = items.first else { return }
                 switch item {
                 case .project(let url): open(url)
-                case .example(let id): if let ex = ExamplePart.all.first(where: { $0.id == id }) { openExample(ex) }
-                case .job, .journal, .firstCut: break
+                case .job, .journal: break
                 }
             }
             .onDeleteCommand {
@@ -107,18 +82,10 @@ struct ProjectsPage: View {
             }
             Group {
                 switch selection {
-                case .firstCut:
-                    FirstCutView()
                 case .project(let url):
                     ProjectDetail(url: url, title: url.deletingPathExtension().lastPathComponent, summary: nil,
                                   icon: NSWorkspace.shared.icon(forFile: url.path)) { open(url) }
                         .id(url)
-                case .example(let id):
-                    if let ex = ExamplePart.all.first(where: { $0.id == id }) {
-                        ProjectDetail(url: FileManager.default.fileExists(atPath: ex.projectURL.path) ? ex.projectURL : nil, title: ex.title,
-                                      summary: ex.summary, icon: NSImage(contentsOf: ex.thumbnailURL)) { openExample(ex) }
-                            .id(id)
-                    }
                 case .job(let folder):
                     if let entry = model.jobs.entries.first(where: { $0.folder == folder }) {
                         JobPane(entry: entry)
@@ -129,26 +96,13 @@ struct ProjectsPage: View {
                     }
                 case nil:
                     ContentUnavailableView("No Project Selected", systemImage: "folder",
-                                           description: Text("Pick a project to see what's in it, or a job from the journal. Import… adds a project someone shared with you."))
+                                           description: Text("Pick a project to see what's in it, or a job from the journal."))
                 }
             }
             .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
         }
         .darkPanel()
         .navigationTitle("Projects")
-        .toolbar {
-            ToolbarItemGroup {
-                Button("Import…", systemImage: "square.and.arrow.down") { model.importProjectsInteractively() }
-                    .help("Add a project: a shared .zip, a .coastline file, an older .dd or .crproj job, a job folder or G-code files (⇧⌘O)")
-                Button("Export…", systemImage: "square.and.arrow.up") { exportSelection() }
-                    .disabled(!canExport)
-                    .help("Save the selected project as one .zip file to share")
-            }
-            ToolbarSpacer(.fixed)
-        }
-        .sheet(isPresented: Bindable(model.jobs).showNewJob) {
-            NewJobSheet().environment(model).tint(Theme.accent)
-        }
         .overlay(alignment: .bottom) {
             if let error = model.jobs.lastError {
                 ErrorBanner(text: error, shape: .capsule) { model.jobs.lastError = nil }.padding(20)
@@ -173,57 +127,26 @@ struct ProjectsPage: View {
                    icon: NSImage(systemSymbolName: "list.bullet.clipboard", accessibilityDescription: nil))
             .tag(ProjectsItem.job(entry.folder))
             .contextMenu {
-                Button("Export…") { model.exportJobInteractively(entry) }
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([entry.folder]) }
-                if !entry.preset {
                     Divider()
                     Button("Delete", role: .destructive) {
                         if selection == .job(entry.folder) { selection = nil }
                         model.jobs.delete(entry)
-                    }
                 }
             }
     }
 
-    /// "firstCut", "project:<path>", "job:<folder>": from an import, a link or a script.
+    /// "project:<path>", "job:<folder>": from an import, a link or a script.
     private func takePick() {
         guard let pick = model.projectsPick else { return }
         model.projectsPick = nil
         reloadRecents()
-        if pick == "firstCut" { selection = .firstCut }
-        else if pick.hasPrefix("project:") { selection = .project(URL(fileURLWithPath: String(pick.dropFirst(8)))) }
+        if pick.hasPrefix("project:") { selection = .project(URL(fileURLWithPath: String(pick.dropFirst(8)))) }
         else if pick.hasPrefix("job:") { selection = .job(URL(fileURLWithPath: String(pick.dropFirst(4)))) }
     }
 
-    private var canExport: Bool {
-        switch selection {
-        case .project, .job: true
-        case .example(let id): ExamplePart.all.first { $0.id == id }.map { FileManager.default.fileExists(atPath: $0.projectURL.path) } ?? false
-        default: false
-        }
-    }
-
-    private func exportSelection() {
-        switch selection {
-        case .project(let url): model.exportProjectInteractively(url)
-        case .example(let id): if let ex = ExamplePart.all.first(where: { $0.id == id }) { model.exportProjectInteractively(ex.projectURL) }
-        case .job(let folder): if let entry = model.jobs.entries.first(where: { $0.folder == folder }) { model.exportJobInteractively(entry) }
-        default: break
-        }
-    }
-
-    @AppStorage("firstCutDone") private var firstCutDone = ""
-
-    private var firstCutProgress: String {
-        let n = firstCutDone.split(separator: ",").count
-        return n == 0 ? "Stage by stage: air cut, wax, POM, aluminium" : "\(n) of \(FirstCut.stages.count) stages done"
-    }
-
-    private var examplePaths: Set<String> { Set(ExamplePart.all.map(\.projectURL.path)) }
-
-    /// The examples have their own section.
     private func reloadRecents() {
-        recents = AppModel.recentProjects.filter { !examplePaths.contains($0.path) }
+        recents = AppModel.recentProjects
     }
 
     private func removeRecent(_ url: URL) {
@@ -243,10 +166,6 @@ struct ProjectsPage: View {
         Task { await model.openProject(url) }
     }
 
-    private func openExample(_ ex: ExamplePart) {
-        model.page = .workspace
-        Task { await model.openExample(ex, inventory: inventory) }
-    }
 }
 
 private struct ProjectRow: View {
@@ -307,7 +226,7 @@ private struct ProjectSummary: Sendable {
 
     static func load(_ url: URL) -> ProjectSummary? {
         guard let data = try? Data(contentsOf: url), let p = try? JSONDecoder().decode(ProjectFile.self, from: data) else { return nil }
-        let programs = (p.results?.prepPrograms ?? []) + (p.results?.programs ?? [])
+        let programs = p.results?.programs ?? []
         var tools: [String] = []
         for t in programs.map(\.tool.name) where !tools.contains(t) { tools.append(t) }
         let material = p.stock?.material?.name
@@ -317,7 +236,7 @@ private struct ProjectSummary: Sendable {
             sides: p.twoSided ? "Two sides (A and B)" + (p.setup.holding == .custom ? "" : p.holdWithTabs ? ", held by tabs" : ", full web") : "One side",
             operations: p.operations.count, programs: programs.count, seconds: programs.reduce(0) { $0 + $1.seconds },
             tools: tools,
-            holding: p.setup.holding == .custom ? p.setup.customFixture.name : p.setup.onBed ? "On the bed (C-clamps)" : !(p.results?.prepPrograms.isEmpty ?? true) ? "Squared on the bed first, then the clamp kit" : "Clamp kit")
+            holding: p.setup.holding == .custom ? p.setup.customFixture.name : "Fixture library")
     }
 }
 

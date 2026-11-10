@@ -37,7 +37,7 @@ extension AppModel {
         guard part != nil, stock != nil else { errorMessage = "Load a part and choose stock, then place the fixture around it."; return }
         guard !isGenerating, !isPlanningJob, !isFindingPlans else { errorMessage = "Finish or cancel the current generation before placing a fixture."; return }
         guard !isSwitchingPlanningMachine else { errorMessage = "Wait for the selected machine to finish loading before placing a fixture."; return }
-        pause(); measuring = false; inspecting = false; gumballPrompt = nil; bedSelection = nil
+        pause(); measuring = false; inspecting = false; gumballPrompt = nil
         var draft: Fixture
         do { draft = try preparedFixture(setup.fixtureAssemblies?.first { $0.id == fixture.id } ?? fixture) }
         catch { errorMessage = error.localizedDescription; return }
@@ -54,7 +54,7 @@ extension AppModel {
         fixturePlacementGeometry = nil
         fixturePlacement = session
         page = .workspace; showInspector = true
-        show(side: 0, stage: 0)
+        show(side: 0)
         if machineModel == nil { await loadMachine() }
         await reloadPlacementGeometry(centreUnconfigured: true)
         guard fixturePlacement?.id == session.id else { return }
@@ -305,7 +305,7 @@ extension AppModel {
         renderer.scene.remove(id: "placement.snap")
         gumballDrag = nil; gumballPrompt = nil
         if save {
-            enter(.clampKit); page = .workspace
+            enter(.setups); page = .workspace
         } else {
             enter(session.returnStage); page = session.returnPage
             renderer.moveCamera(animated: false) { $0 = session.camera }

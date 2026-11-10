@@ -20,7 +20,7 @@ public struct Engraving: Codable, Equatable, Sendable {
     /// Which side it goes on (0 = A, the face; 1 = B, the back of a two-sided part).
     public var side = 0
     /// Probe the face first and follow it (uneven stock): the sender's contour mapping (SurfaceProbe).
-    /// Only on a flat face, conductive stock, in the insulated clamp kit.
+    /// Only on a flat face, conductive stock, with electrical probing.
     public var probeSurface: Bool?
     /// A decorative texture instead of the text (Texture: guilloché, clous de Paris…), at the
     /// same position, turn, depth and side.

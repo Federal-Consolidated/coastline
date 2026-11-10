@@ -11,24 +11,17 @@ import simd
 /// generation `checkTabs` checks the finished job the same way; a tab that doesn't hold fails
 /// side B's last program (the part would come loose in the cut).
 extension AppModel {
-    /// A one-sided part in the clamp kit cut free on tabs: the bar at most this much thicker than
+    /// A one-sided part cut free on tabs: the bar at most this much thicker than
     /// the part (the extra comes off the face; thicker bars keep the part on the back of the bar).
     static let throughMaxExcess = 3.0
 
-    /// How much thicker the bar is than the part, when a one-sided job in the clamp kit can cut
-    /// the part free on tabs (nil: two-sided, on the bed, or a bar too thick for it).
+    /// How much thicker the bar is than the part, when a one-sided job can cut the part free on
+    /// tabs (nil: two-sided, or a bar too thick for it).
     var oneSidedThroughExcess: Double? {
-        guard !twoSided, setup.usesClampKit, let part, let stock else { return nil }
+        guard !twoSided, let part, let stock else { return nil }
         let (lo, hi) = setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
         let e = setup.stockSize(stock).z - (hi.z - lo.z)
         guard e >= -0.01 && e <= Self.throughMaxExcess + 1e-9 else { return nil }
-        // Nothing may sit behind the cut: a parallel behind the outline (one clamp in the middle
-        // of a short bar) would be cut into. Then the part stays on the back of the bar.
-        if let k = clampKitLayout(stockSize: setup.stockSize(stock)) {
-            let pad = 6.0  // the widest finishing tool's radius and a margin
-            let y0 = kitCentreY + setup.partOffsetY - (hi.y - lo.y) / 2 - pad, y1 = kitCentreY + setup.partOffsetY + (hi.y - lo.y) / 2 + pad
-            if k.boxes.contains(where: { $0.id.hasPrefix("fixture.parallel") && $0.hi.y > y0 && $0.lo.y < y1 }) { return nil }
-        }
         return max(e, 0)
     }
 
@@ -229,7 +222,6 @@ extension AppModel {
     /// Generation's last check: a two-sided job held by tabs fails side B's last program when a
     /// tab doesn't hold, or when there are none (the part would fall into the cut).
     func checkTabs() async {
-        guard setup.usesClampKit else { return }
         guard (twoSided && holdWithTabs) || cutsThroughWithTabs, let pi = programs.lastIndex(where: { $0.side == tabSide }) else { return }
         guard !placedTabs.isEmpty else {
             programs[pi].report.issues.append(Issue(.error, "No holding tab could be placed: the last cut would free the part. \(twoSided ? "Use a full web (Setup ▸ Sides) or larger stock." : "Turn Hold with tabs off (Setup ▸ Sides): the part then stays on the back of the bar.")"))

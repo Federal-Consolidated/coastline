@@ -2,49 +2,6 @@ import CoastlineCore
 import MillCore
 import SwiftUI
 
-// MARK: - Work zero
-
-/// Under the position grid: the active work offset (G54…G59), Zero All, Set… and Undo.
-struct WorkZeroRow: View {
-    @Environment(AppModel.self) private var app
-    @State private var setting = false
-
-    var body: some View {
-        let mill = app.mill
-        let s = mill.snapshot
-        let blocked = s.gates.setup != nil
-        HStack(spacing: 10) {
-            Picker("Work offset", selection: Binding(get: { s.activeWCS }, set: { mill.selectWCS($0) })) {
-                ForEach(54...59, id: \.self) { Text("G\($0)").tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .fixedSize()
-            .disabled(blocked)
-            .help("The work offset that moves, programs and the Work column use (G54…G59)")
-            Spacer()
-            if let undo = mill.offsetUndo {
-                Button("Undo", systemImage: "arrow.uturn.backward") { mill.undoOffset() }
-                    .plainGlassButton()
-                    .disabled(blocked)
-                    .help(String(format: "Undo %@: put G%d back to X%.3f Y%.3f Z%.3f", undo.what, undo.wcs, undo.before.x, undo.before.y, undo.before.z))
-                    .accessibilityLabel("Undo \(undo.what)")
-            }
-            Button("Set…") { setting = true }
-                .plainGlassButton()
-                .disabled(blocked)
-                .help("Type the work coordinates of the current position")
-                .popover(isPresented: $setting, arrowEdge: .bottom) { SetWorkPopover() }
-            Button("Zero All") { mill.zero(MillCore.Axis.allCases) }
-                .buttonStyle(.glassProminent)
-                .disabled(blocked)
-                .help("Make the current position X0 Y0 Z0 in G\(s.activeWCS)")
-        }
-        if s.isOpen, let why = s.gates.setup, why != .notConnected {
-            Text(why.text).font(.caption).foregroundStyle(.secondary)
-        }
-    }
-}
-
 /// Typed work coordinates for the current position (G10 L20). Blank axes keep their offset.
 struct SetWorkPopover: View {
     @Environment(AppModel.self) private var app
@@ -83,60 +40,6 @@ struct SetWorkPopover: View {
     }
 }
 
-// MARK: - Spindle
-
-struct SpindleSection: View {
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        @Bindable var mill = app.mill
-        let s = mill.snapshot
-        let low = s.settings.values[31] ?? 0, high = s.settings.values[30] ?? 0
-        Section {
-            LabeledContent("Now", value: state(s))
-            HStack(spacing: 10) {
-                Text("Speed")
-                TextField("Speed", value: $mill.spindleRPM, format: .number.precision(.fractionLength(0)))
-                    .labelsHidden()
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 70)
-                Text("RPM").foregroundStyle(.secondary)
-                Stepper("Speed", value: $mill.spindleRPM, in: max(low, 0)...max(high, low, 1), step: 500)
-                    .labelsHidden()
-                Spacer()
-                Button("Start…", systemImage: "play.fill") { mill.showSpindleConfirm = true }
-                    .buttonStyle(.glassProminent)
-                    .disabled(s.gates.setup != nil)
-                    .help("M3: forward, the cutting direction")
-                Button("Stop", systemImage: "stop.fill") { mill.spindleOff() }
-                    .buttonStyle(.glass).tint(Theme.danger)
-                    .disabled(s.gates.console != nil)
-                    .help("M5")
-            }
-            if s.isOpen, let why = s.gates.setup, why != .notConnected {
-                Text(why.text).font(.caption).foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Spindle")
-        } footer: {
-            Text(high > 0 ? String(format: "%.0f–%.0f RPM ($31–$30). ", low, high) + note : note)
-        }
-    }
-
-    private var note: String {
-        "The state is what the controller reported last ($G). Stop, Soft Reset and the E-stop also stop the spindle."
-    }
-
-    private func state(_ s: MillSnapshot) -> String {
-        guard s.isOpen, let spindle = s.spindle else { return "—" }
-        switch spindle.mode {
-        case "M3": return String(format: "On, forward, %.0f RPM", spindle.rpm)
-        case "M4": return String(format: "On, reverse, %.0f RPM", spindle.rpm)
-        default: return "Off"
-        }
-    }
-}
-
 /// Confirms Spindle Start, like the Home sheet.
 struct SpindleConfirmSheet: View {
     let rpm: Double
@@ -166,60 +69,6 @@ struct SpindleConfirmSheet: View {
         }
         .padding(20)
         .frame(width: 420)
-    }
-}
-
-// MARK: - Overrides
-
-struct OverridesSection: View {
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        let mill = app.mill
-        let s = mill.snapshot
-        let o = s.overrides
-        Section {
-            row("Feed", o.feed, minus10: .feedMinus10, minus1: .feedMinus1, reset: .feedReset, plus1: .feedPlus1, plus10: .feedPlus10)
-            LabeledContent("Rapid") {
-                Picker("Rapid", selection: Binding(get: { o.rapid }, set: { value in
-                    mill.override(value == 25 ? .rapid25 : value == 50 ? .rapid50 : .rapid100)
-                })) {
-                    Text("25%").tag(25)
-                    Text("50%").tag(50)
-                    Text("100%").tag(100)
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .fixedSize()
-            }
-            row("Spindle", o.spindle, minus10: .spindleMinus10, minus1: .spindleMinus1, reset: .spindleReset, plus1: .spindlePlus1, plus10: .spindlePlus10)
-        } header: {
-            Text("Overrides")
-        } footer: {
-            Text(o.reported
-                 ? "As the controller reports them. They act at once, also while a program runs."
-                 : "They act at once, also while a program runs. The machine does not report them: these are what Coastline sent since the last restart, and a restart sets them back to 100%.")
-        }
-        .disabled(!s.isOpen)
-    }
-
-    private func row(_ name: String, _ value: Int, minus10: MillOverride, minus1: MillOverride, reset: MillOverride,
-                     plus1: MillOverride, plus10: MillOverride) -> some View {
-        let mill = app.mill
-        return LabeledContent(name) {
-            HStack(spacing: 6) {
-                Button("−10") { mill.override(minus10) }.help("\(name) −10%")
-                Button("−1") { mill.override(minus1) }.help("\(name) −1%")
-                Text("\(value)%")
-                    .font(.body.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(value == 100 ? .primary : Theme.warning)
-                    .frame(width: 52)
-                Button("+1") { mill.override(plus1) }.help("\(name) +1%")
-                Button("+10") { mill.override(plus10) }.help("\(name) +10%")
-                Button("100%") { mill.override(reset) }.help("\(name) back to 100%")
-            }
-            .plainGlassButton()
-        }
     }
 }
 

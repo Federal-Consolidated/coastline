@@ -321,7 +321,7 @@ let libraryWorkholdingTests: [TestCase] = [
         }
         var input = GuidedJobBuilder.Input(partName: "Test", material: MaterialLibrary.material(id: "al-6061")!,
             stock: StockItem(materialID: "al-6061", sizeX: 20, sizeY: 20, sizeZ: 10), stockSize: libraryStock,
-            setupName: "Library", programs: programs, checkpoints: [], measuring: [], setupImage: nil, squareStockFirst: false)
+            setupName: "Library", programs: programs, checkpoints: [], measuring: [], setupImage: nil)
         try expectThrows { try GuidedJobBuilder.validateWorkholding(input) }
         for i in plan.steps.indices { plan.steps[i].reviewed = true; programs[i].workholding = plan.steps[i] }
         input.programs = programs

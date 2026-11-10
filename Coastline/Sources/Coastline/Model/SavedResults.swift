@@ -9,11 +9,7 @@ import Foundation
 struct SavedResults: Codable, Equatable {
     var version = 1
     var programs: [Program]
-    var prepPrograms: [Program]
     var sides: [Side]
-    var prep: [Side]
-    var autoProtrusion: Double?
-    var bridgeNote: String?
     var placedTabs: [PlacedTab]
     /// Their Z range as generated (older files: from the split).
     var placedTabZ: [Double]? = nil
@@ -147,9 +143,8 @@ extension AppModel {
     /// The generated job as it stands, for saving (nil while generating or with nothing made).
     var savedResults: SavedResults? {
         guard !isGenerating, !programs.isEmpty, !sideResults.isEmpty else { return nil }
-        return SavedResults(programs: programs.map(SavedResults.Program.init), prepPrograms: prepPrograms.map(SavedResults.Program.init),
-                            sides: sideResults.map(SavedResults.Side.init), prep: prepResults.map(SavedResults.Side.init),
-                            autoProtrusion: autoProtrusion, bridgeNote: bridgeNote, placedTabs: placedTabs, placedTabZ: placedTabZ.map { [$0.lowerBound, $0.upperBound] }, generatedTuning: generatedTuning,
+        return SavedResults(programs: programs.map(SavedResults.Program.init), sides: sideResults.map(SavedResults.Side.init),
+                            placedTabs: placedTabs, placedTabZ: placedTabZ.map { [$0.lowerBound, $0.upperBound] }, generatedTuning: generatedTuning,
                             travelIssue: travelIssue, referencePlan: referencePlan, libraryWorkholdingPlan: libraryWorkholdingPlan,
                             machine: planningMachineReference, resources: savedResourceSnapshot)
     }
@@ -167,37 +162,30 @@ extension AppModel {
             status = "Job resources changed · Regenerate toolpaths"
             return false
         }
-        autoProtrusion = r.autoProtrusion
         referencePlan = r.referencePlan
         libraryWorkholdingPlan = r.libraryWorkholdingPlan
         selectedLibraryStep = r.libraryWorkholdingPlan?.steps.first?.id
         generatedTuning = r.generatedTuning
         tuning = r.generatedTuning
-        prepPrograms = r.prepPrograms.map(\.program)
-        prepResults = r.prep.map(\.result)
         programs = r.programs.map(\.program)
         sideResults = r.sides.map(\.result)
         placedTabs = r.placedTabs
         placedTabZ = r.placedTabZ.flatMap { $0.count == 2 && $0[0] <= $0[1] ? $0[0]...$0[1] : nil }
-        bridgeNote = r.bridgeNote
         travelIssue = r.travelIssue
         plannedPrograms = []
         plannedOperationCount = Dictionary(uniqueKeysWithValues: sideResults.map { ($0.side, $0.planned.count) })
         toolpaths = Dictionary(((sideResults.first { $0.side == 0 } ?? sideResults.first)?.paths ?? []).map { ($0.operationID, $0) }, uniquingKeysWith: { a, _ in a })
         switchingView = true
         viewSide = 0
-        prepStage = 0
         switchingView = false
-        // Framed as a new job is (the table at rest), then at chapter 1, step 1: the stock as
-        // bought for a job with prep, else side A's clamping.
+        // Framed as a new job is (the table at rest), then at chapter 1, step 1.
         setView(.iso)
         focusWork()
-        updateKitShift()
         computeSideAFinal()
         prepareToolChangeSpot()
         showSide(at: 0)
         if let first = jobSteps.first { go(to: first) }
-        status = "Toolpaths from the project · about \(Self.duration(programs.reduce(0) { $0 + $1.seconds } + prepPrograms.reduce(0) { $0 + $1.seconds })) of machining"
+        status = "Toolpaths from the project · about \(Self.duration(programs.reduce(0) { $0 + $1.seconds })) of machining"
         if setup.planFromFixtureLibrary { Task { await reloadSavedLibraryGeometry() } }
         return true
     }

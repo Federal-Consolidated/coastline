@@ -58,12 +58,11 @@ public enum SetupSide {
 
 extension Setup {
     /// This side-A setup turned so `side` (SetupSide index) faces the spindle, for the same stock:
-    /// the part keeps its place in the stock. nil when the setup can't be turned (stock prep,
-    /// shoulders or copies change the stock in side A's frame only).
+    /// the part keeps its place in the stock. nil when the setup can't be turned (side B).
     public func forSide(_ side: Int, partMin lo: SIMD3<Double>, partMax hi: SIMD3<Double>, stock: StockItem) -> Setup? {
         if side == 0 { return self }
         if side == 1 { return sideB(partMin: lo, partMax: hi, stock: stock) }
-        guard (2...5).contains(side), !flipped, downsizeHeight == nil, prepLength == nil, shoulders == nil, copies == 1 else { return nil }
+        guard (2...5).contains(side), !flipped else { return nil }
         let a = stockSize(stock)
         let axis = side < 4 ? 1 : 0
         let quarter = [2: -1, 3: 1, 4: 1, 5: -1][side]!
@@ -82,7 +81,6 @@ extension Setup {
         out.partOffsetX = (nlo.x + nhi.x) / 2
         out.partOffsetY = (nlo.y + nhi.y) / 2
         out.topAllowance = -nhi.z
-        out.kitClampShift = []
         return out
     }
 }

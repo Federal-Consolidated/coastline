@@ -88,7 +88,7 @@ extension AppModel {
         undercutOverlayShown = false
         // Drawn on the part in side A's clamping only (the prep shows the bare stock; side B has
         // the part turned over).
-        guard showUndercutOverlay, let a = analysis, !a.undercutTriangles.isEmpty, let stock, let part, !showingMillDown, viewSide != 1 else { return }
+        guard showUndercutOverlay, let a = analysis, !a.undercutTriangles.isEmpty, let stock, let part, viewSide != 1 else { return }
         // The triangles are in the work frame of the analysis. Moved since: follow the part at
         // once. Turned or scaled: those are different faces, so nothing until the new analysis.
         let now = workTransform(part)
@@ -333,7 +333,7 @@ extension AppModel {
             if !inventory.tools.contains(where: { $0.id == t.id }) { library.add(t, to: \.tools) }
             status = "Added the \(t.name) to your tools, to buy."
         case .reviewSetups:
-            enter(.clampKit)
+            enter(.setups)
         case .setStickout:
             break  // a value to set on the tool yourself (shown as text)
         }

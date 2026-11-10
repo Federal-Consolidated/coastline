@@ -123,27 +123,4 @@ let planningMachineReferenceTests: [TestCase] = [
         badLegacy["legacyProfile"] = profile
         try expectThrows { _ = try JSONDecoder().decode(PlanningMachineReference.self, from: JSONSerialization.data(withJSONObject: badLegacy)) }
     },
-    TestCase(name: "sharedProjectRetainsMachineSnapshot") {
-        let package = try MachineDefinitionPackage.load(from: planningPackageURL)
-        let reference = try PlanningMachineReference(definition: package.definition)
-        let scratch = try planningScratch()
-        defer { try? FileManager.default.removeItem(at: scratch) }
-        let part = scratch.appendingPathComponent("reference.step")
-        try "ISO-10303-21;".write(to: part, atomically: true, encoding: .utf8)
-        let record = try JSONSerialization.jsonObject(with: JSONEncoder().encode(reference))
-        let object: [String: Any] = ["version": 1, "partPath": part.path, "machine": record]
-        let project = scratch.appendingPathComponent("Test.coastline")
-        try JSONSerialization.data(withJSONObject: object).write(to: project)
-        let archive = scratch.appendingPathComponent("Test.zip")
-        try ProjectShare.exportProject(project, to: archive)
-        guard case .project(let shared)? = try ProjectShare.unpack(archive, into: scratch.appendingPathComponent("imported")) else {
-            throw TestFailure(description: "Shared archive did not contain a project.")
-        }
-        let imported = try JSONSerialization.jsonObject(with: Data(contentsOf: shared)) as! [String: Any]
-        let restored = try JSONDecoder().decode(PlanningMachineReference.self,
-                                               from: JSONSerialization.data(withJSONObject: imported["machine"]!))
-        try expectEqual(restored, reference)
-        // The share carries the machine identity, not an implicit substitute for missing model assets.
-        try expectThrows { _ = try restored.resolve(in: []) }
-    },
 ]

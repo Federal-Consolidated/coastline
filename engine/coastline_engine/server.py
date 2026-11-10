@@ -152,56 +152,6 @@ def _machine_model(params, blobs):
     }, out
 
 
-def _height_field(params, blobs):
-    """params: {part_id, transform, x0, y0, cell, cols, rows} → the part's top height (work Z)
-    at each cell centre (row-major, NaN off the part): the reference for the deviation map."""
-    import opencamlib as ocl
-
-    from .cam import geometry as g
-    from .cam import surface3d as S3
-
-    part = PARTS[params["part_id"]]
-    geo = g.PartGeometry(part.mesh.vertices, part.mesh.indices, _work_transform(params))
-    cols, rows = int(params["cols"]), int(params["rows"])
-    xs = float(params["x0"]) + float(params["cell"]) * np.arange(cols)
-    ys = float(params["y0"]) + float(params["cell"]) * np.arange(rows)
-    X, Y = np.meshgrid(xs, ys)  # rows × cols
-    floor = geo.zmin - 1.0
-    surf = S3.Surface(geo, ocl.CylCutter(0.02, 100), floor)
-    z = surf.drop(np.c_[X.ravel(), Y.ravel()])
-    z = np.where(z <= floor + 1e-6, np.nan, z).astype("<f4")
-    return {"cols": cols, "rows": rows}, [z.tobytes()]
-
-
-def _nest(params, blobs):
-    """params: {part_id, transform (the setup that machines the part: the face held in the nest
-    down), clearance?, wall?, floor?, min_height?, cell?} → the nest's facts and its binary STL."""
-    from .cam import geometry as g
-    from .cam import nest as N
-
-    part = PARTS[params["part_id"]]
-    m = _work_transform(params)
-    turn = np.diag([1.0, -1.0, -1.0, 1.0])  # over about X
-    geo = g.PartGeometry(part.mesh.vertices, part.mesh.indices, m)
-    flipped = g.PartGeometry(part.mesh.vertices, part.mesh.indices, turn @ m)
-    r = N.build(geo, flipped, cell=float(params.get("cell", 0.15)), clearance=float(params.get("clearance", 0.1)),
-                wall=float(params.get("wall", 4.0)), floor=float(params.get("floor", 3.0)),
-                min_height=float(params.get("min_height", 24.0)))
-    tris = r.pop("triangles")
-    return dict(r, triangles=int(len(tris))), [N.stl_bytes(tris)]
-
-
-def _fixture_kit(params, blobs):
-    """→ the clamp kit's parts [{kit, name, role, color}] with 3 blobs each, kit-local frames."""
-    from .fixture_kit import load
-
-    parts = load()
-    out = []
-    for p in parts:
-        out += _mesh_blobs(p["mesh"])
-    return {"parts": [{k: p[k] for k in ("kit", "name", "role", "color")} for p in parts]}, out
-
-
 def _work_transform(params) -> np.ndarray:
     return np.asarray(params["transform"], float).reshape(4, 4)  # row-major part → work
 
@@ -431,7 +381,6 @@ def _recognise(params, blobs):
 
 
 HANDLERS = {
-    "nest": _nest,
     "recognise": _recognise,
     "ping": _ping,
     "import_part": _import_part,
@@ -441,8 +390,6 @@ HANDLERS = {
     "machine_model": _machine_model,
     "features": _features,
     "generate": _generate,
-    "fixture_kit": _fixture_kit,
-    "height_field": _height_field,
     "analyse": _analyse,
 }
 

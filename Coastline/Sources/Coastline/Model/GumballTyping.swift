@@ -47,21 +47,6 @@ extension AppModel {
             let limited = placementLimited(s)
             if limited != s { status = "Moved as far as the part's frame allows." }
             setup = limited
-        case .bed(.stop):
-            let r = stopRange
-            editPrep { $0.stopShiftY = min(max($0.stopShiftY + v, -r), r) }
-        case .bed(.clamp(let i)):
-            if prompt.isRing {
-                let p = currentBedPlacement
-                let a = (p.map { i < $0.clampAngles.count ? $0.clampAngles[i] : 0 } ?? 0) + v * .pi / 180
-                setClampAngle(i, a)
-            } else {
-                editPrep { if prompt.axis == "gumball.y" { $0.clamps[i].dy += v } else { $0.clamps[i].dz += v } }
-            }
-        case .bed(.kitClamp(let i)):
-            setKitClampShift(i, kitClampShift(i) + v)
-        case .bed(.kitStock):
-            setProtrusion(effectiveProtrusion + v)
         }
     }
 }

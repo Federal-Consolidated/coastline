@@ -25,7 +25,6 @@ let suites: [(String, [TestCase])] = [
     ("Feasibility", feasibilityTests),
     ("DFM", dfmTests),
     ("DFMEngine", dfmEngineTests),
-    ("Fixture", fixtureTests),
     ("LibraryWorkholding", libraryWorkholdingTests),
     ("FixtureAssembly", fixtureAssemblyTests),
     ("VettedFixtureAssembly", vettedFixtureAssemblyTests),
@@ -33,13 +32,10 @@ let suites: [(String, [TestCase])] = [
     ("FixtureMechanism", fixtureMechanismTests),
     ("SetupSide", setupSideTests),
     ("FixtureSnap", fixtureSnapTests),
-    ("Tuner", tunerTests),
     ("Journal", journalTests),
     ("Triage", triageTests),
-    ("PrepGeometry", prepGeometryTests),
     ("Program", programTests),
     ("Dexel", dexelTests),
-    ("Share", shareTests),
 ]
 
 setvbuf(stdout, nil, _IONBF, 0)

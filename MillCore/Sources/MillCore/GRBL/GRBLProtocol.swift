@@ -40,7 +40,7 @@ final class GRBLProtocol: @unchecked Sendable {
             var code = -1
             var message = ""
             if version == .v1_1 {
-                guard let parsed = ManifestParser.leadingInteger(rest) else { throw MillError(.grblError, rest) }
+                guard let parsed = GRBLText.leadingInteger(rest) else { throw MillError(.grblError, rest) }
                 code = parsed
             } else {
                 message = rest
@@ -90,7 +90,7 @@ final class GRBLProtocol: @unchecked Sendable {
             var code = -1
             var description = ""
             if version == .v1_1 {
-                code = ManifestParser.leadingInteger(rest) ?? -1
+                code = GRBLText.leadingInteger(rest) ?? -1
             } else {
                 description = rest
             }
@@ -238,7 +238,7 @@ struct PositionAccumulator {
                 // Remove the first '.', then stoi ("38.2" → 382, "10L2P1" → 10).
                 var digits = param
                 if let dot = digits.firstIndex(of: ".") { digits.remove(at: dot) }
-                guard let number = ManifestParser.leadingInteger(digits) else { continue }
+                guard let number = GRBLText.leadingInteger(digits) else { continue }
                 if number == 53 { useWCS = false }
                 else if number == 90 || number == 91 { distanceMode = number }
             }

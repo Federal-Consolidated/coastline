@@ -36,15 +36,11 @@ final class GenerationRun {
     /// into async calls trip Swift's task allocator ("freed pointer was not the last allocation").
     var boxMin = SIMD3<Double>(repeating: 0)
     var boxMax = SIMD3<Double>(repeating: 0)
-    var strips: [(min: SIMD2<Double>, max: SIMD2<Double>)] = []
-    /// The clamp kit's reachable work X (nil: not in the kit, or not known).
-    var kitXRange: ClosedRange<Double>?
     var jobs: [(side: Int, k: Int)] = []
     var next = 0
     /// Per side, per operation: the toolpaths once done.
     var done: [[[OperationToolpath]?]] = []
     var failed: [(side: Int, k: Int, message: String)] = []
-    var bridged = 0.0
     /// Per side: how many operations from its start are shown.
     var published: [Int] = []
     var lastPublish = Date.distantPast
@@ -89,7 +85,7 @@ extension AppModel {
         let fixture = (try? enc.encode(s)).map { $0.hashValue } ?? 0
         let profile = (try? planningMachineReference.fingerprint()) ?? String(describing: machine)
         let resources = (try? enc.encode(savedResourceSnapshot)).map { $0.hashValue } ?? 0
-        return "\(profile)|\(ops)|\(resources)|\(stockID?.uuidString ?? "")|\(twoSided)|\(fixture)|\(AppSettings.shared.clampKitProbing.rawValue)"
+        return "\(profile)|\(ops)|\(resources)|\(stockID?.uuidString ?? "")|\(twoSided)|\(fixture)"
     }
 
     func genState(for opID: UUID) -> GenState? {
@@ -210,11 +206,9 @@ extension AppModel {
         }
     }
 
-    /// What every operation's result goes through: warnings the plan handles become notes,
-    /// copies along the bar, and the grip strips kept uncut.
+    /// What every operation's result goes through: warnings the plan handles become notes.
     private func finishJob(_ one: [OperationToolpath], k: Int, si: Int, run: GenerationRun) -> [OperationToolpath] {
         let sp = run.sides[si]
-        let strips = run.strips
         let p = sp.planned[k]
         var clipped = one
         // "Too big for these pockets" is no warning when a smaller tool comes later for exactly
@@ -223,74 +217,6 @@ extension AppModel {
             let t = WarningTriage.split(clipped[i].warnings, at: k, in: sp.planned)
             clipped[i].warnings = t.warnings
             clipped[i].notes += t.notes
-        }
-        // Batching: the same cuts for every copy along the bar (facing once for all).
-        if setup.copies > 1, p.operation.kind != .facing {
-            clipped = clipped.map { batched($0, offsets: copyOffsets(for: sp.setup)) }
-        }
-        if p.operation.kind != .facing {
-            for i in clipped.indices {
-                // The strips under the jaws are never faced (side B's backing comes off only around
-                // the part): anything below their top (z 0) would cut what the jaws hold.
-                let (m, skipped) = GripZones.clip(clipped[i].moves, tool: p.tool, strips: strips, below: -0.05,
-                                                  plungeFeed: p.data.plungeFeed)
-                clipped[i].moves = m
-                run.bridged += skipped
-            }
-        }
-        // Within the machine's X travel (the bar's top edge can sit right at it): a move past it is
-        // brought back to the limit; an arc that would end past it becomes a straight line.
-        if let xr = run.kitXRange {
-            // Brought back toward the part, a cut could reach into it: where the tool, held at
-            // the limit, would overlap the part's outline box (alongside it, below the face),
-            // the operation fails instead (the bar must sit lower or higher in the kit).
-            let r = p.tool.diameter / 2
-            let px = sp.partX, py = sp.partY
-            var into = 0, worst = 0.0
-            // Does a straight move from a to b (tool radius r) come near the part's box?
-            func nearPart(_ a: SIMD3<Double>, _ b: SIMD3<Double>) -> Bool {
-                let lo = SIMD2(px.lowerBound - r - 0.05, py.lowerBound - r - 0.05), hi = SIMD2(px.upperBound + r + 0.05, py.upperBound + r + 0.05)
-                for k in 0...20 {
-                    let t = Double(k) / 20, q = a + (b - a) * t
-                    if q.z < -0.05, q.x > lo.x, q.x < hi.x, q.y > lo.y, q.y < hi.y { return true }
-                }
-                return false
-            }
-            for i in clipped.indices {
-                var startMoved = false  // an arc's centre is relative to its start
-                var out: [Move] = []
-                out.reserveCapacity(clipped[i].moves.count)
-                for m in clipped[i].moves {
-                    let beyond = m.x < xr.lowerBound || m.x > xr.upperBound
-                    defer { startMoved = beyond }
-                    guard beyond || startMoved else { out.append(m); continue }
-                    var q = m
-                    q.x = min(max(m.x, xr.lowerBound), xr.upperBound)
-                    if q.motion != .line { q.motion = .line; q.i = 0; q.j = 0 }
-                    let from = out.last?.position ?? q.position
-                    if !beyond, m.motion == .line, m.role == .rapid || !nearPart(from, q.position) { out.append(m); continue }
-                    if m.role != .rapid, !beyond, nearPart(from, q.position) {
-                        // From a clamped start, the move (an arc becomes a chord) would cross the
-                        // part: up and over instead (only frame is left standing).
-                        let up = max(from.z, q.position.z, 0) + 3
-                        out.append(Move(.rapid, x: from.x, y: from.y, z: up))
-                        out.append(Move(.rapid, x: q.x, y: q.y, z: up))
-                        out.append(Move(.plunge, x: q.x, y: q.y, z: q.z, feed: p.data.plungeFeed))
-                        continue
-                    }
-                    let pushed = abs(q.x - m.x)
-                    if m.role != .rapid, pushed > 0.02, m.z < -0.05, m.y > py.lowerBound - r, m.y < py.upperBound + r {
-                        // Pulled down from above: its lower edge vs the part's top; pulled up: the reverse.
-                        let overlap = q.x < m.x ? (px.upperBound - (q.x - r)) : ((q.x + r) - px.lowerBound)
-                        if overlap > 0.02 { into += 1; worst = max(worst, min(overlap, pushed)) }
-                    }
-                    out.append(q)
-                }
-                clipped[i].moves = out
-            }
-            if into > 0, !clipped.isEmpty {
-                clipped[0].warnings.append(Self.outOfReach + " \(into) cutting move\(into == 1 ? "" : "s") of this ⌀\(Length.mm(p.tool.diameter)) mm tool would have to stop up to \(Length.mm(worst)) mm short at the machine's X travel, inside the part's outline. Lower the bar in the kit (Clamp kit: bottom shoulders or parallels) so the part's edge plus the tool's radius is within reach.")
-            }
         }
         return clipped
     }
@@ -367,14 +293,10 @@ extension AppModel {
         sideResults = results
         toolpaths = Dictionary(((results.first { $0.side == 0 } ?? results.first)?.paths ?? []).map { ($0.operationID, $0) }, uniquingKeysWith: { a, _ in a })
         if viewSide >= 0, !results.contains(where: { $0.side == viewSide }) { viewSide = results.first?.side ?? 0 }
-        // In Machining the stock prep's view has nothing yet (its programs come at the end):
-        // the first toolpaths show on side A.
-        // The prep's programs were made first: the job starts there (chapter 1). Without a prep,
-        // side A from its start.
-        if first && viewSide < 0 && prepResults.isEmpty && (stage == .machining || stage == .review) {
+        // The first toolpaths show on side A from its start.
+        if first && viewSide < 0 && (stage == .machining || stage == .review) {
             switchingView = true
             viewSide = 0
-            prepStage = 0
             switchingView = false
         }
         // Side A complete: its final state for side B's simulation (the back) from now on.

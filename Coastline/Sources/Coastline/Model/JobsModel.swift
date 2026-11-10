@@ -8,16 +8,13 @@ import UniformTypeIdentifiers
 import Viewport
 import simd
 
-/// G-code projects (program jobs): guided jobs around G-code that already exists, listed on the
-/// Projects page with the planned projects. Those you import (a job folder, a shared zip, an
-/// older `.dd`) or make from your own G-code are kept in Application Support/Coastline/Jobs; a
-/// build can also ship presets in resources/jobs (none by default).
+/// Generated jobs run on the machine: each "Run on Machine…" writes the job's programs and steps
+/// to a folder in Application Support/Coastline/Jobs, listed on the Projects page and run from there.
 @MainActor @Observable
 final class JobsModel {
     struct Entry: Identifiable, Equatable {
         let folder: URL
         let job: ProgramJob
-        let preset: Bool
         var id: URL { folder }
     }
 
@@ -27,9 +24,6 @@ final class JobsModel {
     var choices: [String: [String: String]] = [:]
     /// The program shown in the 3D preview.
     var previewProgram: String?
-    var showNewJob = false
-    /// G-code files chosen in Import, for the New Project from G-code sheet.
-    var pendingGCode: [URL] = []
     var lastError: String?
     /// Read programs, by `folder|program id`.
     private(set) var programs: [String: GCodeReader.Program] = [:]
@@ -46,7 +40,6 @@ final class JobsModel {
     static var userFolder: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Coastline/Jobs")
     }
-    static var presetFolder: URL { AppModel.repoRoot.appendingPathComponent("resources/jobs") }
 
     init() {
         guard let device = MTLCreateSystemDefaultDevice(), let renderer = try? ViewportRenderer(device: device) else {
@@ -67,11 +60,9 @@ final class JobsModel {
 
     func reload() {
         var list: [Entry] = []
-        for (base, preset) in [(Self.presetFolder, true), (Self.userFolder, false)] {
-            let folders = (try? FileManager.default.contentsOfDirectory(at: base, includingPropertiesForKeys: nil)) ?? []
-            for folder in folders.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-                if let job = try? ProgramJob.load(folder) { list.append(Entry(folder: folder, job: job, preset: preset)) }
-            }
+        let folders = (try? FileManager.default.contentsOfDirectory(at: Self.userFolder, includingPropertiesForKeys: nil)) ?? []
+        for folder in folders.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            if let job = try? ProgramJob.load(folder) { list.append(Entry(folder: folder, job: job)) }
         }
         entries = list
         if selected == nil { selection = list.first?.folder }
@@ -599,77 +590,12 @@ final class JobsModel {
         return read.relativeMoves == 0
     }
 
-    // MARK: New jobs
-
-    /// Imports an old .dd job: each of its jobs becomes a choice, its photos are left out.
-    func importDD(_ url: URL) {
-        let folder = Self.userFolder.appendingPathComponent(PackageImport.slug(url.deletingPathExtension().lastPathComponent))
-        do {
-            try? FileManager.default.removeItem(at: folder)
-            _ = try PackageImport.run(url, into: folder)
-            reload()
-            selection = folder
-        } catch {
-            lastError = "Couldn't import \(url.lastPathComponent): \(error)"
-        }
-    }
-
-    /// A guided job around your own G-code files.
-    func newJob(files: [URL], title: String, tool: ProgramJob.ToolSpec, workOffset: Int) {
-        let folder = Self.userFolder.appendingPathComponent(PackageImport.slug(title).isEmpty ? UUID().uuidString : PackageImport.slug(title))
-        do {
-            let texts = try files.map { ($0.lastPathComponent, try String(contentsOf: $0, encoding: .utf8)) }
-            try? FileManager.default.removeItem(at: folder)
-            _ = try ProgramJob.fromGCode(texts, title: title, tool: tool, workOffset: workOffset, into: folder)
-            reload()
-            selection = folder
-        } catch {
-            lastError = "Couldn't make the job: \(error)"
-        }
-    }
-
     func delete(_ entry: Entry) {
-        guard !entry.preset else { return }
         try? FileManager.default.removeItem(at: entry.folder)
         if selection == entry.folder { selection = nil }
         reload()
     }
 
-    /// Adds a job folder (with its job.json) to your jobs: a copy, so the original can move.
-    func addJobFolder(_ url: URL) {
-        do {
-            let job = try ProgramJob.load(url)
-            let problems = job.problems(in: url)
-            guard problems.isEmpty else {
-                lastError = "\(url.lastPathComponent) can't be added: \(problems.joined(separator: " "))"
-                return
-            }
-            let folder = Self.userFolder.appendingPathComponent(PackageImport.slug(job.id).isEmpty ? UUID().uuidString : PackageImport.slug(job.id))
-            try FileManager.default.createDirectory(at: Self.userFolder, withIntermediateDirectories: true)
-            try? FileManager.default.removeItem(at: folder)
-            try FileManager.default.copyItem(at: url, to: folder)
-            reload()
-            selection = folder
-        } catch {
-            lastError = "Couldn't add \(url.lastPathComponent): \(error)"
-        }
-    }
-
-    func chooseJobFolder() {
-        let panel = NSOpenPanel()
-        panel.title = "Add a Job"
-        panel.message = "Choose a job folder (it holds job.json, programs and models)."
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        if panel.runModal() == .OK, let url = panel.url { addJobFolder(url) }
-    }
-
-    func chooseDDFile() {
-        let panel = NSOpenPanel()
-        panel.title = "Import a .dd Job"
-        panel.allowedContentTypes = [.init(filenameExtension: "dd"), .init(filenameExtension: "crproj"), .zip].compactMap { $0 }
-        if panel.runModal() == .OK, let url = panel.url { importDD(url) }
-    }
 }
 
 extension Automation {

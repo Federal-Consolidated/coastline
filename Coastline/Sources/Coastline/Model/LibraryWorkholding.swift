@@ -54,8 +54,7 @@ extension AppModel {
     }
 
     func enableLibraryPlanning() {
-        choose(.custom)
-        var s = setup
+        var s = setup.selectingHolding(.custom)
         s.planFromFixtureLibrary = true
         setup = s
         twoSidedChosen = false
@@ -68,8 +67,8 @@ extension AppModel {
     }
 
     func libraryOrigin(fixture: Fixture, stock s: SIMD3<Double>) -> SIMD3<Double> {
-        SIMD3(prepTable.topX + fixture.height + s.x / 2, travelCentreY,
-              prepTable.northZ + (fixture.planning?.facePastTable ?? 0))
+        SIMD3(tableGeometry.topX + fixture.height + s.x / 2, travelCentreY,
+              tableGeometry.northZ + (fixture.planning?.facePastTable ?? 0))
     }
 
     /// Machine coordinates of stock zero with zero tool stick-out. The planner subtracts
@@ -137,7 +136,7 @@ extension AppModel {
                 let placedMesh = geometry.workMesh(profile: profile)
                 let stateKey = fixtureStateKey(fixture)
                 libraryFixtureMeshes[stateKey] = placedMesh
-                let origin = libraryOrigin(fixture: fixture, stock: s), table = prepTable
+                let origin = libraryOrigin(fixture: fixture, stock: s), table = tableGeometry
                 let centre = travelCentreY
                 guard let machineOrigin = libraryMachineOrigin(fixture: fixture, stock: s) else {
                     throw EngineClient.EngineError(type: "Machine", message: "The machine placement isn't available.")
@@ -296,7 +295,7 @@ extension AppModel {
 
     func inspectLibraryStep(_ step: LibraryWorkholdingPlan.Step) {
         selectedLibraryStep = step.id
-        if viewSide != step.side { show(side: step.side, stage: 0) }
+        if viewSide != step.side { show(side: step.side) }
         if let p = programs.first(where: { $0.workholdingStep?.id == step.id }),
            let entry = timeline.entries.first(where: { $0.program == p.index }) { seek(entry.tStart) }
         layoutScene()

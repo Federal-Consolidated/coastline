@@ -38,7 +38,6 @@ struct MachiningInspector: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 if !model.operations.isEmpty {
-                    TunerSection().id("tuner")
                     Section("Operations") {
                         ForEach($model.operations) { $op in
                             OperationRow(operation: $op)
@@ -250,24 +249,7 @@ struct ResultsSection: View {
 
     var body: some View {
         Section {
-            LabeledContent("Machining time", value: "≈ " + AppModel.duration((model.programs + model.prepPrograms).reduce(0) { $0 + $1.seconds }))
-            if let note = model.bridgeNote {
-                Label(note, systemImage: "rectangle.connected.to.line.below").font(.caption).foregroundStyle(Theme.warning)
-            }
-            ForEach(model.prepPrograms) { p in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Image(systemName: p.report.passed ? "checkmark.shield.fill" : "xmark.shield.fill")
-                            .foregroundStyle(p.report.passed ? Theme.ok : Theme.danger)
-                            .accessibilityLabel(p.report.passed ? "Passed safety check" : "Failed safety check")
-                        Text("Prep · \(p.opsTitle)").font(.callout.weight(.medium)).lineLimit(1)
-                            .help("Prep · \(p.opsTitle)")
-                    }
-                    Text("\(p.tool.name) · on the side clamps · \(p.report.lineCount) lines · ≈ \(AppModel.duration(p.seconds))")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .help("Squaring and milling the stock down to fit the clamp kit, on the acetal brick and eccentric clamps. Buying stock the right size saves this time.")
-            }
+            LabeledContent("Machining time", value: "≈ " + AppModel.duration(model.programs.reduce(0) { $0 + $1.seconds }))
             if model.twoSided, let part = model.part, let stock = model.stock {
                 let b = model.setupFor(side: 1)
                 let (lo, hi) = model.setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
@@ -296,13 +278,6 @@ struct ResultsSection: View {
             if model.jobs.run != nil {
                 Button("Return to Guided Mode", systemImage: "list.bullet.clipboard") { model.openGuidedMode() }
             }
-            Button("Export Guided Job…", systemImage: "list.bullet.rectangle.portrait") { exportGuided() }
-                .disabled(!ready)
-                .help("A .crproj with mounting, probing or edge finding, tool changes, air cuts and measuring checkpoints")
-            Button("Print a Nest for a Second Side…", systemImage: "cube.transparent") { model.showNestSheet = true }
-                .help("A printed block shaped like one face of the part, to hold it once it's cut free and machine the other face.")
-                .buttonStyle(.glassProminent)
-                .disabled(!model.programs.allSatisfy(\.report.passed))
             Button("Export G-code Only…", systemImage: "square.and.arrow.up") { export() }
                 .plainGlassButton()
                 .disabled(!model.programs.allSatisfy(\.report.passed))
@@ -336,27 +311,8 @@ struct ResultsSection: View {
     }
 
     private var ready: Bool {
-        !model.isGenerating && !model.programs.isEmpty && (model.programs + model.prepPrograms).allSatisfy(\.report.passed)
+        !model.isGenerating && !model.programs.isEmpty && model.programs.allSatisfy(\.report.passed)
             && (!model.setup.planFromFixtureLibrary || model.libraryWorkholdingPlan?.reviewed == true)
-    }
-
-    private func exportGuided() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "crproj") ?? .data]
-        panel.nameFieldStringValue = ((model.part?.fileName as NSString?)?.deletingPathExtension ?? "Coastline") + ".crproj"
-        panel.message = "Save the guided job. Open it in the sender's guided mode."
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            try model.exportGuidedJob(to: url, measuring: inventory.inventory.measuring)
-            exportMessage = "Saved \(url.lastPathComponent)."
-            if let app = AppModel.senderAppURL(for: url) {
-                NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
-            } else {
-                NSWorkspace.shared.activateFileViewerSelecting([url])
-            }
-        } catch {
-            exportMessage = error.localizedDescription
-        }
     }
 
     private func export() {
@@ -469,12 +425,7 @@ struct EngravingFields: View {
 
     /// Why probing can't be used in this job, if it can't.
     private var probeUnavailable: String? {
-        if model.setup.onBed || AppSettings.shared.clampKitProbing != .electrical {
-            return "Needs the insulated clamp kit with electrical probing (Settings ▸ Machining): until then it follows the CAD."
-        }
-        if let m = model.stock?.material, [.wax, .plastic, .printedResin].contains(m.family) {
-            return "\(m.name) doesn't conduct, so the tool can't feel it: it follows the CAD."
-        }
+        return "Needs electrical probing, which this workholding doesn't have: it follows the CAD."
         return nil
     }
 }
@@ -522,13 +473,11 @@ struct GenerateBar: View {
         .overlay(alignment: .top) { Divider() }
     }
 
-    /// The machining time to expect with the settings as they are now (the tuner's estimate
-    /// once generated, the plan's before), and how it moved: always in view, one fixed line.
+    /// The machining time to expect (the generated programs' once they exist, the plan's
+    /// before), and how it moved: always in view, one fixed line.
     private var expectedTime: some View {
-        let generated = (model.programs + model.prepPrograms).reduce(0) { $0 + $1.seconds } / 60
-        let now: Double? = model.programs.isEmpty
-            ? model.plannedMinutes
-            : model.tunerEstimate(model.tuning).map { $0.minutes + model.prepPrograms.reduce(0) { $0 + $1.seconds } / 60 }
+        let generated = model.programs.reduce(0) { $0 + $1.seconds } / 60
+        let now: Double? = model.programs.isEmpty ? model.plannedMinutes : generated
         return HStack(spacing: 6) {
             Image(systemName: "clock").foregroundStyle(.secondary)
             Text("Expected").foregroundStyle(.secondary)
@@ -562,7 +511,13 @@ extension AppModel {
             : tuningChangedSinceGenerating ? "Apply & Regenerate" : "Generate Toolpaths"
     }
 
-    /// Generate, or Apply & Regenerate after the tuner changed (the button and ⌘G).
+    /// The plan's estimate of the machining minutes (before anything is generated).
+    var plannedMinutes: Double? {
+        let ms = operations.filter(\.enabled).compactMap { planEstimate[$0.id] }
+        return ms.isEmpty ? nil : ms.reduce(0, +)
+    }
+
+    /// Generate, or Apply & Regenerate after the tuning changed (the button and ⌘G).
     func generateOrApply(inventory: Inventory) async {
         guard part != nil, stock != nil, !isGenerating else { return }
         if let blocker = generationBlocker {
@@ -570,8 +525,8 @@ extension AppModel {
             NSSound.beep()
             return
         }
-        if tuningChangedSinceGenerating { await applyTuning(inventory: inventory) }
-        else { await generateToolpaths(inventory: inventory) }
+        if tuningChangedSinceGenerating { operations = tuning.apply(to: operations) }
+        await generateToolpaths(inventory: inventory)
     }
 }
 

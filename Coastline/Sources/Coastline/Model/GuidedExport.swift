@@ -12,15 +12,12 @@ extension AppModel {
         var out: [GuidedJobBuilder.Checkpoint] = []
         let (rlo, rhi) = setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
         let size = setup.stockSize(stock)
-        // An example with its own list (the first-cut coupon) measures that instead of the outline
-        // and holes in general.
-        let example = ExamplePart.of(part.url).flatMap { $0.checks.isEmpty ? nil : $0 }
         for p in programs {
             let kinds = Set(p.operations.filter { $0.reference == nil }.map(\.kind))  // not the reference bores
             if kinds.contains(.facing), let face = p.operations.first(where: { $0.kind == .facing }) {
                 out.append(.init(afterProgram: p.index, what: "Stock thickness after facing", expected: size.z - face.faceDepth, tolerance: 0.05))
             }
-            if kinds.contains(.contour), example == nil {
+            if kinds.contains(.contour) {
                 out.append(.init(afterProgram: p.index, what: "Part height (X)", expected: rhi.x - rlo.x, tolerance: 0.05))
                 out.append(.init(afterProgram: p.index, what: "Part width (Y)", expected: rhi.y - rlo.y, tolerance: 0.05))
             }
@@ -36,16 +33,12 @@ extension AppModel {
             }
         }
         // Every hole size once, after the last program that drills or bores (side A's holes).
-        if example == nil, let last = programs.last(where: { p in p.side == 0 && p.operations.contains { ($0.kind == .bore || $0.kind == .drill) && $0.reference == nil } }) {
+        if let last = programs.last(where: { p in p.side == 0 && p.operations.contains { ($0.kind == .bore || $0.kind == .drill) && $0.reference == nil } }) {
             var sizes: [Double] = []
             for h in features?.holes ?? [] where !sizes.contains(where: { abs($0 - h.diameter) < 0.01 }) { sizes.append(h.diameter) }
             for d in sizes.sorted() {
                 out.append(.init(afterProgram: last.index, what: sizes.count == 1 ? "Hole diameter" : "Hole Ø\(Length.mm(d))", expected: d, tolerance: 0.03))
             }
-        }
-        // The example's own list (the first-cut coupon's every feature), after the last program.
-        if let ex = example, let last = programs.last {
-            for c in ex.checks { out.append(.init(afterProgram: last.index, what: c.what, expected: c.expected * setup.partScale, tolerance: c.tolerance)) }
         }
         return out
     }
@@ -85,9 +78,7 @@ extension AppModel {
             partName: part.fileName, material: material, stock: stock, stockSize: setup.stockSize(stock), setupName: "Setup 1",
             programs: guidedPrograms(),
             checkpoints: checkpoints(), measuring: measuring, setupImage: setupSnapshot(),
-            squareStockFirst: setup.holding != .custom && setup.topAllowance > 1e-6 && stock.finish == .sawn,
             faceAllowance: setup.topAllowance)
-        input.shoulders = setup.shoulders
         if setup.holding == .custom {
             if let first = libraryWorkholdingPlan?.steps.first, setup.planFromFixtureLibrary {
                 var custom = Setup.CustomFixture()
@@ -97,37 +88,13 @@ extension AppModel {
                 custom.notes = first.instructions
                 input.customHolding = custom
             } else { input.customHolding = setup.customFixture }
-        } else if setup.onBed, let st = bedJobStage, let p = bedJobPlacement {
-            input.bed = .init(protrusion: st.protrusion, clampAngles: p.clampAngles)
-        } else if let p = clampPlacement(stockSize: setup.stockSize(stock)) {
-            input.clampCount = p.clamps.count
-            if !setup.kitClampShift.isEmpty {
-                // Each clamp's middle from the stock's left end (model −Y is left as you face the machine).
-                let left = kitCentreY - setup.stockSize(stock).y / 2
-                input.clampFromLeft = p.clamps.map { (($0.columns.3.y - left) * 2).rounded() / 2 }
-            }
-            input.parallels = p.parallels
-            input.protrusion = max(min(effectiveProtrusion, setup.stockSize(stock).z - 1), 0.5)
-        }
-        if let tool = programs.map(\.tool).filter({ $0.kind == .flatEndMill }).max(by: { $0.diameter < $1.diameter }),
-           var m = prepMillDown(tool: tool) {
-            let saved = (previewMillDown, prepStage)
-            switchingView = true
-            defer { switchingView = false }
-            previewMillDown = true
-            prepStage = (flatPrepPlan?.stages.firstIndex(where: \.isEdge)) ?? 0
-            layoutScene()
-            m.image = setupSnapshot()
-            (previewMillDown, prepStage) = saved
-            layoutScene()
-            input.millDown = m
         }
         if cutsThroughWithTabs, !placedTabs.isEmpty {
             input.tabs = tabs
             input.tabs?.count = placedTabs.count
         }
         if twoSided {
-            input.tabs = setup.usesClampKit && holdWithTabs && !placedTabs.isEmpty ? tabs : nil
+            input.tabs = holdWithTabs && !placedTabs.isEmpty ? tabs : nil
             input.tabs?.count = placedTabs.count  // as placed (a side without frame gets none)
             input.flipImage = setupSnapshot(side: 1)
         }
@@ -136,11 +103,6 @@ extension AppModel {
         let spot = toolChangeSpot(), tc = machine.toolChangePose
         input.toolChangeZ = spot.z > tc.z + 1e-9 ? spot.z : nil
         input.toolChangeY = abs(spot.y - tc.y) > 1e-9 ? spot.y : nil
-        // The kit left of the middle: where its stock's right end goes, from the spindle there.
-        if kitShiftY < -1e-9, setup.usesClampKit, let mm = machineModel {
-            let spindleY = mm.spindleNose.y + (spot.y - mm.modelPose.y)
-            input.stockRightOfToolChange = spindleY - (kitCentreY + setup.stockSize(stock).y / 2)
-        }
         return input
     }
 
@@ -160,25 +122,9 @@ extension AppModel {
         }
     }
 
-    /// How the job finds the stock: electrical probing in the clamp kit (Settings), which X
-    /// edges are within reach (with the probing tool or the edge finder beside them, 3 mm out),
-    /// and the reference bores.
+    /// How the job finds the stock: the edge finder, and the reference bores.
     func probing(stockSize size: SIMD3<Double>) -> GuidedJobBuilder.Probing {
         var pr = GuidedJobBuilder.Probing()
-        let conductive = stock?.material.map { ![.wax, .plastic, .printedResin].contains($0.family) } ?? false
-        pr.electrical = setup.usesClampKit && conductive && AppSettings.shared.clampKitProbing == .electrical
-        if let xr = kitWorkXRange {
-            for side in 0..<2 {
-                let tool = programs.first { $0.side == side }?.tool
-                let r = pr.electrical ? (tool?.diameter ?? 6.35) / 2 : EdgeFinding.tool.diameter / 2
-                pr.lowerXReachable[side] = -size.x / 2 - r - 3 >= xr.lowerBound
-                pr.upperXReachable[side] = size.x / 2 + r + 3 <= xr.upperBound
-                if !pr.lowerXReachable[side] && !pr.upperXReachable[side] {
-                    // Neither (a bar as tall as the travel): the nearer one anyway.
-                    pr.lowerXReachable[side] = true
-                }
-            }
-        }
         let refs = Set(programs.flatMap { $0.operations.compactMap(\.reference) })
         pr.bores = refs.contains(.bores) && refs.contains(.windows) ? referencePlan : nil
         return pr
@@ -187,17 +133,11 @@ extension AppModel {
     /// The job's tools you don't have yet: on your list to buy (quantity 0), or only in the job.
     var unownedJobTools: [Tool] {
         var seen = Set<UUID>()
-        return (programs + prepPrograms).map(\.tool).filter { tool in
+        return programs.map(\.tool).filter { tool in
             guard seen.insert(tool.id).inserted else { return false }
             if let owned = toolLookup(tool.id) { return owned.quantity <= 0 }
             return tool.isSuggestion
         }
-    }
-
-    /// Writes the guided job as a `.crproj` package (for a sender that runs guided jobs).
-    func exportGuidedJob(to url: URL, measuring: [MeasuringTool]) throws {
-        let input = try checkedGuidedInput(measuring: measuring)
-        try GuidedJobBuilder.write(input, to: url, machine: machine)
     }
 
     /// The same safety gate applies to full export, selected code and the native runner.
@@ -210,7 +150,7 @@ extension AppModel {
         guard !programs.isEmpty else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Generate toolpaths first."])
         }
-        guard (programs + prepPrograms).allSatisfy(\.report.passed) else {
+        guard programs.allSatisfy(\.report.passed) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Fix the safety errors before exporting."])
         }
         // A plan may use tools still to buy; the machine can't run them until you have them.
@@ -222,21 +162,9 @@ extension AppModel {
         guard let input = guidedInput(measuring: measuring) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Generate toolpaths first."])
         }
-        if let m = input.millDown {
-            for it in m.programs(material: input.material, sawn: input.squareStockFirst, machine: machine).items where !it.report.passed {
-                throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey:
-                    "The prep program “\(it.title)” failed the safety check: " + it.report.issues.filter { $0.severity == .error }.map(\.message).joined(separator: " ")])
-            }
-        }
         return input
     }
 
-    /// The app this Mac opens guided-job packages with, if there is one (not Coastline itself).
-    static func senderAppURL(for file: URL) -> URL? {
-        guard let app = NSWorkspace.shared.urlForApplication(toOpen: file),
-              app.standardizedFileURL != Bundle.main.bundleURL.standardizedFileURL else { return nil }
-        return app
-    }
 }
 
 extension AppModel {

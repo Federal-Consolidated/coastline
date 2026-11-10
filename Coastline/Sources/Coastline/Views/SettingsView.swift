@@ -42,13 +42,6 @@ struct SettingsView: View {
             Tab("Machining", systemImage: "gearshape.2") {
                 Form {
                     Section {
-                        Picker("Probing method in the clamp kit", selection: $settings.clampKitProbing) {
-                            ForEach(AppSettings.ClampKitProbing.allCases) { Text($0.title).tag($0) }
-                        }
-                    } footer: {
-                        Text("The clamp kit is electrically isolated from the machine: with the probe wire clipped to the stock, the tool touching it closes the circuit, so the machine finds edges, bores and the top itself (G38.2). On the bed with acetal stops there is no circuit; there it's the edge finder and the paper.")
-                    }
-                    Section {
                         Toggle("Reference bores on two-sided parts", isOn: $settings.referenceBores)
                     } footer: {
                         Text("Side A mills two small bores through the frame; after the flip, side B's zero is found from their centres (bore probing), not from the sawn or clamped edges. Repeatable to a few hundredths and works where an edge is out of reach.")

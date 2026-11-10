@@ -316,29 +316,4 @@ let grblTests: [TestCase] = [
         job.wcsChecks = [WCSCheck(wcs: 59, x: 5, y: 5, z: 4)]
         try expectEqual(connection.wcsValueCheck(for: job), "bad")
     },
-
-    TestCase(name: "universalClampStepStreamsCompletely") {
-        let url = repoRoot.appending(path: "reference/fixtures/universal_clamp.crproj")
-        guard FileManager.default.fileExists(atPath: url.path) else { throw Skip(reason: "fixture not present") }
-        let project = try JobPackage.open(url: url)
-        // Pick a milling step without probing so the mock can run it end to end.
-        guard let step = try project.jobs[0].steps.first(where: { step in
-            guard step.hasGCode else { return false }
-            let lines = try project.gcodeLines(for: step)
-            return lines.count > 200 && !lines.contains { $0.contains("G38") || $0.contains("M1") }
-        }) else { throw Skip(reason: "no suitable step") }
-        let programLines = GCodeProgram(source: try project.gcodeLines(for: step)).lines
-        let mock = MockGRBL()
-        let connection = try connect(mock)
-        defer { connection.disconnect() }
-        let before = mock.receivedLines.count
-        try connection.executeProgram(programLines)
-        try expect(!mock.overflowed)
-        let expected = programLines.map(\.cleaned).filter { !$0.isEmpty }
-        let sent = Array(mock.receivedLines[before...]).filter { $0 != "?" && $0 != "" && $0 != "$G" }
-        let sentProgram = Array(sent.dropLast()) // final G4P0
-        try expectEqual(sentProgram.count, expected.count, "step \(step.title)")
-        try expect(sentProgram == expected, "streamed lines differ from the file")
-        print("    streamed \(expected.count) lines of '\(step.title)' (\(step.gcodePath))")
-    },
 ]

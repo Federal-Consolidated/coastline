@@ -180,7 +180,7 @@ public struct RealTimeStatus: Equatable, Sendable {
     }
 
     static func parseInt(_ s: String) throws -> Int {
-        guard let v = ManifestParser.leadingInteger(s) else { throw ParseError() }
+        guard let v = GRBLText.leadingInteger(s) else { throw ParseError() }
         return v
     }
 

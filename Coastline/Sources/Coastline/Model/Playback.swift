@@ -100,12 +100,6 @@ extension AppModel {
     func togglePlay() {
         if isPlaying { pause(); return }
         if toolChangeStop != nil { return }  // the tool-change panel is up
-        // The stock as bought has nothing to play: start at the first clamping.
-        if viewSide == -1 && prepStage < 0, !prepResults.isEmpty {
-            if let first = jobSteps.first(where: { $0.side == -1 && $0.stage == 0 && $0.kind == .program }) { go(to: first) }
-            pendingPlay = true
-            return
-        }
         let entries = timeline.entries
         guard !entries.isEmpty else { return }
         if playhead >= timeline.duration - 1e-6 { quietSeek(0) }
@@ -165,7 +159,6 @@ extension AppModel {
         isPlaying = false
         playTimer?.invalidate()
         playTimer = nil
-        if wasPlaying && showDeviation { Task { await updateDeviation() } }
     }
 
     func seek(_ t: Double) {
@@ -181,7 +174,6 @@ extension AppModel {
         if target < playhead - 1e-9 { rewindSimulation(to: timeline.index(at: target)) }
         playhead = target
         updatePlayback()
-        if showDeviation && !isPlaying { Task { await updateDeviation() } }
     }
 
     /// Steps to the start of the next/previous move.
@@ -256,17 +248,16 @@ extension AppModel {
     func advanceSpin(_ dt: Double) {
         let i = timeline.index(at: playhead)
         let entry = timeline.entries.indices.contains(i) ? timeline.entries[i] : nil
-        // Edge finding plays as programs 2000+, with its own tool: the cutter (electrical) or the finder.
+        // Edge finding plays as programs 2000+, with the edge finder.
         let probing = (entry?.program ?? 0) >= 2000
-        let electrical = probing && entry.map { plannedTools.indices.contains($0.operation) && plannedTools[$0.operation].id != EdgeFinding.tool.id } == true
-        let turnsPerSecond: Float = probing ? (electrical ? -1.5 : 2) : 4
+        let turnsPerSecond: Float = probing ? 2 : 4
         toolSpin += Float(dt) * 2 * .pi * turnsPerSecond
     }
 
     /// Puts this tool in the collet (rebuilt only when the tool changes).
     func ensureToolMesh(_ tool: Tool) {
         if renderer.scene.mesh("tool") == nil || toolMeshID != tool.id { buildToolMesh(tool) }
-        let spin = isPlaying || touring ? simd_float4x4(simd_quatf(angle: toolSpin, axis: SIMD3(0, 0, 1))) : matrix_identity_float4x4
+        let spin = isPlaying ? simd_float4x4(simd_quatf(angle: toolSpin, axis: SIMD3(0, 0, 1))) : matrix_identity_float4x4
         for id in ["tool", "tool.shank"] { renderer.scene.mesh(id)?.transform = simd_float4x4(translation: SIMD3<Float>(tipAtModelPose)) * spin }
     }
 
@@ -365,12 +356,6 @@ extension AppModel {
         let origin = SIMD3<Float>(workOrigin(stockSize: displayStockSize ?? setup.stockSize(stock)))
         let c = stock.material?.linearSwatch ?? SIMD3(0.5, 0.5, 0.5)
         var back = backSurface(for: hm)
-        if let open = shoulderOpen(hm, stockSize: size) {
-            // Path D: the shoulders' corners are air — open cells (material from top to top).
-            var b = back ?? [Float](repeating: Float(hm.bottom), count: hm.cols * hm.rows)
-            for i in b.indices where open[i] { b[i] = Float(hm.top) }
-            back = b
-        }
         simBack = back
         if let g = SceneMesh.grid(device: renderer.device, id: "simstock", x0: Float(hm.origin.x), y0: Float(hm.origin.y),
                                   cell: Float(hm.cell), cols: hm.cols, rows: hm.rows, z: Float(hm.top),
@@ -538,22 +523,12 @@ extension AppModel {
             m.xrayThrough = true
             scene.setMesh(m)
         }
-        // Loose pieces: nothing joins them to where the clamps hold the stock.
-        let strips = setup.onBed ? [] : shoulderStrips(stockSize: displayStockSize ?? stock.map { setup.stockSize($0) } ?? .zero)
-        let ox = hm.origin.x, oy = hm.origin.y, dc = hm.cell
-        let loose = SimSurfaces.loose(cols: cols, rows: rows, top: h, back: back, bottom: Float(hm.bottom), open: open) { i in
-            let x = ox + Double(i % cols) * dc, y = oy + Double(i / cols) * dc
-            return strips.contains { x >= $0.min.x && x <= $0.max.x && y >= $0.min.y && y <= $0.max.y }
+        // Loose pieces: nothing joins them to the stock's outer edge, where the fixture holds it.
+        let loose = SimSurfaces.loose(cols: cols, rows: rows, top: h, back: back, bottom: Float(hm.bottom), open: { _ in false }) { i in
+            let c = i % cols, r = i / cols
+            return c == 0 || c == cols - 1 || r == 0 || r == rows - 1
         }
         if loosePieces != loose.pieces { loosePieces = loose.pieces }
-        if ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil, loose.pieces > 0 {
-            var n = 0, sx = 0.0, sy = 0.0, x0 = Double.infinity, x1 = -Double.infinity, y0 = Double.infinity, y1 = -Double.infinity
-            for i in loose.mask.indices where loose.mask[i] {
-                let x = ox + Double(i % cols) * dc, y = oy + Double(i / cols) * dc
-                n += 1; sx += x; sy += y; x0 = min(x0, x); x1 = max(x1, x); y0 = min(y0, y); y1 = max(y1, y)
-            }
-            print("loose detail: \(loose.pieces) piece(s), \(n) points, x \(String(format: "%.1f…%.1f", x0, x1)) y \(String(format: "%.1f…%.1f", y0, y1)), strips \(strips.count)")
-        }
         if loose.pieces > 0 {
             let o = SimSurfaces.overlay(cols: cols, rows: rows, x0: x0, y0: y0, cell: cell, top: h, mask: loose.mask)
             if !o.p.isEmpty, let m = SceneMesh(device: renderer.device, id: "simstock.loose", positions: o.p, normals: o.n,

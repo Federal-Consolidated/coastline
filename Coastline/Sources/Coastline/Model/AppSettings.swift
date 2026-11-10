@@ -40,15 +40,6 @@ final class AppSettings {
         }
     }
 
-    /// How the guided job finds edges and the top on clamp-kit setups. The clamp kit is
-    /// electrically isolated from the machine, so a wire on the stock and the tool closing the
-    /// circuit (G38.2) can do it; acetal stops on the bed can't, there it's the edge finder and paper.
-    enum ClampKitProbing: String, CaseIterable, Identifiable {
-        case electrical, edgeFinder
-        var id: String { rawValue }
-        var title: String { self == .electrical ? "Electronic probing (G38.2)" : "Edge finder and paper" }
-    }
-
     private let defaults = UserDefaults.standard
 
     var units: DisplayUnits { didSet { defaults.set(units.rawValue, forKey: "displayUnits") } }
@@ -56,7 +47,6 @@ final class AppSettings {
     var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance"); apply() } }
     /// 0 = automatic (by the number of cores).
     var engines: Int { didSet { defaults.set(engines, forKey: "engines") } }
-    var clampKitProbing: ClampKitProbing { didSet { defaults.set(clampKitProbing.rawValue, forKey: "clampKitProbing") } }
     /// Two-sided jobs mill reference bores on side A and find side B's zero from them.
     var referenceBores: Bool { didSet { defaults.set(referenceBores, forKey: "referenceBores") } }
 
@@ -65,7 +55,6 @@ final class AppSettings {
         accent = Accent(rawValue: defaults.string(forKey: "accent") ?? "") ?? .graphite
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         engines = defaults.integer(forKey: "engines")
-        clampKitProbing = ClampKitProbing(rawValue: defaults.string(forKey: "clampKitProbing") ?? "") ?? .electrical
         referenceBores = defaults.object(forKey: "referenceBores") as? Bool ?? true
     }
 

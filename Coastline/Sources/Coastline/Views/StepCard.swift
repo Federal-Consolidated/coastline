@@ -2,7 +2,7 @@ import CoastlineCore
 import SwiftUI
 
 /// The step on screen, as an instruction card over the 3D view: which phase, what to do at the
-/// machine, the measuring checkpoint when there is one, and Previous / Next / Tour.
+/// machine, the measuring checkpoint when there is one, and Previous / Next.
 struct StepCard: View {
     @Environment(AppModel.self) private var model
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -68,11 +68,6 @@ struct StepCard: View {
                     }
                     .disabled(model.step(after: step, by: 1) == nil)
                     .help("Next step (⌘])")
-                    Spacer()
-                    Button { model.touring ? model.stopTour() : model.startTour() } label: {
-                        Label(model.touring ? "Stop Tour" : "Tour", systemImage: model.touring ? "stop.fill" : "play.rectangle.fill")
-                    }
-                    .help("Walks through every step from here: the stock moving between clampings, each program played through.")
                 }
                 .controlSize(.small)
                 .buttonStyle(.bordered)
@@ -91,12 +86,7 @@ extension AppModel {
     /// Shows the step before or after the one on screen (the step card's buttons, ⌘[ and ⌘]).
     func visitStep(by delta: Int) {
         guard let step = currentStep, let s = self.step(after: step, by: delta) else { return }
-        stopTour()
         visit(s)
     }
 
-    /// Whether there's a step before or after the one on screen.
-    func canVisitStep(by delta: Int) -> Bool {
-        currentStep.flatMap { step(after: $0, by: delta) } != nil
-    }
 }

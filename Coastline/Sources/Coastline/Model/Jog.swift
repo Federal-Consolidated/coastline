@@ -31,9 +31,10 @@ extension AppModel {
         return SIMD3(q.x - m.x + t.x - o.x, q.y - m.y - o.y + t.y, q.z - m.z - o.z + t.z)
     }
 
-    /// Whether the jog tool (cutter, shank, collet nut) would touch the clamp kit here.
+    /// Whether the jog tool (cutter, shank, collet nut) would touch the job's fixture here.
     var jogTouchesClamp: Bool {
-        guard viewSide >= 0, let tool = jogTool, let p = jogWorkPosition, let stock, var field = clampKitField(stockSize: setup.stockSize(stock))
+        guard viewSide >= 0, let tool = jogTool, let p = jogWorkPosition, let fixture = displayedJobFixture,
+              var field = libraryFixtureFields[fixtureStateKey(fixture)]
         else { return false }
         return !FixtureClearance.check([Move(.rapid, x: p.x, y: p.y, z: p.z)], tool: tool, field: &field, margin: 0).isEmpty
     }

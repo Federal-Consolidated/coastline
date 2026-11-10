@@ -11,8 +11,7 @@ private func generatedInput() -> GuidedJobBuilder.Input {
         programs: [.init(tool: tool, gcode: "(One short cut)\nG21 G90\nM3 S5000\nG0 X0 Y0 Z2\nG1 Z-0.1 F20\nG1 Y0.05 F50\nG0 Z2\nM5\n",
                          operationNames: ["Tiny contour"], minutes: 0.1)],
         checkpoints: [.init(afterProgram: 0, what: "Stock thickness", expected: 10, tolerance: 0.05)],
-        measuring: [MeasuringTool(name: "Digital caliper", kind: .caliper)], setupImage: nil, squareStockFirst: false)
-    input.probing.electrical = true
+        measuring: [MeasuringTool(name: "Digital caliper", kind: .caliper)], setupImage: nil)
     return input
 }
 
@@ -46,21 +45,20 @@ let generatedJobTests: [TestCase] = [
         try expectEqual(Set(files.map(\.path)).count, files.count, "Shared helper files appear once")
         try expectEqual(files.first { $0.path == "Code/T1_cut.nc" }?.kind, .cut)
         try expectEqual(files.first { $0.path == "Code/T1_aircut.nc" }?.kind, .airCut)
-        try expectEqual(files.first { $0.path == "Code/probe_top.nc" }?.kind, .probe)
         try expectEqual(files.first { $0.path == "Code/home.nc" }?.kind, .setup)
         for file in files {
             try expectEqual(Data(file.text.utf8), source.files[file.path], file.path)
             try expect(source.jobs.flatMap(\.steps).contains { $0.gcodePath == file.path }, "Only referenced files are offered")
         }
     },
-    TestCase(name: "probeOnlyExportContainsExactlySelectedOriginalPrograms") {
+    TestCase(name: "cutOnlyExportContainsExactlySelectedOriginalPrograms") {
         let input = generatedInput()
         let files = GeneratedJob.codeFiles(input)
-        let selected = Set(files.filter { $0.kind == .probe }.map(\.id))
+        let selected = Set(files.filter { $0.kind == .cut }.map(\.id))
         try expect(!selected.isEmpty)
         let scratch = try generatedScratch()
         defer { try? FileManager.default.removeItem(at: scratch) }
-        let destination = scratch.appendingPathComponent("Probing")
+        let destination = scratch.appendingPathComponent("Cuts")
         let written = try GeneratedJob.export(files, selected: selected, to: destination)
         let relative = written.map { $0.path.replacingOccurrences(of: destination.path + "/", with: "") }
         try expectEqual(Set(relative), selected)
@@ -89,15 +87,14 @@ let generatedJobTests: [TestCase] = [
         try expectThrows { _ = try GeneratedJob.export(files, selected: ["unknown.nc"], to: empty) }
         try expect(!FileManager.default.fileExists(atPath: empty.path))
     },
-    TestCase(name: "nativeJobKeepsPrepAndPartOrderAndOperatorConfirmations") {
+    TestCase(name: "nativeJobKeepsProgramOrderAndOperatorConfirmations") {
         var input = generatedInput()
-        input.squareStockFirst = true
         let source = GuidedJobBuilder.build(input)
         let scratch = try generatedScratch()
         defer { try? FileManager.default.removeItem(at: scratch) }
         let destination = scratch.appendingPathComponent("Native")
         let job = try GeneratedJob.writeNative(input, to: destination)
-        try expectEqual(job.setups.map(\.title), ["Square the Stock", "Setup 1 · Small cut"])
+        try expectEqual(job.setups.map(\.title), ["Setup 1 · Small cut"])
         try expect(job.options.isEmpty)
         try expect(job.setups.allSatisfy { $0.when.isEmpty && $0.steps.allSatisfy { $0.when.isEmpty } })
         try expectEqual(try ProgramJob.load(destination), job)
@@ -122,27 +119,6 @@ let generatedJobTests: [TestCase] = [
         }
         try expectThrows { _ = try GeneratedJob.writeNative(input, to: destination) }
         try expectEqual(try ProgramJob.load(destination), job, "Existing generated job was preserved")
-    },
-    TestCase(name: "nativeJobIncludesMillDownBeforePartPrograms") {
-        var input = generatedInput()
-        var prep = GuidedJobBuilder.MillDown(raw: SIMD3(50, 60, 10), target: 48, tool: input.programs[0].tool)
-        prep.faceEnd = false
-        prep.rounds = 1
-        prep.extrudedAlong = 1
-        input.millDown = prep
-        let scratch = try generatedScratch()
-        defer { try? FileManager.default.removeItem(at: scratch) }
-        let destination = scratch.appendingPathComponent("Native")
-        let job = try GeneratedJob.writeNative(input, to: destination)
-        try checkNativePrograms(job, at: destination)
-        try expectEqual(job.setups.map(\.title), ["Square and Size the Stock", "Setup 1 · Small cut"])
-        let prepRuns = job.setups[0].steps.filter { $0.kind == .run }.compactMap(\.program)
-        try expect(prepRuns.contains { $0.hasPrefix("Code/prep_") }, "Mill-down cutting programs are included")
-        try expect(!prepRuns.contains { $0.hasSuffix("_aircut.nc") })
-        try expect(job.setups[1].steps.contains { $0.kind == .run && $0.program == "Code/T1_cut.nc" })
-        for program in job.programs where program.file.hasPrefix("Code/prep_") {
-            try expectEqual(program.purpose, .cut)
-        }
     },
     TestCase(name: "nativeJobRejectsUnsupportedSurfaceMapAndEmptyPrograms") {
         var input = generatedInput()

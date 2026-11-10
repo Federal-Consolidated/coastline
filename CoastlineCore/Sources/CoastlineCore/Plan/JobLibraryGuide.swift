@@ -2,7 +2,7 @@ import Foundation
 import simd
 
 /// Inventory proposals precede workholding constraints: a blank can contain a part without
-/// having a sacrificial clamp-kit frame. A matching jig is a preference, not a fit requirement.
+/// having a sacrificial frame. A matching jig is a preference, not a fit requirement.
 public enum JobLibraryGuide {
     public struct StockChoice: Sendable {
         public var stock: StockItem
@@ -14,9 +14,7 @@ public enum JobLibraryGuide {
                                     preferredAxes: [Int]? = nil) -> [StockChoice] {
         inventory.stock.compactMap { item -> StockChoice? in
             guard item.quantity > 0, !item.isSuggestion, item.material != nil else { return nil }
-            let options = StockOrientation.options(stock: item, part: partSize, twoSided: false,
-                topAllowance: 0, softJaw: false, toolDiameter: 6.35,
-                requiresClampFrame: false, preferredAxes: preferredAxes).filter(\.workable)
+            let options = StockOrientation.options(stock: item, part: partSize, preferredAxes: preferredAxes).filter(\.workable)
             guard let first = options.first else { return nil }
             let matches = options.map { option in
                 (option, inventory.fixtures.filter {

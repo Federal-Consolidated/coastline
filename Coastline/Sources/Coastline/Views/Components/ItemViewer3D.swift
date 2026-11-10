@@ -167,25 +167,3 @@ extension StockItem {
         return [m]
     }
 }
-
-extension AppModel {
-    /// Clamp-kit meshes for a fixture kind (kit-local frame, z up), if the kit has it.
-    func fixtureMeshes(_ kind: Fixture.Kind, device: MTLDevice) -> [SceneMesh] {
-        let kit: [String] = switch kind {
-        case .universalClamp: ["clamp"]
-        case .squaringBoss, .squaringStop: ["brick"]
-        case .cClamp: ["cclamp"]
-        case .vise: ["eccentric"]
-        case .tSlotNuts: []
-        default: []
-        }
-        return kitParts.enumerated().compactMap { j, p in
-            guard kit.contains(p.kit) else { return nil }
-            let look = Self.kitAppearance(p)
-            let m = SceneMesh(device: device, id: "item.\(j)", positions: p.mesh.vertices, normals: p.mesh.normals,
-                              indices: p.mesh.indices, color: look.color)
-            m?.material = look.material
-            return m
-        }
-    }
-}

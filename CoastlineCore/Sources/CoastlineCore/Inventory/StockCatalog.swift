@@ -14,7 +14,7 @@ public enum StockCatalog {
 
     private static func id(_ n: Int) -> UUID { UUID(uuidString: String(format: "C0A57200-0000-4000-8000-%012d", n))! }
 
-    /// A bar `w` × `t` mm in section (width stands up in the clamp kit), `cutLength` long.
+    /// A bar `w` × `t` mm in section ((width stands up)), `cutLength` long.
     private static func bar(_ n: Int, _ material: String, w: Double, t: Double, length: Double = cutLength, note: String) -> StockItem {
         var s = StockItem(id: id(n), materialID: material, shape: .block, sizeX: length, sizeY: w, sizeZ: t, quantity: 0, finish: .sawn,
                           supplier: source, notes: "Not in your inventory: a standard size. \(note)")
@@ -45,7 +45,7 @@ public enum StockCatalog {
         bar(5, "al-6061", w: 40, t: 10, note: "Watch plates and pendants up to ~30 mm across: the tallest flat bar the soft jaws hold."),
         bar(6, "al-6061", w: 40, t: 20, note: "Chunky parts up to ~30 × 17 mm."),
         bar(7, "al-6061", w: 30, t: 30, note: "Square bar: rings and three-dimensional parts."),
-        bar(8, "al-6061", w: 40, t: 40, note: "Square bar: the largest section the clamp kit holds (40 mm tall on the jaw)."),
+        bar(8, "al-6061", w: 40, t: 40, note: "Square bar: 40 mm section."),
         // Imperial sections (ASTM B221, 6061-T6511).
         bar(9, "al-6061", w: 25.4, t: 6.35, note: "1\" × 1/4\" flat bar, the common US section."),
         bar(10, "al-6061", w: 38.1, t: 12.7, note: "1-1/2\" × 1/2\" flat bar."),

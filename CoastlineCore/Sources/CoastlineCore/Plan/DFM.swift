@@ -119,6 +119,9 @@ public struct DFMFinding: Identifiable, Sendable, Equatable {
 /// owned tool reaches each pocket and hole (cutter, shank and collet nut), and which faces need
 /// another side or position. Geometry only: forces, rigidity and holding are not judged.
 public enum DFM {
+    /// Common end mill sizes (mm), for "buy one of these" suggestions.
+    static let standardSizes: [Double] = [0.5, 0.8, 1.0, 1.5875, 2.0, 2.38, 3.0, 3.175, 4.0, 4.7625, 6.0, 6.35, 8.0]
+
     /// Shank left in the collet, mm: the same threshold as InventoryChecks' grip warning.
     public static let minimumGrip = 10.0
     public static let notChecked = "Not checked: cutting force, rigidity, clamping, fixtures before toolpaths, and the spindle above the collet nut."
@@ -508,7 +511,7 @@ public enum DFM {
     static func suggestedTool(_ f: Feature, _ i: Input) -> Tool? {
         guard let maxShank = shanks(i).max() else { return nil }
         let limit = f.hole.map { $0 - 0.1 - 1e-6 } ?? f.opening.map { $0 - 0.02 } ?? .infinity
-        guard let d = Feasibility.standardSizes.filter({ $0 <= Swift.min(limit, maxShank) + 1e-9 }).max() else { return nil }
+        guard let d = DFM.standardSizes.filter({ $0 <= Swift.min(limit, maxShank) + 1e-9 }).max() else { return nil }
         let shank = shanks(i).first { $0 >= d - 1e-6 } ?? d
         let reachLength = (f.wallDepth + 0.5).rounded(.up)
         let stick = (Swift.max(f.holderDepth, reachLength) * 2).rounded(.up) / 2
@@ -531,7 +534,7 @@ public enum DFM {
     /// tooth suits.
     static func suggestedThreadMill(minor: Double, depth: Double, _ i: Input) -> Tool? {
         guard let maxShank = shanks(i).max(),
-              let d = Feasibility.standardSizes.filter({ $0 <= Swift.min(minor - 1, maxShank) + 1e-9 }).max() else { return nil }
+              let d = DFM.standardSizes.filter({ $0 <= Swift.min(minor - 1, maxShank) + 1e-9 }).max() else { return nil }
         let shank = shanks(i).first { $0 >= d - 1e-6 } ?? d
         let reach = (depth + 1).rounded(.up)
         let stick = ((depth + 1) * 2).rounded(.up) / 2
@@ -932,7 +935,7 @@ public enum DFM {
             let flats = usable.filter { $0.kind == .flatEndMill || $0.kind == .bullNoseEndMill }
             if let t = flats.filter({ $0.diameter <= 2 * r * 0.98 }).max(by: { $0.diameter < $1.diameter }) {
                 out.append(DFMFinding(id: "corner", category: .ok, title: title, summary: "The \(label(t)) fits the tightest corner."))
-            } else if let buy = Feasibility.standardSizes.filter({ $0 <= 2 * r * 0.98 }).max() {
+            } else if let buy = DFM.standardSizes.filter({ $0 <= 2 * r * 0.98 }).max() {
                 out.append(DFMFinding(id: "corner", category: .missingResource, title: title,
                                       summary: "None of your end mills is small enough for the tightest inside corner.",
                                       fix: "Get a \(size(buy)) or smaller end mill, or accept rounder corners."))
@@ -946,7 +949,7 @@ public enum DFM {
             if let t = usable.filter({ $0.kind == .ballEndMill && $0.diameter / 2 <= r * 0.98 }).max(by: { $0.diameter < $1.diameter }) {
                 out.append(DFMFinding(id: "concave", category: .ok, title: title, summary: "The \(label(t)) fits them."))
             } else {
-                let buy = Feasibility.standardSizes.filter { $0 / 2 <= r * 0.98 }.max()
+                let buy = DFM.standardSizes.filter { $0 / 2 <= r * 0.98 }.max()
                 out.append(DFMFinding(id: "concave", category: .missingResource, title: title,
                                       summary: "None of your ball end mills is small enough for a clean finish there.",
                                       fix: "Get a \(buy.map(size) ?? "under 0.5 mm") or smaller ball end mill."))

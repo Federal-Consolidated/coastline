@@ -8,6 +8,13 @@ private func mockConnection(_ mock: MockGRBL) throws -> MillConnection {
                                isManualOperation: { false })
 }
 
+
+/// The built job's G-code for a step (what the .crproj export used to hold).
+private func gcodeLines(_ built: (jobs: [Job], files: [String: Data]), _ step: Step) throws -> [String] {
+    guard let data = built.files[step.gcodePath] else { throw TestFailure(description: "no G-code for \(step.title)") }
+    return String(decoding: data, as: UTF8.self).components(separatedBy: "\n")
+}
+
 let guidedTests: [TestCase] = [
     TestCase(name: "markdownIsMadeSafeForTheCutcodeFormat") {
         let safe = GuidedJobBuilder.safeMarkdown("Tip: keep it clean\nOK!\n**Bold:** fine\nnormal line")
@@ -33,15 +40,10 @@ let guidedTests: [TestCase] = [
             partName: "Pendant", material: al, stock: stock, stockSize: SIMD3(80, 150, 20), setupName: "OP1",
             programs: [.init(tool: tool, gcode: program, operationNames: ["Facing"], minutes: 7)],
             checkpoints: [.init(afterProgram: 0, what: "Stock face flatness", expected: 0, tolerance: 0.02)],
-            measuring: [MeasuringTool(name: "Digital caliper", kind: .caliper)], setupImage: Data([0x89, 0x50, 0x4E, 0x47]),
-            squareStockFirst: true)
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("coastline-\(UUID()).crproj")
-        defer { try? FileManager.default.removeItem(at: url) }
-        try GuidedJobBuilder.write(input, to: url)
-        let project = try JobPackage.open(url: url)
-        try project.verify()  // every referenced G-code and image exists
-        try expectEqual(project.jobs.map(\.title), ["Square the Stock", "OP1 · Pendant"])
-        let job = project.jobs[1]
+            measuring: [MeasuringTool(name: "Digital caliper", kind: .caliper)], setupImage: Data([0x89, 0x50, 0x4E, 0x47]))
+        let project = GuidedJobBuilder.build(input)
+        try expectEqual(project.jobs.map(\.title), ["OP1 · Pendant"])
+        let job = project.jobs[0]
         try expect(job.steps.count > 20, "\(job.steps.count) steps")
         try expect(job.steps.contains { $0.gcodePath == "Code/set_x_centre.nc" }, "edge finding to centre")
         // Popups loop or skip as designed.
@@ -54,78 +56,17 @@ let guidedTests: [TestCase] = [
         // The programs in the project pass the safety validator.
         let v = GCodeValidator()
         let box = (SIMD3<Double>(-40, -75, -20), SIMD3<Double>(40, 75, 0))
-        let cut = try project.gcodeLines(for: job.steps[air + 2]).joined(separator: "\n")
+        let cut = try gcodeLines(project, job.steps[air + 2]).joined(separator: "\n")
         try expect(v.validate(cut, context: .init(stockMin: box.0, stockMax: box.1, tool: tool)).passed)
         var ctx = GCodeValidator.Context(stockMin: box.0, stockMax: box.1, tool: tool)
         ctx.airCut = true
-        let airG = try project.gcodeLines(for: job.steps[air + 1]).joined(separator: "\n")
+        let airG = try gcodeLines(project, job.steps[air + 1]).joined(separator: "\n")
         let r = v.validate(airG, context: ctx)
         try expect(r.passed && r.minZ > 9, "air cut stays above the work: \(r.issues.map(\.message)) minZ \(r.minZ)")
-        // The sender's navigator can walk the job.
-        let nav = GuidedNavigator(steps: job.steps)
-        try expectEqual(nav.steps.count, job.steps.count)
     },
 ]
 
 let probingMethodTests: [TestCase] = [
-    TestCase(name: "guidedProbingMethodSelectsElectronicOrManualSetup") {
-        let tool = Tool(name: "Uncoated flat end mill", kind: .flatEndMill, diameter: 6.35, shankDiameter: 6.35,
-                        flutes: 2, fluteLength: 12, stickout: 28, overallLength: 50)
-        let stock = StockItem(materialID: "al-6061", sizeX: 60, sizeY: 30, sizeZ: 10)
-        var input = GuidedJobBuilder.Input(partName: "Probe coupon", material: MaterialLibrary.material(id: "al-6061")!,
-            stock: stock, stockSize: SIMD3(30, 60, 10), setupName: "Setup 1",
-            programs: [.init(tool: tool, gcode: "G21 G90\nM5\n", operationNames: ["Facing"], minutes: 1)],
-            checkpoints: [], measuring: [], setupImage: nil, squareStockFirst: false)
-        for electrical in [false, true] {
-            input.probing.electrical = electrical
-            let result = GuidedJobBuilder.build(input)
-            let job = try unwrap(result.jobs.last)
-            let programs = job.steps.compactMap { $0.gcodePath.isEmpty ? nil : $0.gcodePath }
-            for path in programs { try expect(result.files[path] != nil, "Missing \(path)") }
-            try expectEqual(job.steps.contains { $0.title == "Connect the Probe Wire" }, electrical)
-            let actual = programs.compactMap { result.files[$0] }.compactMap { String(data: $0, encoding: .utf8) }.joined(separator: "\n")
-            try expectEqual(actual.contains("G38.2"), electrical)
-            if electrical {
-                let top = String(data: try unwrap(result.files["Code/probe_top.nc"]), encoding: .utf8) ?? ""
-                try expect(top.contains("G38.2 G91 Z-8 F20") && top.contains("G10 L20 P1 Z0"), top)
-                try expect(top.contains("G91 G0 Z3") && top.hasSuffix("G90\nG54\n"), top)
-                for (path, motion, register) in [
-                    ("Code/probeA_x_low.nc", "X10", "P2 X0"),
-                    ("Code/probeA_x_high.nc", "X-10", "P3 X0"),
-                    ("Code/probeA_y_left.nc", "Y10", "P2 Y0"),
-                    ("Code/probeA_y_right.nc", "Y-10", "P3 Y0")
-                ] {
-                    let code = String(data: try unwrap(result.files[path]), encoding: .utf8) ?? ""
-                    try expect(code.contains("G38.2 G91 \(motion) F20") && code.contains("G10 L20 \(register)"), code)
-                    try expect(code.hasSuffix("M5\nG90\n"), code)
-                }
-                try expect(!job.steps.contains { $0.title == "Start the Edge Finder" })
-            } else {
-                try expect(job.steps.contains { $0.title == "Start the Edge Finder" })
-                try expect(job.steps.contains { $0.title.hasPrefix("Touch Off Tool") && $0.markdown.contains("paper") })
-            }
-        }
-    },
-    TestCase(name: "electronicProbingUsesReachableEdgeAndToolRadius") {
-        let tool = Tool(name: "Flat end mill", kind: .flatEndMill, diameter: 6, shankDiameter: 6,
-                        flutes: 2, fluteLength: 12, stickout: 28, overallLength: 50)
-        let stock = StockItem(materialID: "al-6061", sizeX: 60, sizeY: 30, sizeZ: 10)
-        var input = GuidedJobBuilder.Input(partName: "Probe coupon", material: MaterialLibrary.material(id: "al-6061")!,
-            stock: stock, stockSize: SIMD3(30, 60, 10), setupName: "Setup 1",
-            programs: [.init(tool: tool, gcode: "G21 G90\nM5\n", operationNames: ["Facing"], minutes: 1)],
-            checkpoints: [], measuring: [], setupImage: nil, squareStockFirst: false)
-        input.probing.electrical = true
-        for useLower in [true, false] {
-            input.probing.lowerXReachable = [useLower, useLower]
-            input.probing.upperXReachable = [!useLower, !useLower]
-            let result = GuidedJobBuilder.build(input)
-            let code = String(data: try unwrap(result.files["Code/probeA_x_single.nc"]), encoding: .utf8) ?? ""
-            try expect(code.contains(useLower ? "G38.2 G91 X10" : "G38.2 G91 X-10"), code)
-            try expect(code.contains(useLower ? "G10 L20 P1 X-18" : "G10 L20 P1 X18"), code)
-            let job = try unwrap(result.jobs.last)
-            try expect(!job.steps.contains { $0.gcodePath == "Code/set_x_centre.nc" })
-        }
-    },
 ]
 
 let feasibilityTests: [TestCase] = [
@@ -137,17 +78,13 @@ let feasibilityTests: [TestCase] = [
             stock: stock, stockSize: SIMD3(30, 60, 10), setupName: "Custom", programs: [
                 .init(tool: tool, gcode: "G21 G90\nM5\n", operationNames: ["Pocket"], minutes: 1),
                 .init(tool: tool, gcode: "G21 G90\nM5\n", operationNames: ["Back pocket"], minutes: 1, side: 1)],
-            checkpoints: [], measuring: [], setupImage: nil, squareStockFirst: false)
+            checkpoints: [], measuring: [], setupImage: nil)
         var custom = Setup.CustomFixture()
         custom.name = "Test vise"
         custom.notes = "Grip on the uncut lower band."
         custom.height = 12
         input.customHolding = custom
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("coastline-\(UUID()).crproj")
-        defer { try? FileManager.default.removeItem(at: url) }
-        try GuidedJobBuilder.write(input, to: url)
-        let project = try JobPackage.open(url: url)
-        try project.verify()
+        let project = GuidedJobBuilder.build(input)
         let job = try unwrap(project.jobs.last)
         let mount = try unwrap(job.steps.first { $0.title == "Mount the Stock" }).markdown
         try expect(mount.contains("Test vise") && mount.contains(custom.notes) && mount.contains("not included in collision checks"), mount)
@@ -156,45 +93,6 @@ let feasibilityTests: [TestCase] = [
         try expect(flip.contains("Test vise") && flip.contains("not assumed") && !flip.contains("lower jaw"), flip)
         let done = try unwrap(job.steps.first { $0.title == "Done" }).markdown
         try expect(!done.contains("thin web"), done)
-    },
-    TestCase(name: "assessmentSuggestsToolsAndFlips") {
-        var inv = Inventory()
-        inv.accessories = [Accessory(name: "1/8", kind: .collet, size: 3.175), Accessory(name: "1/4", kind: .collet, size: 6.35)]
-        inv.tools = [Tool(name: "1/4 flat", kind: .flatEndMill, diameter: 6.35, shankDiameter: 6.35, flutes: 3, fluteLength: 12.7, stickout: 28, overallLength: 50.8),
-                     Tool(name: "1/8 flat", kind: .flatEndMill, diameter: 3.175, shankDiameter: 3.175, flutes: 3, fluteLength: 9.5, stickout: 28, overallLength: 50.8)]
-        let a = PartAnalysis(minCornerRadius: 1.5, minConcaveRadius: 0.8, undercutArea: 116, thinnestWall: 0.4, depth: 15)
-        let issues = Feasibility.assess(a, inventory: inv, partSize: SIMD3(30, 30, 5), stockSize: SIMD3(20, 150, 20))
-        let text = issues.map(\.message).joined(separator: "\n")
-        try expect(text.contains("⌀3 mm") || text.contains("⌀2.38") || text.contains("buy"), "R1.5 corner → needs ≤ 3 mm tool: \(text)")
-        try expect(issues.contains { $0.message.contains("another setup") && !$0.message.contains("flip") })
-        try expect(issues.contains { $0.message.contains("Thinnest wall") && $0.severity == .warning })
-        try expect(issues.contains { $0.message.contains("longest flutes") })
-        try expect(issues.contains { $0.severity == .error && $0.message.contains("doesn't fit this stock") })
-        let fits = Feasibility.fittingStock(partSize: SIMD3(30, 30, 5),
-                                            inventory: { var i = inv; i.stock = [StockItem(materialID: "al-6061", sizeX: 150, sizeY: 80, sizeZ: 20)]; return i }())
-        try expectEqual(fits.count, 1)
-    },
-    TestCase(name: "bedJobMountsTheStockFlatOnTheBed") {
-        let al = MaterialLibrary.material(id: "al-6061")!
-        let tool = Tool(name: "1/4\" flat end mill", kind: .flatEndMill, diameter: 6.35, shankDiameter: 6.35, flutes: 3,
-                        fluteLength: 12.7, stickout: 28.575, overallLength: 50.8)
-        let stock = StockItem(materialID: "al-6061", sizeX: 150, sizeY: 80, sizeZ: 20)
-        let data = FeedsEngine.compute(tool: tool, material: al, kind: .facing)
-        let program = FacingProgram.make(width: 20, length: 150, depth: 0.25, tool: tool, data: data, machine: .standard, title: "Test #1")
-        var input = GuidedJobBuilder.Input(
-            partName: "Plaque", material: al, stock: stock, stockSize: SIMD3(20, 150, 80), setupName: "OP1",
-            programs: [.init(tool: tool, gcode: program, operationNames: ["Facing"], minutes: 7)],
-            checkpoints: [], measuring: [], setupImage: nil, squareStockFirst: false)
-        input.bed = .init(protrusion: 7, clampAngles: [-.pi / 4, .pi / 4])
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("coastline-\(UUID()).crproj")
-        defer { try? FileManager.default.removeItem(at: url) }
-        try GuidedJobBuilder.write(input, to: url)
-        let project = try JobPackage.open(url: url)
-        try project.verify()
-        let mount = try unwrap(project.jobs.last?.steps.first { $0.title == "Mount the Stock" })
-        let text = mount.markdown
-        try expect(text.contains("flat on the bed") && text.contains("C-clamps") && text.contains("7 mm") && text.contains("45°")
-                   && !text.contains("universal clamp"), text)
     },
     TestCase(name: "referenceBoresSitInTheFrameOffTheCentreLine") {
         // The wallet: 70 × 101.6 mm in an 80 × 169.5 × 20 bar, the jaws' strips at both ends.

@@ -73,7 +73,7 @@ struct WorkspaceView: View {
         .overlay {
             // Only when nothing is open, opening or offered on the start sheet (both at once, or
             // this showing while a choice made there loads, looked like a second splash).
-            if model.part == nil && model.machineLoaded && !model.showStart && !model.isBusy {
+            if model.part == nil && model.machineLoaded && !model.isBusy {
                 emptyState
                     .transition(.opacity)
             }
@@ -133,20 +133,8 @@ struct WorkspaceView: View {
             }
             model.measuringToolNames = inventory.inventory.measuring.filter { [.micrometer, .caliper].contains($0.kind) }.map(\.name)
             if ProcessInfo.processInfo.environment["COASTLINE_DEV"] != "1" { await model.loadMachine() }
-            // The start sheet: continue the last session, open, import or try an example. The
-            // first time, after the welcome.
-            if ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil,
-               ProcessInfo.processInfo.environment["COASTLINE_DEV"] != "1", model.part == nil, !model.showWelcome {
-                model.showStart = true
-            }
         }
         .onChange(of: inventory.inventory.stock) { model.layoutScene() }
-        .onChange(of: AppSettings.shared.clampKitProbing) {
-            if model.operations.contains(where: { $0.engraving?.probeSurface == true }) {
-                model.cancelGenerationNow()
-                model.clearToolpathResults()
-            }
-        }
         // Reduce Motion: the camera jumps to a view instead of easing round.
         .onAppear { model.applyReduceMotion() }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification)) { _ in
@@ -335,68 +323,6 @@ struct ErrorBanner<S: Shape>: View {
     }
 }
 
-/// The example parts as cards: picture, name, what they show. Click opens one (Examples.swift).
-struct ExampleGrid: View {
-    @Environment(AppModel.self) private var model
-    @Environment(InventoryModel.self) private var inventory
-    /// Bigger cards with the description (the start sheet).
-    var large = false
-    var onPick: () -> Void = {}
-
-    var body: some View {
-        // A Grid, not a lazy one: the two cards of a row stretch to the same height.
-        Grid(horizontalSpacing: 12, verticalSpacing: 12) {
-            ForEach(Array(stride(from: 0, to: ExamplePart.all.count, by: 2)), id: \.self) { k in
-                GridRow {
-                    ForEach(ExamplePart.all[k..<min(k + 2, ExamplePart.all.count)]) { ex in button(ex) }
-                }
-            }
-        }
-    }
-
-    private func button(_ ex: ExamplePart) -> some View {
-        Button {
-            onPick()
-            Task { await model.openExample(ex, inventory: inventory) }
-        } label: { card(ex) }
-            .buttonStyle(.plain)
-            .disabled(model.isBusy)
-            .help(ex.summary)
-            .accessibilityLabel("\(ex.title) example")
-            .accessibilityHint(ex.summary + " Shows: " + ex.shows.joined(separator: ", ") + ".")
-    }
-
-    private func card(_ ex: ExamplePart) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Group {
-                if let img = NSImage(contentsOf: ex.thumbnailURL) {
-                    Image(nsImage: img).resizable().scaledToFit()
-                } else {
-                    Image(systemName: "cube").font(.title).foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: large ? 92 : 64, height: large ? 92 : 64)
-            .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(ex.title).font(large ? .headline : .callout.weight(.semibold))
-                if large {
-                    Text(ex.summary).font(.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Text(ex.shows.joined(separator: " · ")).font(.caption.weight(large ? .medium : .regular))
-                    .foregroundStyle(large ? Theme.accent : .secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .contentShape(.rect(cornerRadius: 14))
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.06)))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.primary.opacity(0.08)))
-    }
-}
-
 /// The empty workspace's prompt: import a part, or the start screen again. It appears after a
 /// moment, so a part being opened never flashes it.
 struct EmptyWorkspacePrompt: View {
@@ -412,9 +338,6 @@ struct EmptyWorkspacePrompt: View {
             HStack(spacing: 10) {
                 Button("Import Part…", systemImage: "square.and.arrow.down") { importing = true }
                     .buttonStyle(.glassProminent)
-                Button("Start Screen…", systemImage: "square.grid.2x2") { model.showStart = true }
-                    .buttonStyle(.glass)
-                    .help("Continue, open a project or try an example (⇧⌘N)")
             }
             .controlSize(.large)
         }

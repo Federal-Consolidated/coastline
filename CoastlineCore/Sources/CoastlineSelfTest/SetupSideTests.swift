@@ -28,8 +28,6 @@ let setupSideTests: [TestCase] = [
         // Side A's +X (the upper side) faces the spindle in setup 3.
         try expect(simd_distance(SetupSide.rotation(2) * SIMD3(1, 0, 0), SIMD3(0, 0, 1)) < 1e-12)
         try expect(simd_distance(SetupSide.rotation(5) * SIMD3(0, -1, 0), SIMD3(0, 0, 1)) < 1e-12)
-        var prepped = a; prepped.downsizeHeight = 40
-        try expect(prepped.forSide(2, partMin: lo, partMax: hi, stock: stock) == nil)
     },
     TestCase(name: "aSideSetupCutsOnlyInsideTheWindowAroundItsFeatures") {
         let stock = SIMD3<Double>(50, 200, 40)  // side A's frame

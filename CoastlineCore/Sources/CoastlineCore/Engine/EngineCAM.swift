@@ -195,33 +195,4 @@ extension EngineClient {
         return (paths, placed)
     }
 
-    /// The part's top height (work Z) at each cell centre of a grid (row-major, NaN off the part):
-    /// the reference for the simulation's deviation map.
-    /// A printable nest for the part (engine cam/nest.py): its facts and binary STL. `transform`
-    /// is the setup that machines the part (the face held in the nest down).
-    public struct Nest: Sendable {
-        /// Block size (X up in the clamp, Y along, Z), mm.
-        public var size: SIMD3<Double>
-        /// How much of the part stands above the rim, and its height, mm.
-        public var proud: Double
-        public var partHeight: Double
-        public var triangles: Int
-        public var stl: Data
-    }
-
-    public func nest(partID: String, transform: simd_double4x4, clearance: Double, wall: Double, floor: Double = 3,
-                     minHeight: Double = 24) throws -> Nest {
-        let r = try call("nest", ["part_id": partID, "transform": Self.rowMajor(transform), "clearance": clearance, "wall": wall,
-                                  "floor": floor, "min_height": minHeight])
-        let s = r.result["size"] as? [Double] ?? [0, 0, 0]
-        return Nest(size: SIMD3(s[0], s[1], s[2]), proud: r.result["proud"] as? Double ?? 0, partHeight: r.result["part_height"] as? Double ?? 0,
-                    triangles: r.result["triangles"] as? Int ?? 0, stl: r.blobs.first ?? Data())
-    }
-
-    public func heightField(partID: String, transform: simd_double4x4, origin: SIMD2<Double>, cell: Double,
-                            cols: Int, rows: Int) throws -> [Float] {
-        let r = try call("height_field", ["part_id": partID, "transform": Self.rowMajor(transform), "x0": origin.x, "y0": origin.y,
-                                          "cell": cell, "cols": cols, "rows": rows])
-        return r.blobs.first?.littleEndianArray(of: Float.self) ?? []
-    }
 }

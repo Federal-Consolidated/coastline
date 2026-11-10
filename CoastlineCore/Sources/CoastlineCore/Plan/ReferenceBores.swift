@@ -117,7 +117,7 @@ public enum ReferenceBores {
     }
 
     /// Electrical probing: the tool turns slowly backwards (M4 S1500, as the maker's own
-    /// probing cutcode), so a touch never cuts, and the clamp kit closes the circuit.
+    /// probing cutcode), so a touch never cuts, and the fixture closes the circuit.
     static let probeOn = ["M4 S1500", "G4 P2"]
     static let probeFeed = 20.0
 

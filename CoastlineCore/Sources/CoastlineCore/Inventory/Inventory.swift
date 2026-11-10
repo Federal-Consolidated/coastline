@@ -107,18 +107,18 @@ extension Inventory {
     /// The starting inventory on first launch, built from what ships in the standard machine kit:
     /// - The maker's two Fusion tool libraries (the tools used in the machine lessons);
     /// - the ER-11 collets the maker's cutcodes use (1/8" and 1/4");
-    /// - the universal clamp, jig plate and T-slot nuts from the clamp kit;
+    /// - the universal clamp, jig plate and T-slot nuts;
     /// - the 0.2\" edge finder from the operator manual;
     /// - the 150 × 80 × 20 mm 6061 block modelled in the machine dimensions model.
     /// Everything is editable; the app asks the user to confirm what they actually own.
-    /// What holds stock flat on the bed before it fits the clamp kit (FlatPrep): the two
+    /// Fixtures a workshop usually has (FlatPrep): the two
     /// acetal squaring stops, the kit's riser plate and two 3" C-clamps.
     public static let flatClampingKit: [Fixture] = [
         Fixture(name: "Acetal squaring stop", kind: .squaringStop, quantity: 2, height: 25.4,
                 notes: "54 × 19 × 25.4 mm acetal brick, bolted across both T-slots (M4x25 + T-slot nuts). Its spindle-side face sits level with the table's edge, so stock always sticks out past it by the cut + 2 mm."),
-        Fixture(name: "Riser plate", kind: .riser, quantity: 1, height: FlatPrep.riserHeight,
+        Fixture(name: "Riser plate", kind: .riser, quantity: 1, height: 12.7,
                 notes: "12.7 mm aluminium plate under flat stock, placed just behind the squaring stop's face so the cut overhangs it."),
-        Fixture(name: "3\" C-clamp", kind: .cClamp, quantity: 2, gripRange: 0 ... FlatPrep.clampOpening,
+        Fixture(name: "3\" C-clamp", kind: .cClamp, quantity: 2, gripRange: 0 ... 76.0,
                 notes: "Screw C-clamp from the maker's kit: 76 mm opening, 50 mm throat. Reaches around the table's back edge to hold flat stock on the riser."),
     ]
 

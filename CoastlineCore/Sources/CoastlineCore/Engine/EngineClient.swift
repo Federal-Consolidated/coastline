@@ -271,22 +271,6 @@ extension EngineClient {
         }
     }
 
-    /// The clamp kit's parts (universal clamp, spacers, acetal brick, eccentric clamps),
-    /// each in its kit's local frame (see `UniversalClamp`).
-    public func fixtureKit() throws -> [FixturePart] {
-        let r = try call("fixture_kit", [:])
-        let meta = r.result["parts"] as? [[String: Any]] ?? []
-        return meta.enumerated().map { i, m in
-            let c = m["color"] as? [Double] ?? [0.5, 0.5, 0.5]
-            return FixturePart(kit: m["kit"] as? String ?? "", name: m["name"] as? String ?? "", role: m["role"] as? String ?? "",
-                               color: SIMD3(Float(c[0]), Float(c[1]), Float(c[2])),
-                               mesh: MeshData(vertices: r.blobs[3 * i].littleEndianArray(of: Float.self),
-                                              normals: r.blobs[3 * i + 1].littleEndianArray(of: Float.self),
-                                              indices: r.blobs[3 * i + 2].littleEndianArray(of: UInt32.self),
-                                              boundsMin: .zero, boundsMax: .zero, exact: false, faceCount: 0))
-        }
-    }
-
     /// Describes the exact surface nearest `point` (part coordinates).
     public func faceInfo(partID: String, point: Vec3) throws -> FaceInfo {
         let r = try call("face_info", ["part_id": partID, "point": [point.x, point.y, point.z]])

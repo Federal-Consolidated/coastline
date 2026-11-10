@@ -39,9 +39,7 @@ extension AppModel {
         jobResources = next
         clearToolpathResults()
         opCache.removeAll(); opCacheOrder.removeAll()
-        prepProgramCache = nil
         toolChangeSpotCache = nil
-        kitShiftCache = nil
         referencePlan = nil
         planCandidates = []; planOptions = []; chosenPlan = nil; recommendedPlan = nil
         if let stock = next.stock { stockEdited(stock) }

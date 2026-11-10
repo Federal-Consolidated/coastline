@@ -211,24 +211,12 @@ extension AppModel {
         // the bar, the extra off the face, so the outline cut goes right through around it.
         if let e = oneSidedThroughExcess, holdWithTabs, abs(setup.topAllowance - e) > 0.01 {
             setup.topAllowance = e
-        } else if !twoSided, setup.usesClampKit, !cutsThroughWithTabs {
-            // Not cut through: a skin of bar stays behind the part, so it can't come loose in the
-            // last cut (the part moved to the back for tabs, then tabs turned off).
-            let (lo, hi) = setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
-            let excess = setup.stockSize(stock).z - (hi.z - lo.z)
-            let skin = excess - setup.topAllowance
-            if skin < Self.throughSkin - 1e-6, excess >= Self.throughSkin + 0.2 {
-                setup.topAllowance = min(0.5, excess - Self.throughSkin)
-            }
         }
         // The split, the holes and the floors come from the analysis: never from one made before
         // the part was last scaled or turned (both sides would cut to the old split).
         if let pending = analysisTask { await pending.value }
         if part.exact, analysisTransform != workTransform(part) { await runAnalysis() }
         guard planningMachineReady, planningMachineReference == machineReference else { return }
-        // Where the kit is bolted (left of the middle when the tools need room on the right):
-        // before generating, so the travel checks see it.
-        updateKitShift()
         var base: [EngineClient.PlannedOperation] = operations.compactMap { op in
             guard op.enabled, let id = op.toolID, let tool = inventory.tools.first(where: { $0.id == id }) else { return nil }
             // What the journal learned (chatter → slower) scales the feeds for this tool kind.
@@ -248,15 +236,6 @@ extension AppModel {
                 .map(\.tool).max { $0.diameter < $1.diameter }
         }
         guard !base.isEmpty else { errorMessage = "No enabled operations with a tool."; return }
-        // The part's edge plus the tool's radius must be within the X travel in the kit: lower
-        // the bar (bottom shoulders) first if it isn't, rather than stop cuts short of the part.
-        if !setup.onBed, let sh = setup.shoulders, let r = reachExcess, r.above > 0, sh.bottom < maxShoulderBottom {
-            let before = sh.bottom
-            lowerForReach()
-            if let after = setup.shoulders?.bottom, after > before {
-                planNotes.append("The part's top edge plus the tool's radius was \(Length.mm(r.above)) mm beyond the machine's X travel: the shoulders' bottom now comes off \(Length.mm(after)) mm (was \(Length.mm(before))), so the bar sits lower and every wall is in reach.")
-            }
-        }
         errorMessage = nil
         status = "Generating toolpaths…"
         do {
@@ -270,15 +249,8 @@ extension AppModel {
             var results: [SideResult] = []
             var allPrograms: [ToolProgram] = []
             var generated: [(side: Int, setup: Setup, planned: [EngineClient.PlannedOperation], paths: [OperationToolpath], materialTop: Double)] = []
-            // The strips along the clamped edges stay uncut on both sides (GripZones): the frame
-            // stays whole and gripped, and the tools never reach the jaws. Roughing keeps out of
-            // them; every other operation is lifted over them (leaving bridges to saw).
-            // On the bed (path B) the clamps hold the bar behind the cut: no strips.
-            let strips = (setup.onBed ? [] : shoulderStrips(stockSize: setup.stockSize(stock)))
-                + fixtureKeepOut(stockSize: setup.stockSize(stock))
-            let keepOut = strips
+            let keepOut: [(min: SIMD2<Double>, max: SIMD2<Double>)] = []
             let keepOutBelow = 0.5
-            var bridged = 0.0
             if ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil {
                 print("keepout below \(keepOutBelow) rects \(keepOut.count) stock \(setup.stockSize(stock)) inside the stock: \(keepOut.filter { $0.max.x > -setup.stockSize(stock).x / 2 && $0.min.x < setup.stockSize(stock).x / 2 && $0.max.y > -setup.stockSize(stock).y / 2 && $0.min.y < setup.stockSize(stock).y / 2 }.map { String(format: "x %.1f…%.1f y %.1f…%.1f", $0.min.x, $0.max.x, $0.min.y, $0.max.y) })")
             }
@@ -409,10 +381,6 @@ extension AppModel {
                     .flatMap { Self.finishStrips($0, yRange: (s.partOffsetY - (phi.y - plo.y) / 2 - 3) ... (s.partOffsetY + (phi.y - plo.y) / 2 + 3)) }
                 planned = addReferenceFeatures(planned, side: side, material: material, stock: stock)
                 // The tabs end where every tool can go round their ends (within the X travel).
-                if side == 1, tabSpec != nil, let xr = kitWorkXRange {
-                    let m = (planned.map(\.tool.diameter).max() ?? 6.35) / 2 + 0.5
-                    if xr.upperBound - xr.lowerBound > 2 * m { tabSpec?.withinX = (xr.lowerBound + m)...(xr.upperBound - m) }
-                }
                 // The tabs keep clear of the windows side B opens over the reference bores.
                 if side == 1, tabSpec != nil, let plan = referencePlan {
                     let windowTool = planned.first { $0.operation.reference == .windows }?.tool.diameter ?? 0
@@ -471,17 +439,11 @@ extension AppModel {
                 }
             }
             plannedPrograms = planned
-            // The stock prep is the first thing done at the machine: its programs first (they're
-            // quick, made here), so its chapters open straight away.
-            generatePrep(base: base, material: material, stock: stock)
             // The job starts at chapter 1: the stock as bought (or side A's clamping without a prep).
             selectedStep = nil
-            if hasPrep && !prepResults.isEmpty { show(side: -1, stage: -1) }
             plannedOperationCount = Dictionary(uniqueKeysWithValues: run.sides.map { ($0.side, $0.planned.count) })
             run.boxMin = box.min
             run.boxMax = box.max
-            run.strips = strips
-            run.kitXRange = kitWorkXRange
             try await runInBackground(run, partURL: part.url, partID: part.partID)
             if !run.failed.isEmpty {
                 publishPartial(run, force: true)
@@ -493,7 +455,6 @@ extension AppModel {
                 status = "\(run.finished) of \(run.total) operations ready · \(run.failed.count) failed"
                 return
             }
-            bridged = run.bridged
             for (si, sp) in run.sides.enumerated() {
                 // An operation with nothing to cut on this side (its pockets all done from the
                 // other side, say) gets no program: no tool change for nothing.
@@ -534,48 +495,15 @@ extension AppModel {
                     return
                 }
             }
-            // Toolpaths are relative to the stock face, so where the stock sits in the clamps
-            // doesn't change them: stand the face out past the jaws far enough that no tool,
-            // shank or collet nut comes near them (parallels behind the stock), then check.
-            let t0Check = Date()
-            autoProtrusion = nil
-            status = setup.holding == .custom ? "Checking clearance to the table…" : "Checking clearance to the clamps…"
-            let stockSize = setup.stockSize(stock)
-            if !setup.planFromFixtureLibrary, let field = clampKitField(stockSize: stockSize) {
-                let jobs = generated.flatMap { g in zip(g.planned, g.paths).map { ($0.tool, $1.moves) } }
-                let setback = await Task.detached(priority: .userInitiated) {
-                    var f = field
-                    return jobs.map { FixtureClearance.requiredSetback($0.1, tool: $0.0, field: &f) }.max() ?? 0
-                }.value
-                guard generationSignature == run.signature, !cancelGeneration else { throw CancellationError() }
-                if setback > 0.01, setup.onBed, let st = bedJobStage {
-                    // The bar sticks out further past the stop; the clamps still need a grip.
-                    autoProtrusion = min(((st.protrusion + setback + 0.25) * 2).rounded(.up) / 2, stockSize.z - 15)
-                } else if setback > 0.01, setup.usesClampKit {
-                    let want = ((setup.clampProtrusion + setback + 0.25) * 2).rounded(.up) / 2
-                    autoProtrusion = min(want, max(stockSize.z - Self.minimumGrip, setup.clampProtrusion))
-                }
-            }
-            if ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil {
-                print("timing setback \(String(format: "%.3f", Date().timeIntervalSince(t0Check))) s")
-            }
             let t0Post = Date()
-            let clampField = clampKitField(stockSize: stockSize)
-            if ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil {
-                print("timing clamp field \(String(format: "%.3f", Date().timeIntervalSince(t0Post))) s")
-            }
+            let stockSize = setup.stockSize(stock)
             status = "Posting and checking the programs…"
             // Every program is posted and checked at once (they're independent), then collected
             // in order.
             typealias Posted = (posted: (text: String, lines: [[Int?]]), report: GCodeValidator.Report, seconds: Double, hits: [FixtureClearance.Hit],
                                 probe: String?)
-            // Engraving that follows the probed face: the tool feels the stock electrically, so
-            // only conductive stock in the insulated clamp kit (with electrical probing on).
-            let probeBlocked: String? = !setup.usesClampKit || AppSettings.shared.clampKitProbing != .electrical
-                ? "The engraving can't follow the probed face here: that needs the insulated clamp kit with electrical probing (Settings ▸ Machining). It follows the CAD."
-                : [.wax, .plastic, .printedResin].contains(material.family)
-                ? "The engraving can't follow the probed face: \(material.name) doesn't conduct, so the tool can't feel it. It follows the CAD."
-                : nil
+            // Engraving that follows the probed face needs electrical probing, which this workholding hasn't.
+            let probeBlocked: String? = "The engraving can't follow the probed face: that needs electrical probing, which this workholding doesn't have. It follows the CAD."
             struct Pending {
                 var side: Int
                 var group: [(EngineClient.PlannedOperation, OperationToolpath)]
@@ -605,7 +533,7 @@ extension AppModel {
                     let rpm = group.map(\.0.data.rpm).max() ?? machine.spindleRPM.upperBound
                     let groupPaths = group.map(\.1), names = group.map { $0.0.operation.title }
                     let top = materialTop, bmin = sideBox.min, bmax = sideBox.max
-                    let fixtures = step.flatMap { libraryFixtureFields[fixtureStateKey($0.fixture)] } ?? clampField
+                    let fixtures = step.flatMap { libraryFixtureFields[fixtureStateKey($0.fixture)] }
                     let setupName = step?.title ?? setupName
                     // Posting and the safety check are heavy for 3D programs (tens of thousands of
                     // lines): off the main thread, so the app stays responsive.
@@ -668,8 +596,8 @@ extension AppModel {
                 for (k, path) in r.paths.enumerated() where k < r.planned.count {
                     let step = libraryWorkholdingPlan?.step(for: "\(r.side):\(k)")
                     let libraryOrigin = step.flatMap { libraryMachineOrigin(fixture: $0.fixture, stock: r.setup.stockSize(stock)) }
-                        .map { $0 + SIMD3(0, 0, r.planned[k].tool.stickout) } // as kitMachineOrigin(stickout:)
-                    guard let origin = libraryOrigin ?? kitMachineOrigin(stickout: r.planned[k].tool.stickout) else { continue }
+                        .map { $0 + SIMD3(0, 0, r.planned[k].tool.stickout) } // as machineOrigin(stickout:)
+                    guard let origin = libraryOrigin ?? machineOrigin(stickout: r.planned[k].tool.stickout) else { continue }
                     var outside = 0, first: SIMD3<Double>?
                     for m in path.moves {
                         let q = origin + m.position
@@ -717,16 +645,11 @@ extension AppModel {
             // Where the user is looking stays put: the partial results already showed (from
             // chapter 1, step 1), and he may have moved on to another step or view meanwhile.
             let shownBefore = run.published.contains { $0 > 0 }
-            let keepView = ViewKey(side: viewSide, stage: prepStage), keepTime = playhead
+            let keepView = viewSide, keepTime = playhead
             viewSide = min(viewSide, results.count - 1)
-            if viewSide == -1 && prepStage < 0 && !prepResults.isEmpty {
-                switchingView = true
-                prepStage = 0  // the first clamping, with its program
-                switchingView = false
-            }
             computeSideAFinal()
             prepareToolChangeSpot()
-            showSide(at: shownBefore && ViewKey(side: viewSide, stage: prepStage) == keepView ? keepTime : 0)
+            showSide(at: shownBefore && viewSide == keepView ? keepTime : 0)
             lap("showSide")
             if !shownBefore {
                 revealWork()
@@ -735,9 +658,6 @@ extension AppModel {
             }
             lap("view")
             let secs = programs.reduce(0) { $0 + $1.seconds }
-            bridgeNote = bridged > 1
-                ? "The part comes close to the clamped edges: \(Length.mm(bridged)) mm of cutting was skipped to keep \(Length.mm(GripZones.grip)) mm of stock under the jaws, so the part stays joined to the frame there. Saw those bridges after unclamping, or use taller stock."
-                : nil
             status = "Toolpaths ready in \(String(format: "%.1f", Date().timeIntervalSince(started))) s · about \(Self.duration(secs)) of machining"
                 + (cachedOps > 0 ? " · \(cachedOps) unchanged operation\(cachedOps == 1 ? "" : "s") reused" : "")
         } catch is CancellationError {
@@ -800,9 +720,9 @@ extension AppModel {
             // Past the widest clearing band and the tabs' reach into the frame.
             let rough = planned.filter { $0.operation.kind == .adaptive }.map(\.tool.diameter).max() ?? 6.35
             let clear = max(1.6 * rough + 1, holdWithTabs ? 1.6 * rough + 3.75 : 0) + 0.5
-            let strips = setup.onBed ? [] : shoulderStrips(stockSize: size)
+            let strips: [(min: SIMD2<Double>, max: SIMD2<Double>)] = []
             guard let plan = ReferenceBores.place(stock: size, partMin: lo, partMax: hi, clear: clear, keepOut: strips,
-                                                  xReach: kitWorkXRange, toolDiameter: tool.diameter,
+                                                  xReach: nil, toolDiameter: tool.diameter,
                                                   maxDepth: tool.stickout - 2) else { return planned }
             referencePlan = plan
             var op = Operation(id: Self.referenceBoresID, kind: .bore, toolID: tool.id)
@@ -845,7 +765,6 @@ extension AppModel {
     static func edgeFindProgram(side: Int, stage: Int) -> Int { 2000 + (side + 1) * 100 + stage }
 
     func result(forSide side: Int) -> SideResult? {
-        if side == -1 { return prepResults.isEmpty || prepStage < 0 ? nil : prepResults[min(prepStage, prepResults.count - 1)] }
         return sideResults.first { $0.side == side }
     }
 
@@ -865,23 +784,17 @@ extension AppModel {
         // The edge finder goes first after every clamping: its visit to each edge plays like a
         // program (it removes nothing).
         let size = displayStockSize ?? stock.map { setup.stockSize($0) } ?? SIMD3(10, 10, 10)
-        let protrusion = viewSide == -1 ? (currentPrepStage?.protrusion ?? 3) : effectiveProtrusion
-        // In the clamp kit the first tool probes electrically; elsewhere the edge finder.
-        let electrical = viewSide >= 0 && setup.usesClampKit && AppSettings.shared.clampKitProbing == .electrical
-        let probeTool = electrical ? (r.planned.first?.tool ?? EdgeFinding.tool) : EdgeFinding.tool
-        var probeMoves = EdgeFinding.moves(stock: size, depth: min(electrical ? 1.0 : 1.5, max(protrusion - 0.5, 0.5)), radius: probeTool.diameter / 2)
-        if viewSide >= 0, let xr = kitWorkXRange {
-            // Within the X travel: at a bar's top edge right at the limit the finder can't go round it.
-            probeMoves = probeMoves.map { var q = $0; q.x = min(max(q.x, xr.lowerBound), xr.upperBound); if q.x != $0.x && q.motion != .line { q.motion = .line; q.i = 0; q.j = 0 }; return q }
-        }
+        let protrusion = displayedJobFixture?.planning?.facePastTable ?? setup.customFixture.faceProtrusion
+        let probeTool = EdgeFinding.tool
+        let probeMoves = EdgeFinding.moves(stock: size, depth: min(1.5, max(protrusion - 0.5, 0.5)), radius: probeTool.diameter / 2)
         let probe = OperationToolpath(operationID: UUID(), moves: probeMoves)
-        let probeProgram = Self.edgeFindProgram(side: viewSide, stage: prepStage)
+        let probeProgram = Self.edgeFindProgram(side: viewSide, stage: 0)
         if setup.planFromFixtureLibrary {
             timelineTitles = r.planned.map { $0.operation.title }
             timeline = ToolpathTimeline(paths: r.paths, programOf: r.operationProgram, lines: r.operationLines, machine: machine)
         } else {
             plannedTools = [probeTool] + plannedTools
-            timelineTitles = [electrical ? "Probing" : "Edge finding"] + r.planned.map { $0.operation.title }
+            timelineTitles = ["Edge finding"] + r.planned.map { $0.operation.title }
             timeline = ToolpathTimeline(paths: [probe] + r.paths, programOf: [probeProgram] + r.operationProgram, lines: [[]] + r.operationLines, machine: machine)
         }
         lap("timeline")
@@ -891,7 +804,6 @@ extension AppModel {
         resetSimulation()
         lap("reset sim")
         showToolpaths()
-        showClearanceHits()
         lap("paths + playback")
         updatePlayback()
         lap("playback")

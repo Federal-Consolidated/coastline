@@ -26,7 +26,5 @@ let package = Package(
         ], swiftSettings: [.unsafeFlags(["-O"], .when(configuration: .debug))]),
         // Self-test runner (XCTest and the Testing macros need Xcode; see scripts/selftest.sh).
         .executableTarget(name: "CoastlineSelfTest", dependencies: ["CoastlineCore", "MillCore", .product(name: "ZIPFoundation", package: "ZIPFoundation")]),
-        // `swift run jobtool import job.dd <folder>`: a .dd job as a Coastline program job (also bounds, section, info).
-        .executableTarget(name: "jobtool", dependencies: ["CoastlineCore"]),
     ]
 )

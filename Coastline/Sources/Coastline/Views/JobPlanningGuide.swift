@@ -46,7 +46,7 @@ struct JobPlanInspector: View {
                 LabeledContent("Part", value: model.part?.fileName ?? "No part")
                 LabeledContent("Stock", value: model.stock.map { "\($0.material?.name ?? "Stock") · \($0.sizeDescription)" } ?? "Choose stock")
                 LabeledContent("Workholding") {
-                    Button(workholdingName) { model.enter(.clampKit) }
+                    Button(workholdingName) { model.enter(.setups) }
                         .buttonStyle(.link)
                         .help("Change the workholding in Setups")
                 }
@@ -84,7 +84,7 @@ struct JobPlanInspector: View {
             let names = (model.setup.fixtureAssemblies ?? []).filter { model.setup.selectedFixtureIDs?.contains($0.id) == true }.map(\.name)
             return names.isEmpty ? "Choose in Setups" : names.joined(separator: ", ")
         }
-        return model.holdingPath.title
+        return model.setup.holding == .custom ? model.setup.customFixture.name : "Fixture library"
     }
 
     private var planningAction: some View {
@@ -108,7 +108,7 @@ struct JobPlanInspector: View {
                     HStack(alignment: .firstTextBaseline) {
                         Text(blocker).font(.caption).foregroundStyle(.secondary)
                         if blocker.contains("Setups") {
-                            Button("Go to Setups") { model.enter(.clampKit) }.controlSize(.small)
+                            Button("Go to Setups") { model.enter(.setups) }.controlSize(.small)
                         }
                     }
                 }
@@ -130,7 +130,6 @@ struct JobPlanInspector: View {
 struct WorkholdingChoiceSection: View {
     @Environment(AppModel.self) private var model
     @Environment(InventoryModel.self) private var inventory
-    @State private var manualHolding = false
     @State private var manualDetails = false
     @State private var importingFixture = false
 
@@ -155,27 +154,15 @@ struct WorkholdingChoiceSection: View {
                 ForEach(fixtures) { fixture in fixtureRow(fixture, automatic: automatic) }
                 Button("Add Workholding…", systemImage: "plus") { importingFixture = true }
             } else {
-                LabeledContent("Method", value: model.holdingPath.title)
+                LabeledContent("Method", value: model.setup.holding == .custom ? model.setup.customFixture.name : "Fixture library")
                 Button("Choose from Library", systemImage: "square.grid.2x2") { model.enableLibraryPlanning() }
                 Button("Fixture Placement and Grip…") { manualDetails = true }
-                if model.hasPrep {
-                    Button("Review Stock Preparation…") { model.enter(.prep) }
-                }
             }
-            Button("Other Holding Method…") { manualHolding = true }
-                .controlSize(.small)
-        }
-        .sheet(isPresented: $manualHolding) {
-            VStack(spacing: 0) {
-                HoldingInspector()
-                HStack { Spacer(); Button("Done") { manualHolding = false } }.padding()
-            }.frame(width: 480, height: 600)
         }
         .sheet(isPresented: $manualDetails) {
             VStack(spacing: 0) {
                 if model.setup.holding == .custom { CustomHoldingInspector() }
-                else if model.setup.onBed { BedJobInspector() }
-                else { SetupInspector(scope: .clampKit) }
+                else { SetupInspector(scope: .setups) }
                 HStack { Spacer(); Button("Done") { manualDetails = false } }.padding()
             }.frame(width: 500, height: 700)
         }
@@ -247,7 +234,6 @@ struct JobSetupsInspector: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             PlacementSection()
-            ProbingMethodSection()
             if model.part != nil && model.stock != nil {
                 IssuesSection(issues: model.stockContainmentIssues)
             }
@@ -260,8 +246,8 @@ struct JobSetupsInspector: View {
                 }
                 .buttonStyle(.glassProminent).controlSize(.large)
                 .disabled(!model.canVisit(.planning))
-                if model.status(.clampKit).state == .todo {
-                    Text(model.status(.clampKit).why).font(.caption).foregroundStyle(.secondary)
+                if model.status(.setups).state == .todo {
+                    Text(model.status(.setups).why).font(.caption).foregroundStyle(.secondary)
                 }
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(.bar)
         }
