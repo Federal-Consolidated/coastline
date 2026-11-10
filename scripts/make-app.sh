@@ -81,8 +81,9 @@ if (( STANDALONE )); then
   PY=$(readlink -f "$(sed -n 's/^home = //p' $ROOT/engine/.venv/pyvenv.cfg)/..")
   rsync -a --exclude '__pycache__' --exclude 'EXTERNALLY-MANAGED' $PY/ $B/python/
   SITE=$B/python/lib/python3.11/site-packages
-  # Not the dev tools, not the editable link back to the repo, and not VTK's Python modules and
-  # matplotlib (OCP's wheel pulls them in; the engine never loads them).
+  # Not the dev tools, not the editable link back to the repo, and not VTK's Python modules (OCP's
+  # wheel pulls them in; the engine never loads them). matplotlib and Pillow are no longer in the
+  # lock at all (engine/pyproject.toml overrides them away); the excludes stay as a guard.
   rsync -a --exclude '__pycache__' \
     --exclude 'vtkmodules' --exclude 'vtk*' --exclude 'matplotlib*' --exclude 'mpl_toolkits' \
     --exclude '_pytest' --exclude 'pytest*' --exclude 'pluggy*' --exclude 'iniconfig*' --exclude 'pybind11*' \

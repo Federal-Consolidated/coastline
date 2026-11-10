@@ -16,6 +16,12 @@ dependencies = [
 [dependency-groups]
 dev = ["pytest>=8", "pybind11>=2.12"]
 
+[tool.uv]
+# cadquery-ocp needs VTK's libraries, and the vtk wheel declares matplotlib (and with it Pillow)
+# for its Python text rendering. The engine never imports vtkmodules or matplotlib; the
+# impossible marker drops them from the lock so they are neither installed nor shipped.
+override-dependencies = ["matplotlib; sys_platform == 'never'"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
