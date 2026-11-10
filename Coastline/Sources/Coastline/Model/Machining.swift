@@ -249,7 +249,8 @@ extension AppModel {
             var results: [SideResult] = []
             var allPrograms: [ToolProgram] = []
             var generated: [(side: Int, setup: Setup, planned: [EngineClient.PlannedOperation], paths: [OperationToolpath], materialTop: Double)] = []
-            let keepOut: [(min: SIMD2<Double>, max: SIMD2<Double>)] = []
+            // Roughing keeps clear of the fixtures (the planner's clearance check holds every tool to it).
+            let keepOut = fixtureKeepOut(candidates: libraryCandidates, stockSize: setup.stockSize(stock))
             let keepOutBelow = 0.5
             if ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil {
                 print("keepout below \(keepOutBelow) rects \(keepOut.count) stock \(setup.stockSize(stock)) inside the stock: \(keepOut.filter { $0.max.x > -setup.stockSize(stock).x / 2 && $0.min.x < setup.stockSize(stock).x / 2 && $0.max.y > -setup.stockSize(stock).y / 2 && $0.min.y < setup.stockSize(stock).y / 2 }.map { String(format: "x %.1f…%.1f y %.1f…%.1f", $0.min.x, $0.max.x, $0.min.y, $0.max.y) })")
@@ -365,10 +366,13 @@ extension AppModel {
                         .filter { $0.operation.kind == .adaptive && $0.tool.diameter > planned[k].tool.diameter + 1e-6 }
                         .map { ($0.tool.diameter, $0.operation.minPocket ?? Operation.defaultMinPocket, $0.operation.leaveRadial) }
                 }
-                if !keepOut.isEmpty {
+                let reach = reachInSetup(candidates: libraryCandidates, stockSize: s.stockSize(stock))
+                if reach == nil, ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil { print("reach unknown for side \(side) stock \(s.stockSize(stock))") }
+                let sideKeepOut = keepOut + Self.outOfReachStrips(reach)
+                if !sideKeepOut.isEmpty {
                     planned = planned.map { p in
                         var p = p
-                        if p.operation.kind == .adaptive { p.keepOut = keepOut; p.keepOutBelow = keepOutBelow }
+                        if p.operation.kind == .adaptive { p.keepOut = sideKeepOut; p.keepOutBelow = keepOutBelow }
                         return p
                     }
                 }
@@ -393,9 +397,14 @@ extension AppModel {
                     let w = transform * SIMD4(c, 1)
                     partLo = simd_min(partLo, SIMD2(w.x, w.y)); partHi = simd_max(partHi, SIMD2(w.x, w.y))
                 }
+                // Only what the tool reaches here: the depth per tool now, the X travel on the paths.
+                if let reach {
+                    planned = withinReach(planned, reach: reach, stockDepth: s.stockSize(stock).z, setupName: Self.setupTitle(side: side, twoSided: twoSided))
+                }
                 run.sides.append(.init(side: side, setup: s, planned: planned, materialTop: materialTop,
                                        tabSpec: tabSpec, tabBottom: tabBottom, transform: transform,
-                                       partX: partLo.x...partHi.x, partY: partLo.y...partHi.y))
+                                       partX: partLo.x...partHi.x, partY: partLo.y...partHi.y, reachX: reach?.x,
+                                       fields: fixtureFields(candidates: libraryCandidates, stockSize: s.stockSize(stock))))
             }
             // Setups from the other sides (upper, lower side, ends): each cuts only the features
             // that need it. They come first at the machine, while the stock is still a whole block.
@@ -410,10 +419,26 @@ extension AppModel {
                         partLo = simd_min(partLo, SIMD2(w.x, w.y)); partHi = simd_max(partHi, SIMD2(w.x, w.y))
                     }
                     let sideBox = sp.setup.stockBox(stock)
-                    run.sides.append(.init(side: sp.side, setup: sp.setup, planned: sp.planned, materialTop: 0,
+                    var planned = sp.planned
+                    let reach = reachInSetup(candidates: libraryCandidates, stockSize: sp.setup.stockSize(stock))
+                    if reach == nil, ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil { print("reach unknown for side \(sp.side) stock \(sp.setup.stockSize(stock))") }
+                    let sideKeepOut = fixtureKeepOut(candidates: libraryCandidates, stockSize: sp.setup.stockSize(stock)) + Self.outOfReachStrips(reach)
+                    if !sideKeepOut.isEmpty {
+                        planned = planned.map { p in
+                            var p = p
+                            if p.operation.kind == .adaptive { p.keepOut += sideKeepOut; p.keepOutBelow = min(p.keepOutBelow, keepOutBelow) }
+                            return p
+                        }
+                    }
+                    if let reach {
+                        planned = withinReach(planned, reach: reach, stockDepth: sp.setup.stockSize(stock).z, setupName: Self.setupTitle(side: sp.side, twoSided: twoSided))
+                    }
+                    guard !planned.isEmpty else { continue }
+                    run.sides.append(.init(side: sp.side, setup: sp.setup, planned: planned, materialTop: 0,
                                            tabSpec: nil, tabBottom: 0, transform: transform,
                                            partX: partLo.x...partHi.x, partY: partLo.y...partHi.y,
-                                           boxMin: sideBox.min, boxMax: sideBox.max))
+                                           boxMin: sideBox.min, boxMax: sideBox.max, reachX: reach?.x,
+                                           fields: fixtureFields(candidates: libraryCandidates, stockSize: sp.setup.stockSize(stock))))
                 }
             }
             // Machining order: side A's operations, then side B's. Several engines take them in
@@ -617,9 +642,6 @@ extension AppModel {
                 if setup.holding == .custom && !setup.planFromFixtureLibrary {
                     allPrograms[i].report.issues.append(Issue(.warning, "Custom fixture geometry is not included in collision checks. Verify clearance to \(setup.customFixture.name), its jaws and fasteners."))
                 }
-                for w in allPrograms[i].warnings where w.hasPrefix(Self.outOfReach) {
-                    allPrograms[i].report.issues.append(Issue(.error, w))
-                }
             }
             programs = allPrograms
             await checkTabs()
@@ -759,6 +781,14 @@ extension AppModel {
         status = "Cancelling…"
         engine?.terminate()
         for w in workerEngines { w.engine.terminate() }  // restarted, with the part, next time
+    }
+
+    /// Keep-out strips for what lies beyond the X travel in a setup (roughing stays out of them;
+    /// the other passes lift over). Far wider than any stock.
+    static func outOfReachStrips(_ reach: SetupReach?) -> [(min: SIMD2<Double>, max: SIMD2<Double>)] {
+        guard let r = reach else { return [] }
+        let far = 1e4
+        return [(SIMD2(-far, -far), SIMD2(r.x.lowerBound, far)), (SIMD2(r.x.upperBound, -far), SIMD2(far, far))]
     }
 
     /// The timeline's pseudo-program for the edge finding after a clamping.

@@ -309,15 +309,21 @@ public enum LibraryWorkholdingPlanner {
             for (i, candidate) in fixtures.enumerated() {
                 let fixture = candidate.fixture
                 let heavy = [.adaptive, .facing].contains(cut.operation.kind)
-                let reaches = candidate.machineOrigin.map { origin in
-                    // The origin is for a bare spindle nose at work zero: a tool sticking out
-                    // further puts the spindle that much higher for the same tip position.
+                // The origin is for a bare spindle nose at work zero: a tool sticking out
+                // further puts the spindle that much higher for the same tip position. The
+                // worst excursion past the travel, if any, with its axis.
+                let travel: String? = candidate.machineOrigin.flatMap { origin -> String? in
                     let offset = origin + SIMD3(0, 0, cut.tool.stickout)
                     let a = bounds.min + offset, b = bounds.max + offset
-                    return machine.machineEnvelope.x.contains(a.x) && machine.machineEnvelope.x.contains(b.x)
-                        && machine.machineEnvelope.y.contains(a.y) && machine.machineEnvelope.y.contains(b.y)
-                        && machine.machineEnvelope.z.contains(a.z) && machine.machineEnvelope.z.contains(b.z)
-                } ?? true
+                    let e = machine.machineEnvelope
+                    var worst: (axis: String, mm: Double)?
+                    for (axis, lo, hi, range) in [("X", a.x, b.x, e.x), ("Y", a.y, b.y, e.y), ("Z", a.z, b.z, e.z)] {
+                        let over = max(range.lowerBound - lo, hi - range.upperBound, 0)
+                        if over > 1e-6, over > (worst?.mm ?? 0) { worst = (axis, over) }
+                    }
+                    return worst.map { "the \(cut.tool.name) would go \(Length.mm($0.mm)) mm past the machine's \($0.axis) travel (its moves span X \(Length.mm(bounds.min.x))…\(Length.mm(bounds.max.x)), Z \(Length.mm(bounds.min.z))…\(Length.mm(bounds.max.z)))" }
+                }
+                let reaches = travel == nil
                 let field = fields[i], pad = max(cut.tool.diameter / 2, cut.tool.shankDiameter / 2, FixtureClearance.nutRadius) + 0.5
                 let covered = bounds.min.x - pad >= field.minX && bounds.max.x + pad <= field.minX + Double(field.nx - 1) * field.cell
                     && bounds.min.y - pad >= field.minY && bounds.max.y + pad <= field.minY + Double(field.ny - 1) * field.cell
@@ -330,7 +336,7 @@ public enum LibraryWorkholdingPlanner {
                 if !ok {
                     let why = !sized ? "not fitted to the stock this way round"
                         : heavy && fixture.planning?.allowsRoughing != true ? "not defined for roughing/facing"
-                        : !reaches ? "outside machine travel" : !covered ? "tool motion leaves the checked CAD region"
+                        : !reaches ? (travel ?? "outside machine travel") : !covered ? "tool motion leaves the checked CAD region"
                         : !fits ? "fixture intersects material still present at this setup"
                         : !holds ? "grip/support material is absent or removed by the cuts"
                         : "\(hits.first?.part ?? "tool") clearance collision"

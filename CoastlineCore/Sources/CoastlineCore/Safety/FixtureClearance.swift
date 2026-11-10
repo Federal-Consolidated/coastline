@@ -217,6 +217,73 @@ public enum FixtureClearance {
         return worst
     }
 
+    /// The moves with every stretch where the tool (cutter, shank or collet nut) would come within
+    /// `margin` of a fixture lifted out: the tool rises to `safeZ`, crosses, and comes back down
+    /// where the path is clear again. What it skips stays uncut (a stub to finish by hand, or
+    /// nothing at all where the wall is the stock's own face). Returns the new moves and how much
+    /// cutting (mm) was skipped.
+    public static func clip(_ moves: [Move], tool: Tool, field: inout FixtureField, margin: Double = 0.5,
+                            safeZ: Double = 3, plungeFeed: Double) -> (moves: [Move], skipped: Double) {
+        guard !field.isEmpty, let first = moves.first else { return (moves, 0) }
+        let secs = sections(tool: tool)
+        let snap = field.cell * 0.71
+        let maps = secs.map { field.dilated(radius: max($0.r + margin - snap, 0)) }
+        func blocked(_ p: SIMD3<Double>) -> Bool {
+            for (s, map) in zip(secs, maps) {
+                let f = Double(field.value(map, x: p.x, y: p.y))
+                if f > -.infinity, f - (p.z + s.z0) + margin > 0 { return true }
+            }
+            return false
+        }
+        var out: [Move] = []
+        out.reserveCapacity(moves.count)
+        var skipped = 0.0
+        var prev = first.position
+        var lifted = false  // currently skipping (up at safe Z)
+        for (k, m) in moves.enumerated() {
+            defer { prev = m.position }
+            if k == 0 || m.role == .rapid {
+                if lifted {
+                    // Rapids are above the work: carry on from the safe height.
+                    out.append(Move(.rapid, x: m.x, y: m.y, z: max(m.z, safeZ)))
+                    if m.z < safeZ { out.append(Move(.rapid, x: m.x, y: m.y, z: m.z)) }
+                    lifted = false
+                } else {
+                    out.append(m)
+                }
+                continue
+            }
+            let pts = samples(from: prev, m, step: max(field.cell, 0.25))
+            let anyBlocked = blocked(prev) || pts.contains(where: blocked)
+            if !anyBlocked && !lifted {
+                out.append(m)
+                continue
+            }
+            // Walk the move in short steps, cutting what is allowed and hopping over the rest.
+            var last = prev
+            for p in pts {
+                if blocked(p) {
+                    if !lifted {
+                        out.append(Move(.rapid, x: last.x, y: last.y, z: safeZ))
+                        lifted = true
+                    }
+                    skipped += simd_length(p - last)
+                } else {
+                    if lifted {
+                        out.append(Move(.rapid, x: p.x, y: p.y, z: safeZ))
+                        out.append(Move(.plunge, x: p.x, y: p.y, z: p.z, feed: plungeFeed))
+                        lifted = false
+                    } else {
+                        out.append(Move(m.role, x: p.x, y: p.y, z: p.z, feed: m.feed))
+                    }
+                }
+                last = p
+            }
+        }
+        if lifted, let l = out.last { out.append(Move(.rapid, x: l.x, y: l.y, z: safeZ)) }
+        return (out, skipped)
+    }
+
     /// A sentence for the safety report.
     public static func describe(_ hits: [Hit]) -> String? {
         guard let worst = hits.max(by: { $0.depth < $1.depth }) else { return nil }

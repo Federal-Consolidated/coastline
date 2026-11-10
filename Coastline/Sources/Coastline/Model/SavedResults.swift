@@ -70,7 +70,7 @@ struct SavedResults: Codable, Equatable {
     }
 }
 
-private extension Data {
+extension Data {
     func lzfse() -> Data { ((try? (self as NSData).compressed(using: .lzfse)) as Data?) ?? self }
     func unlzfse() -> Data { ((try? (self as NSData).decompressed(using: .lzfse)) as Data?) ?? self }
     /// Int32 values as written (little-endian on every Mac Coastline runs on).
@@ -99,15 +99,7 @@ extension SavedResults.Side {
         for op in r.operationLines { lines += op.map { Int32($0 ?? -1) } }
         self.init(side: r.side, setup: r.setup,
                   planned: r.planned.map { SavedResults.Planned(operation: $0.operation, tool: $0.tool, data: $0.data, zMin: $0.zMin, zTop: $0.zTop, refTool: $0.refTool) },
-                  paths: r.paths.map { p in
-                      var rows: [Float] = []
-                      rows.reserveCapacity(p.moves.count * 8)
-                      for m in p.moves {
-                          rows += [Float(m.role.rawValue), Float(m.motion.rawValue), Float(m.x), Float(m.y), Float(m.z), Float(m.i), Float(m.j), Float(m.feed)]
-                      }
-                      let raw = rows.withUnsafeBufferPointer { Data(buffer: $0) }
-                      return SavedResults.Path(operationID: p.operationID, moves: raw.lzfse(), warnings: p.warnings, notes: p.notes, minStickout: p.minStickout)
-                  },
+                  paths: r.paths.map(SavedResults.Path.init),
                   operationProgram: r.operationProgram,
                   operationLines: lines.withUnsafeBufferPointer { Data(buffer: $0) }.lzfse(),
                   lineCounts: r.operationLines.map(\.count))
@@ -129,12 +121,7 @@ extension SavedResults.Side {
                               o.refTool = p.refTool
                               return o
                           },
-                          paths: paths.map { p in
-                              var t = OperationToolpath.decode(operationID: p.operationID, blob: p.moves.unlzfse(), warnings: p.warnings)
-                              t.notes = p.notes
-                              t.minStickout = p.minStickout
-                              return t
-                          },
+                          paths: paths.map(\.toolpath),
                           operationProgram: operationProgram, operationLines: lines)
     }
 }
@@ -188,5 +175,25 @@ extension AppModel {
         status = "Toolpaths from the project · about \(Self.duration(programs.reduce(0) { $0 + $1.seconds })) of machining"
         if setup.planFromFixtureLibrary { Task { await reloadSavedLibraryGeometry() } }
         return true
+    }
+}
+
+extension SavedResults.Path {
+    /// The engine's rows for a toolpath, LZFSE compressed.
+    init(_ p: OperationToolpath) {
+        var rows: [Float] = []
+        rows.reserveCapacity(p.moves.count * 8)
+        for m in p.moves {
+            rows += [Float(m.role.rawValue), Float(m.motion.rawValue), Float(m.x), Float(m.y), Float(m.z), Float(m.i), Float(m.j), Float(m.feed)]
+        }
+        let raw = rows.withUnsafeBufferPointer { Data(buffer: $0) }
+        self.init(operationID: p.operationID, moves: raw.lzfse(), warnings: p.warnings, notes: p.notes, minStickout: p.minStickout)
+    }
+
+    var toolpath: OperationToolpath {
+        var t = OperationToolpath.decode(operationID: operationID, blob: moves.unlzfse(), warnings: warnings)
+        t.notes = notes
+        t.minStickout = minStickout
+        return t
     }
 }

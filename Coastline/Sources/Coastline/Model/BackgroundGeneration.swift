@@ -29,6 +29,11 @@ final class GenerationRun {
         /// This setup's stock box when it isn't side A's (a turned setup).
         var boxMin: SIMD3<Double>? = nil
         var boxMax: SIMD3<Double>? = nil
+        /// The work X the tool tip reaches in this setup (the machine's travel from the fixture).
+        var reachX: ClosedRange<Double>? = nil
+        /// The fixtures fitted to this setup's stock, as the clearance check sees them (the tool,
+        /// shank and collet nut keep out of them; their dilation caches fill as the paths come).
+        var fields: [FixtureField] = []
     }
 
     var sides: [SidePlan] = []
@@ -64,7 +69,6 @@ final class GenerationRun {
 
 extension AppModel {
     /// A program whose moves had to be pulled into the part to stay within the travel fails.
-    static let outOfReach = "Out of the machine's reach:"
 
     /// How many engine processes generate at once (the main one and workers).
     static var generationWorkers: Int {
@@ -108,19 +112,18 @@ extension AppModel {
         let mainPartID = self.part?.partID ?? fallbackID
         // Workers only when there's real work: cached operations come back instantly.
         let uncached = run.jobs.filter { j in
-            let sp = run.sides[j.side]
-            return opCache[Self.generationKey(partID: mainPartID, sp.planned[j.k], sp.transform, run.boxMin, run.boxMax, sp.tabSpec, sp.tabBottom, machine: run.machine)] == nil
+            opCache[jobKey(run, j.side, j.k, mainPartID: mainPartID)] == nil && !ToolpathDiskCache.has(diskKey(run, j.side, j.k, partURL: url))
         }.count
         let extra = max(min(Self.generationWorkers - 1, uncached - 1), 0)
         // Plain tasks on the main actor (each waits on its own engine process, so they run in
         // parallel); a task group here tripped the task allocator with this SDK and runtime.
         var tasks = [Task { @MainActor in
-            await self.work(run, engine: main, partID: mainPartID, mainPartID: mainPartID)
+            await self.work(run, engine: main, partID: mainPartID, mainPartID: mainPartID, partURL: url)
         }]
         for i in 0..<extra {
             tasks.append(Task { @MainActor in
                 guard let w = await self.worker(i, url: url) else { return }
-                await self.work(run, engine: w.engine, partID: w.partID, mainPartID: mainPartID)
+                await self.work(run, engine: w.engine, partID: w.partID, mainPartID: mainPartID, partURL: url)
             })
         }
         for t in tasks { await t.value }
@@ -147,7 +150,7 @@ extension AppModel {
     }
 
     /// One engine's loop: takes the next job until there are none (or it's cancelled).
-    private func work(_ run: GenerationRun, engine: EngineClient, partID: String, mainPartID: String) async {
+    private func work(_ run: GenerationRun, engine: EngineClient, partID: String, mainPartID: String, partURL: URL) async {
         while !cancelGeneration, run.next < run.jobs.count {
             if generationSignature != run.signature {
                 if ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil { print("signature changed:\n  \(run.signature)\n  \(generationSignature)") }
@@ -170,12 +173,19 @@ extension AppModel {
             let key = jobKey(run, si, k, mainPartID: mainPartID)
             do {
                 let one: [OperationToolpath], placed: [PlacedTab]
+                let dkey = diskKey(run, si, k, partURL: partURL)
                 if let hit = opCache[key] {
                     (one, placed) = hit
+                    cachedOps += 1
+                } else if let hit = ToolpathDiskCache.load(dkey) {
+                    // The same request in an earlier run (this session or another).
+                    (one, placed) = hit
+                    storeInCache(key, hit)
                     cachedOps += 1
                 } else {
                     (one, placed) = try await generateJob(run, si, k, engine: engine, partID: partID)
                     storeInCache(key, (one, placed))
+                    ToolpathDiskCache.store(dkey, (one, placed))
                 }
                 if cancelGeneration || generationSignature != run.signature { return }
                 run.done[si][k] = finishJob(one, k: k, si: si, run: run)
@@ -218,12 +228,104 @@ extension AppModel {
             clipped[i].warnings = t.warnings
             clipped[i].notes += t.notes
         }
+        // Beyond the machine's X travel in this fixture (the lowest few millimetres of a bar
+        // standing on the table, say): the pass lifts over it, as over a fixture. What it skips
+        // stays uncut, for a setup from the other side or a higher stand.
+        if let xr = sp.reachX {
+            var skipped = 0.0
+            for i in clipped.indices {
+                let (m, s) = Self.liftOutside(clipped[i].moves, x: xr, plungeFeed: p.data.plungeFeed)
+                clipped[i].moves = m
+                skipped += s
+            }
+            if skipped > 1, !clipped.isEmpty {
+                clipped[0].warnings.append("\(Length.mm(skipped)) mm of this pass lies beyond the machine's X travel with the stock held like this: left uncut here (another setup may reach it; to cut it from this side, stand the stock \(xr.lowerBound > -1e3 ? "higher" : "lower") in the fixture).")
+            }
+        }
+        // The fixtures and the table: where the cutter, shank or collet nut would meet them, the
+        // pass lifts over (roughing keeps out of them already; finishing along a stock edge that
+        // is the part's own face has nothing to cut there anyway).
+        if !run.sides[si].fields.isEmpty, p.operation.kind != .facing {
+            var skipped = 0.0
+            for i in clipped.indices {
+                for f in run.sides[si].fields.indices {
+                    let (m, s) = FixtureClearance.clip(clipped[i].moves, tool: p.tool, field: &run.sides[si].fields[f], plungeFeed: p.data.plungeFeed)
+                    clipped[i].moves = m
+                    skipped += s
+                }
+            }
+            if skipped > 1, !clipped.isEmpty {
+                clipped[0].warnings.append("\(Length.mm(skipped)) mm of this pass was lifted to keep the \(p.tool.stickout < 20 ? "collet nut" : "tool") clear of the fixture or the table: what it skipped stays uncut. To cut there, stand the stock higher in the fixture (parallels under it) or use a longer stick-out.")
+            }
+        }
         return clipped
     }
 
     private func jobKey(_ run: GenerationRun, _ si: Int, _ k: Int, mainPartID: String) -> String {
         let sp = run.sides[si]
         return Self.generationKey(partID: mainPartID, sp.planned[k], sp.transform, sp.boxMin ?? run.boxMin, sp.boxMax ?? run.boxMax, sp.tabSpec, sp.tabBottom, machine: run.machine)
+    }
+
+    /// The moves with every stretch outside `x` lifted out: the tool rises to `safeZ`, crosses,
+    /// and comes back down where the path is within reach again. Rapids are left as they are
+    /// (above the work). Returns the new moves and how much cutting (mm) was skipped.
+    nonisolated static func liftOutside(_ moves: [Move], x: ClosedRange<Double>, safeZ: Double = 3, plungeFeed: Double) -> (moves: [Move], skipped: Double) {
+        guard let first = moves.first else { return (moves, 0) }
+        func blocked(_ p: SIMD3<Double>) -> Bool { p.x < x.lowerBound || p.x > x.upperBound }
+        func inside(_ v: Double) -> Double { min(max(v, x.lowerBound), x.upperBound) }
+        var out: [Move] = []
+        out.reserveCapacity(moves.count)
+        var skipped = 0.0
+        var prev = first.position
+        var lifted = false
+        for (k, m) in moves.enumerated() {
+            defer { prev = m.position }
+            if k == 0 || m.role == .rapid {
+                // Rapids travel above the work: one past the limit is brought back to it (its
+                // endpoint, so the cut it leads to starts within reach).
+                var q = m
+                q.x = inside(m.x)
+                if lifted {
+                    out.append(Move(.rapid, x: q.x, y: q.y, z: max(q.z, safeZ)))
+                    if q.z < safeZ { out.append(Move(.rapid, x: q.x, y: q.y, z: q.z)) }
+                    lifted = false
+                } else {
+                    out.append(q)
+                }
+                continue
+            }
+            let pts = FixtureClearance.samples(from: prev, m, step: 0.5)
+            if !lifted, !blocked(prev), !pts.contains(where: blocked) { out.append(m); continue }
+            var last = prev
+            for q in pts {
+                if blocked(q) {
+                    if !lifted { out.append(Move(.rapid, x: inside(last.x), y: last.y, z: safeZ)); lifted = true }
+                    skipped += simd_length(q - last)
+                } else {
+                    if lifted {
+                        out.append(Move(.rapid, x: q.x, y: q.y, z: safeZ))
+                        out.append(Move(.plunge, x: q.x, y: q.y, z: q.z, feed: plungeFeed))
+                        lifted = false
+                    } else {
+                        out.append(Move(m.role, x: q.x, y: q.y, z: q.z, feed: m.feed))
+                    }
+                }
+                last = q
+            }
+        }
+        if lifted, let l = out.last { out.append(Move(.rapid, x: inside(l.x), y: l.y, z: safeZ)) }
+        return (out, skipped)
+    }
+
+    /// The disk cache's key: what the session's key holds, with the part file's contents in place
+    /// of the engine's session id, the operation by its content (a plan gives it a new id every
+    /// time it is chosen), and the engine's own code.
+    private func diskKey(_ run: GenerationRun, _ si: Int, _ k: Int, partURL: URL) -> String {
+        let sp = run.sides[si]
+        var op = sp.planned[k]
+        op.operation.id = ToolpathDiskCache.sameID
+        return Self.generationKey(partID: ToolpathDiskCache.fileFingerprint(partURL), op, sp.transform, sp.boxMin ?? run.boxMin,
+                                  sp.boxMax ?? run.boxMax, sp.tabSpec, sp.tabBottom, machine: run.machine) + "|engine:" + ToolpathDiskCache.engineFingerprint
     }
 
     /// The engine call, with everything read from the run inside (no SIMD values in the async

@@ -8,7 +8,7 @@ dist/
 # engine
 engine/.venv/
 engine/build/
-engine/**/__pycache__/
+__pycache__/
 engine/.pytest_cache/
 engine/coastline_engine/_native*.so
 /build/

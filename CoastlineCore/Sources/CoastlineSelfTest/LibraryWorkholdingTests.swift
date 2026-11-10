@@ -282,7 +282,7 @@ let libraryWorkholdingTests: [TestCase] = [
         op.moves = [Move(.rapid, x: 0, y: -5, z: 3), Move(.plunge, x: 0, y: -5, z: -2, feed: 100),
                     Move(.cut, .arcCCW, x: 0, y: 5, z: -2, i: 0, j: 5, feed: 200)]
         let plan = LibraryWorkholdingPlanner.plan(cuts: [op], candidates: [candidate], stock: libraryStock)
-        try expect(!plan.complete && plan.issues.joined().contains("outside machine travel"), "\(plan.issues)")
+        try expect(!plan.complete && plan.issues.joined().contains("past the machine's"), "\(plan.issues)")
     },
     TestCase(name: "aLongerToolRaisesTheSpindleInTheTravelCheck") {
         // The origin is for the bare spindle nose at work zero. With the tool out, the spindle
@@ -292,7 +292,7 @@ let libraryWorkholdingTests: [TestCase] = [
         candidate.machineOrigin = SIMD3((env.x.lowerBound + env.x.upperBound) / 2, (env.y.lowerBound + env.y.upperBound) / 2,
                                         env.z.lowerBound + 5)
         let plan = LibraryWorkholdingPlanner.plan(cuts: [cut("deep", x: 0)], candidates: [candidate], stock: libraryStock)
-        try expect(!plan.issues.joined().contains("outside machine travel"), "\(plan.issues)")
+        try expect(!plan.issues.joined().contains("past the machine's"), "\(plan.issues)")
     },
     TestCase(name: "invalidInputProducesAnIssueInsteadOfCrashing") {
         let plan = LibraryWorkholdingPlanner.plan(cuts: [cut("bad", x: .nan)], candidates: [jig(1)], stock: libraryStock)
