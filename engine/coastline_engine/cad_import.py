@@ -15,13 +15,16 @@ from pathlib import Path
 import numpy as np
 
 from OCP.BRep import BRep_Tool
+from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
+from OCP.BRepTools import BRepTools
+from OCP.GeomAbs import GeomAbs_Cone, GeomAbs_Cylinder, GeomAbs_Plane, GeomAbs_Sphere, GeomAbs_Torus
 from OCP.Bnd import Bnd_Box
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.IGESControl import IGESControl_Reader
 from OCP.STEPControl import STEPControl_Reader
-from OCP.TopAbs import TopAbs_FACE, TopAbs_REVERSED
+from OCP.TopAbs import TopAbs_FACE, TopAbs_REVERSED, TopAbs_WIRE
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS, TopoDS_Shape
@@ -148,11 +151,78 @@ def tessellate(
             for i in range(1, tri.NbTriangles() + 1):
                 a, b, c = tri.Triangle(i).Get()
                 t[i - 1] = (a - 1, b - 1, c - 1)
+            if _off_surface(face, tri, v, t):
+                grid = _grid(face, linear_deflection)
+                if grid is not None:
+                    v, t = grid
             if face.Orientation() == TopAbs_REVERSED:
                 t = t[:, [0, 2, 1]]
             parts.append(Mesh(v, vertex_normals(v, t), t))
         exp.Next()
     return Mesh.concat(parts), faces
+
+
+# A triangle whose middle is this far off its face's surface (mm) is a mesher failure, not a
+# chord: OCCT's mesher leaves some long, high-degree B-spline faces (a modelled thread's
+# helical flanks) with triangles across whole turns, which put material where there is none.
+OFF_SURFACE = 0.05
+_ANALYTIC = {GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone, GeomAbs_Sphere, GeomAbs_Torus}
+
+
+def _off_surface(face, tri, v: np.ndarray, t: np.ndarray, limit: float = OFF_SURFACE) -> bool:
+    """Whether some triangle of a free-form face lies more than `limit` off the surface, at
+    its middle (the surface point at its UV middle). Analytic faces mesh reliably; only
+    triangles with an edge longer than 4 x `limit` can be that far off, so only those are asked."""
+    s = BRepAdaptor_Surface(face)
+    if s.GetType() in _ANALYTIC or not tri.HasUVNodes() or len(t) == 0:
+        return False
+    p = v[t].astype(float)
+    longest = np.max(np.linalg.norm(p - p[:, [1, 2, 0]], axis=2), axis=1)
+    for k in np.flatnonzero(longest > 4 * limit):
+        uv = [tri.UVNode(int(j) + 1) for j in t[k]]
+        q = s.Value(sum(a.X() for a in uv) / 3, sum(a.Y() for a in uv) / 3)
+        if np.linalg.norm(p[k].mean(axis=0) - (q.X(), q.Y(), q.Z())) > limit:
+            return True
+    return False
+
+
+def _grid(face, linear_deflection: float, most: int = 300_000):
+    """An untrimmed face (its UV bounds are its surface's own, one wire) as a UV grid fine
+    enough that every cell's middle and edge middles lie within the deflection (at least 0.005 mm)
+    of the surface: (vertices, triangles), or None for a trimmed face (kept as meshed)."""
+    s = BRepAdaptor_Surface(face)
+    u0, u1, v0, v1 = BRepTools.UVBounds_s(face)
+    natural = (s.FirstUParameter(), s.LastUParameter(), s.FirstVParameter(), s.LastVParameter())
+    span = max(u1 - u0, v1 - v0, 1e-9)
+    wires = TopExp_Explorer(face, TopAbs_WIRE)
+    count = 0
+    while wires.More():
+        count += 1
+        wires.Next()
+    if count != 1 or any(abs(a - b) > 1e-6 * span for a, b in zip((u0, u1, v0, v1), natural)):
+        return None
+    tol = max(linear_deflection, 0.005)
+
+    def at(us, vs):
+        return np.array([[(lambda q: (q.X(), q.Y(), q.Z()))(s.Value(u, w)) for u in us] for w in vs])
+
+    nu, nv = 2, 2
+    while True:
+        U, V = np.linspace(u0, u1, nu + 1), np.linspace(v0, v1, nv + 1)
+        Um, Vm = (U[:-1] + U[1:]) / 2, (V[:-1] + V[1:]) / 2
+        P = at(U, V)  # (nv+1, nu+1, 3)
+        off_u = np.linalg.norm(at(Um, V) - (P[:, :-1] + P[:, 1:]) / 2, axis=2).max()
+        off_v = np.linalg.norm(at(U, Vm) - (P[:-1] + P[1:]) / 2, axis=2).max()
+        if (off_u <= tol and off_v <= tol) or 2 * nu * nv > most:
+            break
+        if off_u > tol:
+            nu *= 2
+        if off_v > tol:
+            nv *= 2
+    k = np.arange((nu + 1) * (nv + 1)).reshape(nv + 1, nu + 1)
+    a, b, c, d = k[:-1, :-1].ravel(), k[:-1, 1:].ravel(), k[1:, 1:].ravel(), k[1:, :-1].ravel()
+    t = np.concatenate([np.stack([a, b, c], 1), np.stack([a, c, d], 1)]).astype(np.uint32)
+    return P.reshape(-1, 3).astype(np.float32), t
 
 
 def vertex_normals(v: np.ndarray, t: np.ndarray) -> np.ndarray:

@@ -70,17 +70,48 @@ class PartGeometry:
         top = self.zmax
         if z >= top:
             return []
-        levels = list(np.arange(top - 1e-3, z, -step)) + [z + 1e-3]
+        # The sections from the top down to the last sample above z, unioned once and kept: each
+        # deeper level adds only its new sections (every level unioned all of them again: ~9 s a
+        # level on a tall part, holding the interpreter so the levels couldn't run in parallel).
+        n = int(np.ceil((top - 1e-3 - z) / step))  # samples top − 1e-3 − k·step > z: k < n
+        while n > 0 and top - 1e-3 - (n - 1) * step <= z:
+            n -= 1
+        acc = self._cumulative(top, step, n)
+        extra = [self.region(z + 1e-3)]
         if self.tabs and self.tabs[1] > z:
-            levels.append(min(self.tabs[2], top - 1e-3))
-        regions = [self.region(l) for l in levels if l < top]
-        regions = [r for r in regions if r]
-        if not regions:
-            return []
+            extra.append(self.region(min(self.tabs[2], top - 1e-3)))
+        extra = [r for r in extra if r]
+        if not extra:
+            return acc
         pc = pyclipper.Pyclipper()
-        for r in regions:
+        for r in ([acc] if acc else []) + extra:
             pc.AddPaths(r, pyclipper.PT_SUBJECT, True)
         return pc.Execute(pyclipper.CT_UNION, pyclipper.PFT_NONZERO, pyclipper.PFT_NONZERO)
+
+    def _cumulative(self, top: float, step: float, n: int) -> list:
+        """The union of the sections at top − 1e-3 − k·step for k < n (cached, per tab state)."""
+        import threading
+        if not hasattr(self, "_cum_lock"):
+            self._cum_lock = threading.Lock()
+        with self._cum_lock:
+            key = (step, id(self.tabs) if self.tabs else None)
+            cum = self._cum_cache.setdefault(key, [[]]) if hasattr(self, "_cum_cache") else None
+            if cum is None:
+                self._cum_cache = {key: [[]]}
+                cum = self._cum_cache[key]
+            # cum[k]: the union of the first k samples.
+            while len(cum) <= n:
+                k = len(cum) - 1
+                r = self.region(top - 1e-3 - k * step)
+                if not r:
+                    cum.append(cum[-1])
+                    continue
+                pc = pyclipper.Pyclipper()
+                if cum[-1]:
+                    pc.AddPaths(cum[-1], pyclipper.PT_SUBJECT, True)
+                pc.AddPaths(r, pyclipper.PT_SUBJECT, True)
+                cum.append(pc.Execute(pyclipper.CT_UNION, pyclipper.PFT_NONZERO, pyclipper.PFT_NONZERO))
+            return cum[n]
 
 
 def chain_segments(segs: np.ndarray, tol: float = 1e-5) -> list[np.ndarray]:

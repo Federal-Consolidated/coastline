@@ -46,6 +46,7 @@ extension AppModel {
     /// the lower jaws) and, at each end, everything above the shoulder's grip line (the clamp's
     /// screws and jaw are there; what's left of the bar there is the shoulder).
     func shoulderStrips(stockSize s: SIMD3<Double>) -> [(min: SIMD2<Double>, max: SIMD2<Double>)] {
+        guard setup.usesClampKit else { return [] }
         guard let sh = setup.shoulders else { return GripZones.strips(stock: s) }
         let g = GripZones.grip, out = 30.0
         let gripBottom = -s.x / 2 + sh.bottom, gripTop = gripBottom + sh.height

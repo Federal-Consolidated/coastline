@@ -827,6 +827,16 @@ def rest(surf: Surface, grid: CLGrid, geo: g.PartGeometry, op, params: dict, reg
 NUT_RADIUS = 8.0  # ER-11 "A" nut, Ø16
 
 
+def part_heights(geo: g.PartGeometry, pts: np.ndarray, drop=None) -> np.ndarray:
+    """The finished part's top (work Z) at each XY point, as a tiny cutter sees it; -1e9 off the
+    part. The holder checks measure clearance against this. `drop`: a drop function to reuse
+    (XY → Z, floor below the part), else a 0.05 mm cutter on the part."""
+    if drop is None:
+        drop = Surface(geo, ocl.CylCutter(0.05, 100), geo.zmin - 1).drop
+    H = drop(pts)
+    return np.where(H <= geo.zmin - 0.5, -1e9, H)
+
+
 def min_stickout(geo: g.PartGeometry, moves: np.ndarray, material_top: float, band: list, step: float = 0.5) -> float:
     """The shortest stick-out (tip to collet-nut face) that keeps the nut 1 mm above everything
     within its radius at every cutting move. Material outside the cleared band is still at the
@@ -840,9 +850,7 @@ def min_stickout(geo: g.PartGeometry, moves: np.ndarray, material_top: float, ba
     ys = np.arange(lo[1], hi[1] + step, step)
     X, Y = np.meshgrid(xs, ys, indexing="ij")
     pts = np.c_[X.ravel(), Y.ravel()]
-    tiny = Surface(geo, ocl.CylCutter(0.05, 100), geo.zmin - 1)
-    H = tiny.drop(pts).reshape(X.shape)
-    H = np.where(H <= geo.zmin - 0.5, -1e9, H)  # off the part
+    H = part_heights(geo, pts).reshape(X.shape)
     if band:
         inside = np.array([any(pyclipper.PointInPolygon(q, b) != 0 for b in band) for q in g.to_int(pts)]).reshape(X.shape)
         H = np.where(inside, H, np.maximum(H, material_top))

@@ -20,6 +20,11 @@ struct SavedResults: Codable, Equatable {
     var generatedTuning: Tuning
     var travelIssue: String?
     var referencePlan: ReferenceBores.Plan?
+    var libraryWorkholdingPlan: LibraryWorkholdingPlan? = nil
+    /// Results are valid only for the complete machine assignment used to generate them.
+    /// Missing in an older file means legacy desktop, not whichever profile is selected.
+    var machine: PlanningMachineReference? = nil
+    var resources: JobResourceSnapshot? = nil
 
     struct Program: Codable, Equatable {
         var index: Int
@@ -35,6 +40,7 @@ struct SavedResults: Codable, Equatable {
         var clearanceHits: [FixtureClearance.Hit]
         var title: String?
         var surfaceProbe: String? = nil
+        var workholdingStep: LibraryWorkholdingPlan.Step? = nil
     }
 
     struct Side: Codable, Equatable {
@@ -81,12 +87,13 @@ extension SavedResults.Program {
     init(_ p: ToolProgram) {
         self.init(index: p.index, side: p.side, tool: p.tool, operations: p.operations, rpm: p.rpm, gcode: p.gcode, report: p.report,
                   seconds: p.seconds, warnings: p.warnings, minStickout: p.minStickout, clearanceHits: p.clearanceHits, title: p.title,
-                  surfaceProbe: p.surfaceProbe)
+                  surfaceProbe: p.surfaceProbe, workholdingStep: p.workholdingStep)
     }
 
     var program: ToolProgram {
         ToolProgram(index: index, side: side, tool: tool, operations: operations, rpm: rpm, gcode: gcode, report: report, seconds: seconds,
-                    warnings: warnings, minStickout: minStickout, clearanceHits: clearanceHits, title: title, surfaceProbe: surfaceProbe)
+                    warnings: warnings, minStickout: minStickout, clearanceHits: clearanceHits, title: title, surfaceProbe: surfaceProbe,
+                    workholdingStep: workholdingStep)
     }
 }
 
@@ -143,13 +150,27 @@ extension AppModel {
         return SavedResults(programs: programs.map(SavedResults.Program.init), prepPrograms: prepPrograms.map(SavedResults.Program.init),
                             sides: sideResults.map(SavedResults.Side.init), prep: prepResults.map(SavedResults.Side.init),
                             autoProtrusion: autoProtrusion, bridgeNote: bridgeNote, placedTabs: placedTabs, placedTabZ: placedTabZ.map { [$0.lowerBound, $0.upperBound] }, generatedTuning: generatedTuning,
-                            travelIssue: travelIssue, referencePlan: referencePlan)
+                            travelIssue: travelIssue, referencePlan: referencePlan, libraryWorkholdingPlan: libraryWorkholdingPlan,
+                            machine: planningMachineReference, resources: savedResourceSnapshot)
     }
 
     /// Puts a saved job back: the programs checked as they were, at chapter 1, step 1.
-    func restore(_ r: SavedResults) {
+    @discardableResult
+    func restore(_ r: SavedResults) -> Bool {
+        guard (r.machine ?? .legacy) == planningMachineReference else {
+            clearToolpathResults()
+            status = "Machine changed · Regenerate toolpaths"
+            return false
+        }
+        if let resources = r.resources, resources != savedResourceSnapshot {
+            clearToolpathResults()
+            status = "Job resources changed · Regenerate toolpaths"
+            return false
+        }
         autoProtrusion = r.autoProtrusion
         referencePlan = r.referencePlan
+        libraryWorkholdingPlan = r.libraryWorkholdingPlan
+        selectedLibraryStep = r.libraryWorkholdingPlan?.steps.first?.id
         generatedTuning = r.generatedTuning
         tuning = r.generatedTuning
         prepPrograms = r.prepPrograms.map(\.program)
@@ -162,7 +183,7 @@ extension AppModel {
         travelIssue = r.travelIssue
         plannedPrograms = []
         plannedOperationCount = Dictionary(uniqueKeysWithValues: sideResults.map { ($0.side, $0.planned.count) })
-        toolpaths = Dictionary((sideResults.first?.paths ?? []).map { ($0.operationID, $0) }, uniquingKeysWith: { a, _ in a })
+        toolpaths = Dictionary(((sideResults.first { $0.side == 0 } ?? sideResults.first)?.paths ?? []).map { ($0.operationID, $0) }, uniquingKeysWith: { a, _ in a })
         switchingView = true
         viewSide = 0
         prepStage = 0
@@ -177,5 +198,7 @@ extension AppModel {
         showSide(at: 0)
         if let first = jobSteps.first { go(to: first) }
         status = "Toolpaths from the project · about \(Self.duration(programs.reduce(0) { $0 + $1.seconds } + prepPrograms.reduce(0) { $0 + $1.seconds })) of machining"
+        if setup.planFromFixtureLibrary { Task { await reloadSavedLibraryGeometry() } }
+        return true
     }
 }

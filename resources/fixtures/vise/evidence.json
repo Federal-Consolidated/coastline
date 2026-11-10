@@ -1,0 +1,156 @@
+[
+ {
+  "path": "0/0",
+  "name": "Vise Body:1 / Vise Body / solid0",
+  "min": [
+   15.865,
+   -286.9,
+   88.764
+  ],
+  "max": [
+   45.865,
+   -186.9,
+   128.764
+  ]
+ },
+ {
+  "path": "1/0",
+  "name": "Vise Moving Jaw:1 / Vise Moving Jaw / solid0",
+  "min": [
+   27.865,
+   -245.4,
+   88.764
+  ],
+  "max": [
+   45.865,
+   -225.0,
+   128.764
+  ]
+ },
+ {
+  "path": "2/0",
+  "name": "Vise Lead Screw M8:1 / Vise Lead Screw M8 / solid0",
+  "min": [
+   31.865,
+   -234.9,
+   104.764
+  ],
+  "max": [
+   39.865,
+   -180.9,
+   112.764
+  ]
+ },
+ {
+  "path": "3/0",
+  "name": "Vise Washer:1 / Vise Washer / solid0",
+  "min": [
+   27.865,
+   -186.9,
+   100.764
+  ],
+  "max": [
+   43.865,
+   -185.4,
+   116.764
+  ]
+ },
+ {
+  "path": "4/0",
+  "name": "Vise Knob:1 / Vise Knob / solid0",
+  "min": [
+   23.865,
+   -180.9,
+   96.764
+  ],
+  "max": [
+   47.865,
+   -158.9,
+   120.764
+  ]
+ },
+ {
+  "path": "5/0",
+  "name": "Hardware - Vise:1 / T-Slot Nut - M4 (Fairway JPPNM04016):1 / T-Slot Nut - M4 (Fairway JPPNM04016) / solid0",
+  "min": [
+   10.725,
+   -276.27,
+   113.264
+  ],
+  "max": [
+   14.365,
+   -260.4,
+   124.264
+  ]
+ },
+ {
+  "path": "6/0",
+  "name": "Hardware - Vise:1 / T-Slot Nut - M4 (Fairway JPPNM04016):2 / T-Slot Nut - M4 (Fairway JPPNM04016) / solid0",
+  "min": [
+   10.725,
+   -238.27,
+   113.264
+  ],
+  "max": [
+   14.365,
+   -222.4,
+   124.264
+  ]
+ },
+ {
+  "path": "7/0",
+  "name": "Hardware - Vise:1 / T-Slot Nut - M4 (Fairway JPPNM04016):3 / T-Slot Nut - M4 (Fairway JPPNM04016) / solid0",
+  "min": [
+   10.725,
+   -213.4,
+   113.264
+  ],
+  "max": [
+   14.365,
+   -197.53,
+   124.264
+  ]
+ },
+ {
+  "path": "8/0",
+  "name": "Hardware - Vise:1 / M4 x 12 SHCS (ISO 4762):2 / M4 x 12 SHCS (ISO 4762) / solid0",
+  "min": [
+   10.565,
+   -268.4,
+   115.264
+  ],
+  "max": [
+   26.565,
+   -261.4,
+   122.264
+  ]
+ },
+ {
+  "path": "9/0",
+  "name": "Hardware - Vise:1 / M4 x 12 SHCS (ISO 4762):3 / M4 x 12 SHCS (ISO 4762) / solid0",
+  "min": [
+   10.565,
+   -230.4,
+   115.264
+  ],
+  "max": [
+   26.565,
+   -223.4,
+   122.264
+  ]
+ },
+ {
+  "path": "10/0",
+  "name": "Hardware - Vise:1 / M4 x 12 SHCS (ISO 4762):4 / M4 x 12 SHCS (ISO 4762) / solid0",
+  "min": [
+   10.565,
+   -212.4,
+   115.264
+  ],
+  "max": [
+   26.565,
+   -205.4,
+   122.264
+  ]
+ }
+]

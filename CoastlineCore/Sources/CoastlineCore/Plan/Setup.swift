@@ -14,6 +14,48 @@ import simd
 /// The machine is a horizontal-spindle mill: "top face" means the face pointing at the spindle,
 /// and the stock stands on the table with its X extent vertical.
 public struct Setup: Equatable, Sendable, Codable {
+    public enum Workholding: String, CaseIterable, Identifiable, Sendable, Codable {
+        case clampKit, bedOnly, prepThenKit, shoulders, custom
+        public var id: Self { self }
+    }
+
+    /// nil lets Coastline recommend a method; a user's explicit choice is never replaced
+    /// by automatic stock prep. Legacy documents infer their method from the setup below.
+    public var holding: Workholding?
+    public var planFromFixtureLibrary = false
+    public var customFixture = CustomFixture()
+    /// Complete job-owned fixture definitions and mechanical positions before CAM exists.
+    public var fixtureAssemblies: [Fixture]? = nil
+    /// Workholding explicitly available to this job. nil preserves older jobs' automatic
+    /// library selection; an empty list deliberately allows no fixtures.
+    public var selectedFixtureIDs: [UUID]? = nil
+    public var usesClampKit: Bool { !onBed && holding != .custom }
+
+    /// Replace the holding method as a single value, discarding prep and gripping geometry
+    /// belonging to the previous method. Unavailable methods may still be selected so the
+    /// user can edit them; their assessment blocks generation until they are workable.
+    public func selectingHolding(_ method: Workholding, shoulders proposal: Shoulders? = nil,
+                                 prepHeight: Double? = nil) -> Setup {
+        var s = self
+        s.planFromFixtureLibrary = false
+        s.holding = method
+        s.onBed = method == .bedOnly
+        s.shoulders = method == .shoulders ? proposal : nil
+        s.downsizeHeight = method == .prepThenKit ? prepHeight : nil
+        s.prepLength = nil
+        return s
+    }
+
+    /// Placement and setup notes for workholding outside the built-in fixture kit.
+    /// Its detailed geometry is not modelled by the fixture clearance checker.
+    public struct CustomFixture: Equatable, Sendable, Codable {
+        public var name = "Vise / custom fixture"
+        public var height = 0.0
+        public var faceProtrusion = 2.0
+        public var notes = ""
+        public init() {}
+    }
+
     /// Which part axis points at the spindle (becomes +Z of the work frame).
     public enum Facing: String, CaseIterable, Sendable, Codable {
         case plusZ, minusZ, plusX, minusX, plusY, minusY
@@ -171,12 +213,17 @@ public struct Setup: Equatable, Sendable, Codable {
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case facing, spin, stockAxes, topAllowance, partOffsetX, partOffsetY, clampProtrusion, flipped, downsizeHeight, clampSoftJaw, prepLength, partScale, prepOverrides, prepFaceEnd, prepRounds, onBed, bedJobOverride, shoulders, kitClampShift, kitClampCount, copies
+        case fixtureAssemblies, selectedFixtureIDs, planFromFixtureLibrary, holding, customFixture, facing, spin, stockAxes, topAllowance, partOffsetX, partOffsetY, clampProtrusion, flipped, downsizeHeight, clampSoftJaw, prepLength, partScale, prepOverrides, prepFaceEnd, prepRounds, onBed, bedJobOverride, shoulders, kitClampShift, kitClampCount, copies
     }
 
     /// Tolerant decoding: sessions saved by older versions miss newer keys.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        planFromFixtureLibrary = try c.decodeIfPresent(Bool.self, forKey: .planFromFixtureLibrary) ?? false
+        fixtureAssemblies = try c.decodeIfPresent([Fixture].self, forKey: .fixtureAssemblies)
+        selectedFixtureIDs = try c.decodeIfPresent([UUID].self, forKey: .selectedFixtureIDs)
+        holding = try c.decodeIfPresent(Workholding.self, forKey: .holding)
+        customFixture = try c.decodeIfPresent(CustomFixture.self, forKey: .customFixture) ?? CustomFixture()
         facing = try c.decodeIfPresent(Facing.self, forKey: .facing) ?? .plusZ
         spin = try c.decodeIfPresent(Int.self, forKey: .spin) ?? 0
         stockAxes = try c.decodeIfPresent([Int].self, forKey: .stockAxes) ?? [1, 0, 2]
@@ -198,6 +245,13 @@ public struct Setup: Equatable, Sendable, Codable {
         kitClampCount = try c.decodeIfPresent(Int.self, forKey: .kitClampCount)
         copies = max(try c.decodeIfPresent(Int.self, forKey: .copies) ?? 1, 1)
         clampSoftJaw = try c.decodeIfPresent(Bool.self, forKey: .clampSoftJaw) ?? true
+        if let holding { onBed = holding == .bedOnly }
+        if !usesClampKit {
+            // Older bed setups could retain shoulders or a prep size from the clamp kit.
+            shoulders = nil
+            downsizeHeight = nil
+            prepLength = nil
+        }
     }
 
     // MARK: Part transform
@@ -320,6 +374,18 @@ public struct Setup: Equatable, Sendable, Codable {
         return (SIMD3(-s.x / 2, -s.y / 2, -s.z), SIMD3(s.x / 2, s.y / 2, 0))
     }
 
+    /// Physical placement inside the blank, without inventing a machining allowance on a
+    /// face that is already to size. Workholding clearance is checked separately.
+    public func placementLimits(partMin: SIMD3<Double>, partMax: SIMD3<Double>, stock: StockItem,
+                                toolDiameter: Double = 6.35) -> (x: ClosedRange<Double>, y: ClosedRange<Double>, depth: ClosedRange<Double>) {
+        let (lo, hi) = rotatedPartBounds(min: partMin, max: partMax)
+        var size = hi - lo
+        if copies > 1 { size.y += Double(copies - 1) * Self.copyPitch(partY: size.y, toolDiameter: toolDiameter) }
+        let raw = stockSize(stock)
+        let mx = max((raw.x - size.x) / 2, 0), my = max((raw.y - size.y) / 2, 0)
+        return (-mx...mx, -my...my, 0...max(raw.z - size.z, 0))
+    }
+
     /// The default stock arrangement: thinnest dimension toward the spindle, longest along Y.
     public static func defaultStockAxes(_ stock: StockItem) -> [Int] {
         let e = [stock.envelope.x, stock.envelope.y, stock.envelope.z]
@@ -360,8 +426,10 @@ public enum SetupChecks {
             let slack = min(slackLow, slackHigh)
             if slack < -1e-6 {
                 issues.append(Issue(.error, "The part sticks out of the stock in \(names[axis]) by \(Length.mm(-slack)) mm. Use bigger stock, turn the part, or move it."))
+            } else if slack < 1e-6 {
+                issues.append(Issue(.info, "The part meets an existing stock face in \(names[axis]). No extra stock is required on a face that stays as supplied."))
             } else if slack < 3 {
-                issues.append(Issue(.warning, "Only \(Length.mm(slack)) mm of stock around the part in \(names[axis]). Profiling around it needs room for the tool."))
+                issues.append(Issue(.info, "\(Length.mm(slack)) mm of stock around the part in \(names[axis]). Tool and fixture clearance is checked on the generated paths."))
             }
         }
         let depth = phi.z - plo.z + setup.topAllowance
@@ -369,7 +437,7 @@ public enum SetupChecks {
         if depth > thickness + 1e-6 {
             issues.append(Issue(.error, "The part (\(Length.mm(phi.z - plo.z)) mm deep plus \(Length.mm(setup.topAllowance)) mm to face) is thicker than the stock (\(Length.mm(thickness)) mm)."))
         } else if thickness - depth < 2 {
-            issues.append(Issue(.info, "The part goes almost all the way through the stock. It will need tabs or a second setup to finish the back."))
+            issues.append(Issue(.info, "The part reaches the stock's back face. Any cut that frees it needs independent support or holding tabs."))
         }
         // Reach: the tool has to cover the stock face in X and Y.
         let size = setup.stockSize(stock)

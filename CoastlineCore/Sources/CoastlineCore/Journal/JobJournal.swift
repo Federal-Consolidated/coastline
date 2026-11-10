@@ -52,6 +52,8 @@ public struct JournalEntry: Codable, Identifiable, Equatable, Sendable {
     public var partName: String
     public var projectPath: String?
     public var materialID: String
+    /// Preserve the material name and recipe even after its library entry is edited or removed.
+    public var materialSnapshot: Material? = nil
     public var stockID: UUID?
     public var stockDescription: String
     public var copies = 1
@@ -141,6 +143,7 @@ public enum ToolLife {
     /// What to buy: tools near the end of their life with no spare, and worn or broken ones.
     public static func shoppingList(_ inv: Inventory, material: Material) -> [(tool: Tool, why: String)] {
         inv.tools.compactMap { t in
+            guard !t.requiresSpecificationReview, ResourceLibraryValidation.issues(for: t).isEmpty else { return nil }
             let s = status(t, material: material)
             if t.condition == .broken { return (t, "Broken") }
             if t.condition == .worn && t.quantity <= 1 { return (t, "Marked worn, no spare") }

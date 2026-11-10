@@ -6,23 +6,38 @@ import simd
 /// The workspace inspector: Setup and Machining tabs.
 struct WorkspaceInspector: View {
     @Environment(AppModel.self) private var model
+    @State private var toolbarInset: CGFloat = 0
 
     var body: some View {
         @Bindable var model = model
+        GeometryReader { geometry in
         VStack(spacing: 0) {
+            if model.fixturePlacement != nil {
+                FixturePlacementInspector()
+            } else {
             StageBar()
             StageHeader()
             Divider()
+            Group {
             switch model.stage {
-            case .partStock: SetupInspector(scope: .partStock)
+            case .partStock: SetupInspector(scope: .part)
+            case .stock: SetupInspector(scope: .stock)
+            case .planning: JobPlanInspector()
             case .holding: HoldingInspector()
             case .prep: PrepInspector()
-            case .clampKit:
-                if model.setup.onBed { BedJobInspector() } else { SetupInspector(scope: .clampKit) }
+            case .clampKit: JobSetupsInspector()
             case .machining: MachiningInspector()
             case .review: ReviewInspector()
             }
+            }
+            .frame(minHeight: 0, maxHeight: .infinity)
+            .clipped()
+            }
         }
+        .padding(.top, toolbarInset)
+        .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+        }
+        .background(ToolbarContentInset(top: $toolbarInset))
         .background(Theme.panelBackground)
     }
 }
@@ -32,7 +47,7 @@ struct SetupInspector: View {
     @Environment(AppModel.self) private var model
     @Environment(InventoryModel.self) private var inventory
     /// Which stage it serves: the part and stock, or the clamp kit's workholding.
-    enum Scope { case partStock, clampKit }
+    enum Scope { case partStock, part, stock, clampKit }
     var scope: Scope = .partStock
     /// A stock being made from the Stock picker ("New Stock…", "Duplicate This One…").
     @State private var draftStock: StockItem?
@@ -45,7 +60,7 @@ struct SetupInspector: View {
     var body: some View {
         @Bindable var model = model
         Form {
-            if scope == .partStock, let part = model.part {
+            if scope == .partStock || scope == .part, let part = model.part {
                 Section("Part") {
                     LabeledContent("File", value: part.fileName)
                     let k = model.setup.partScale
@@ -61,35 +76,23 @@ struct SetupInspector: View {
                         Text("%").foregroundStyle(.secondary)
                         if let fit = model.scaleToFitStock {
                             Button("Fit") { model.setup.partScale = fit }
-                                .help("The largest scale at which the part fits the stock (with room for the frame and the clamps)")
+                                .help("The largest scale at which the part fits inside the stock. Workholding is checked separately.")
                         }
                     }
                     ForEach(part.warnings, id: \.self) { w in
                         Label(w, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning).font(.callout)
                     }
                 }
-                Section {
-                    Picker("Facing the spindle", selection: $model.setup.facing) {
-                        ForEach(Setup.Facing.allCases, id: \.self) { Text("Part \($0.title)").tag($0) }
-                    }
-                    LabeledContent("Turn") {
-                        HStack(spacing: 6) {
-                            Button("Turn Left", systemImage: "rotate.left") { model.setup.spin = (model.setup.spin + 3) % 4 }
-                            Button("Turn Right", systemImage: "rotate.right") { model.setup.spin = (model.setup.spin + 1) % 4 }
-                            Text("\(model.setup.spin * 90)°").monospacedDigit().frame(width: 40, alignment: .trailing)
-                        }
-                        .labelStyle(.iconOnly)
-                        .plainGlassButton()
-                    }
-                } header: {
-                    HStack {
-                        Text("Orientation")
-                        InfoTip(text: "The spindle cuts the face pointing at it. Coastline starts with the part's thinnest side toward the spindle; a part that needs both faces is cut from two sides (turned over in between).")
-                    }
+                Section("Next") {
+                    Text("Choose stock from your library. Coastline will then propose machining and workholding together; orientation and work zero are reviewed in Setups.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("Choose Stock", systemImage: "chevron.right") { model.enter(.stock) }
+                        .buttonStyle(.glassProminent)
                 }
             }
 
-            if scope == .partStock {
+            if scope == .partStock || scope == .stock {
+            OwnedStockSuggestions()
             Section {
                 Picker("Stock", selection: Binding(get: { model.stockID }, set: { id in
                     if id == Self.newStockTag {
@@ -103,7 +106,7 @@ struct SetupInspector: View {
                     } else if id == Self.editStockTag, let s = model.stock {
                         editingStock = s
                     } else if let item = inventory.inventory.stock.first(where: { $0.id == id }) {
-                        model.useStock(item)
+                        model.useGuidedStock(item, inventory: inventory.inventory)
                     } else {
                         model.stockID = nil
                     }
@@ -131,7 +134,7 @@ struct SetupInspector: View {
                 .sheet(item: $draftStock) { draft in
                     NewStockSheet(draft: draft) { added in
                         inventory.update { $0.stock.append(added) }
-                        model.useStock(added)
+                        model.useGuidedStock(inventory.inventory.resolvedStock(added), inventory: inventory.inventory)
                     }
                 }
                 .sheet(item: $editingStock) { item in
@@ -148,9 +151,9 @@ struct SetupInspector: View {
                     .map({ !$0.workable || $0.prepHeight != nil || $0.viaShoulders }) ?? true {
                     StandardStockSuggestions()
                 }
-                if let stock = model.stock, stock.isSuggestion {
+                if let stock = model.stock, (model.stockLookup(stock.id)?.quantity ?? 0) <= 0 {
                     HStack {
-                        Label("Not owned: a standard size to buy.", systemImage: "cart")
+                        Label("This stock is not marked as owned.", systemImage: "cart")
                             .font(.callout).foregroundStyle(Theme.warning)
                         Spacer()
                         Button("I Have It Now") { inventory.markStockOwned([stock.id]) }
@@ -161,7 +164,7 @@ struct SetupInspector: View {
                     let raw = model.setup.rawStockSize(stock)
                     LabeledContent("Size", value: "\(Length.mm(raw.x)) × \(Length.mm(raw.y)) × \(Length.mm(raw.z)) mm as bought")
                     let fit = model.stockOptions().first { $0.axes == model.setup.stockAxes }
-                    Label(fit?.workable == true ? "The part fits, with room for its frame and the clamps" : (fit?.reason.map { "Doesn't fit: \($0)" } ?? "Doesn't fit"),
+                    Label(fit?.workable == true ? "The part fits inside the stock" : (fit?.reason.map { "Doesn't fit: \($0)" } ?? "Doesn't fit"),
                           systemImage: fit?.workable == true ? "checkmark.circle.fill" : "xmark.octagon.fill")
                         .foregroundStyle(fit?.workable == true ? Theme.ok : Theme.danger)
                     let options = model.stockOptions()
@@ -179,18 +182,32 @@ struct SetupInspector: View {
                             Label(options.first { $0.axes == model.setup.stockAxes }?.summary ?? "How it sits", systemImage: "rotate.3d")
                                 .lineLimit(2)
                         }
-                        .help("Which side of the stock stands up in the clamp. Only ways the part fits are offered; the first one removes the least material, and Coastline picks it for you.")
+                        .help("Which stock dimension runs along each work axis. Any orientation that contains the part can be chosen; workholding is assessed separately.")
                     }
 
                 }
             } header: {
                 HStack {
                     Text("Stock")
-                    InfoTip(text: "Work zero is the centre of the stock face toward the spindle. X is up, Y is left–right, Z points at the spindle. Only ways the part fits can be chosen (the others say why); the best keeps the extrusion running left–right and removes the least material.")
+                    InfoTip(text: "Choose the material and blank you actually have. This step checks that the part fits. Workholding, machining allowance and work zero are reviewed together in Setups.")
                 }
             }
             }
 
+            if scope == .stock, model.stock != nil {
+                Section {
+                    Button("Plan with My Library", systemImage: "sparkles") { model.enter(.planning) }
+                        .buttonStyle(.glassProminent)
+                        .disabled(model.status(.stock).state != .done)
+                }
+            }
+
+            if scope == .clampKit {
+                Section {
+                    LabeledContent("Method", value: model.holdingPath.title)
+                    Button("Change Workholding…") { model.enter(.holding) }
+                }
+            }
             if scope == .clampKit, let stock = model.stock, let p = model.clampPlacement(stockSize: model.setup.stockSize(stock)) {
                 Section {
                     LabeledContent("Fixture", value: "Clamp kit ×\(p.clamps.count), across both T-slots")
@@ -239,6 +256,9 @@ struct SetupInspector: View {
                 }
             }
 
+            if scope == .clampKit {
+                ProbingMethodSection()
+            }
             if scope == .clampKit, model.setup.shoulders != nil {
                 ShoulderSection()  // what the clamps grip: set here, the stock prep follows
             }
@@ -303,8 +323,8 @@ struct SetupInspector: View {
                             : "Turn this on for parts with surfaces facing away from the spindle (shown red), like most jewellery."))
                 }
             }
-            if scope == .clampKit, let a = model.analysis, let part = model.part {
-                AnalysisSection(analysis: a, part: part)
+            if scope == .clampKit {
+                AnalysisSection()
             }
 
         }
@@ -321,40 +341,62 @@ struct SetupInspector: View {
 }
 
 
-/// What limits machining this part from this side, with a way forward for each finding.
-struct AnalysisSection: View {
-    let analysis: PartAnalysis
-    let part: PartInfo
+/// Keep stock-finding choices beside the setup that uses them, as well as in Settings.
+/// This is the shared clamp-kit preference; excluded setups retain manual edge finding.
+struct ProbingMethodSection: View {
     @Environment(AppModel.self) private var model
-    @Environment(InventoryModel.self) private var inventory
+    @Bindable private var settings = AppSettings.shared
+
+    private var unavailable: String? {
+        if !model.setup.usesClampKit {
+            return model.setup.holding == .custom
+                ? "Electronic probing needs verified electrical isolation. Use the edge finder and paper with this custom fixture."
+                : "The bed's clamps and stops are not electrically isolated. Use the edge finder and paper for this setup."
+        }
+        if let material = model.stock?.material, [.wax, .plastic, .printedResin].contains(material.family) {
+            return "\(material.name) does not conduct electricity. Use the edge finder and paper for this stock."
+        }
+        return nil
+    }
 
     var body: some View {
-        let (lo, hi) = model.setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
-        let size = hi - lo
-        let issues = Feasibility.assess(analysis, inventory: inventory.inventory, partSize: size,
-                                        stockSize: model.stock.map { model.setup.stockSize($0) })
         Section {
-            ForEach(issues) { issue in
-                Label {
-                    Text(issue.message).fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: Theme.symbol(issue.severity)).foregroundStyle(Theme.color(issue.severity))
+            if model.setup.planFromFixtureLibrary {
+                LabeledContent("Method", value: "Fixture datum · manual verification")
+                Text("For each setup, establish X0 Y0 at the defined stock-face centre and Z0 at the original face. Use the fixture's locating datum and account for material already removed. The guided job stops for this verification at every re-clamping.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if let unavailable {
+                LabeledContent("Method", value: "Edge finder and paper")
+                Label(unavailable, systemImage: "info.circle")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Picker("Method", selection: $settings.clampKitProbing) {
+                    ForEach(AppSettings.ClampKitProbing.allCases) { Text($0.title).tag($0) }
                 }
-            }
-            let fits = Feasibility.fittingStock(partSize: size, inventory: inventory.inventory).filter { $0.id != model.stockID }
-            if issues.contains(where: { $0.message.contains("doesn't fit this stock") }) && !fits.isEmpty {
-                ForEach(fits.prefix(3)) { s in
-                    Button("Use \(s.material?.name ?? "stock") \(s.sizeDescription)", systemImage: "shippingbox") { model.useStock(s) }
-                        .plainGlassButton()
-                }
+                .accessibilityLabel("Stock probing method")
+                .disabled(model.isGenerating)
+                Text(settings.clampKitProbing == .electrical
+                     ? "The tool finds edges and the face with G38.2. Connect the probe wire to conductive stock in the insulated clamp kit; the guided job walks through each contact."
+                     : "Find X and Y with the spinning edge finder, then touch off Z with paper. The guided job walks through each step.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         } header: {
-            HStack {
-                Text("Analysis")
-                InfoTip(text: "Measured on the exact CAD for this orientation. Red faces in the viewport face away from the spindle.")
+            Text("Work zero")
+        } footer: {
+            if unavailable == nil && !model.setup.planFromFixtureLibrary {
+                Text("Saved as the preference for clamp-kit jobs. Used when exporting or running the guided setup.")
             }
         }
     }
+}
+
+
+/// What limits machining this part as set up: the same findings, highlights and ways forward
+/// as the Plan step (MachinabilitySection), under this inspector's own heading.
+struct AnalysisSection: View {
+    var body: some View { MachinabilitySection(title: "Analysis") }
 }
 
 /// What to do when the stock doesn't fit the clamp kit: turn it, use other stock, buy stock
@@ -368,7 +410,7 @@ struct StockAdviceView: View {
         if let part = model.part {
             let (lo, hi) = model.setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
             let size = hi - lo
-            let tool = OperationPlanner.usableTools(inventory.inventory).filter { $0.kind == .flatEndMill && $0.diameter <= 6.36 }
+            let tool = OperationPlanner.usableTools(inventory.inventory, machine: model.machine).filter { $0.kind == .flatEndMill && $0.diameter <= 6.36 }
                 .max { $0.diameter < $1.diameter }
             let margin = (tool?.diameter ?? 6.35) + 3
             let depth = size.z + model.setup.topAllowance + 1
@@ -405,7 +447,7 @@ struct StockAdviceView: View {
                 }
                 if ideal.x <= jaw.upperBound, raw.x > jaw.upperBound {
                     let target = min(max(ideal.x, jaw.lowerBound), jaw.upperBound - 0.5).rounded(.down)
-                    let est = StockAdvice.downsize(stock: raw, target: target, tool: tool, material: stock.material)
+                    let est = StockAdvice.downsize(stock: raw, target: target, tool: tool, material: stock.material, machine: model.machine)
                     Toggle(stock.finish == .sawn ? "Square it and mill it down to \(Length.mm(target)) mm first" : "Mill it down to \(Length.mm(target)) mm first", isOn: Binding(
                         get: { model.setup.downsizeHeight != nil },
                         set: { model.setup.downsizeHeight = $0 ? target : nil; if !$0 { model.previewMillDown = false } }))
@@ -421,7 +463,7 @@ struct StockAdviceView: View {
                     }
                 } else if ideal.x > jaw.upperBound {
                     // Room around the part is set by the roughing tool: a smaller one may make it fit.
-                    let small = OperationPlanner.usableTools(inventory.inventory).filter { $0.kind == .flatEndMill && $0.diameter >= 1.5 }
+                    let small = OperationPlanner.usableTools(inventory.inventory, machine: model.machine).filter { $0.kind == .flatEndMill && $0.diameter >= 1.5 }
                         .min { $0.diameter < $1.diameter }
                     if let small, let fit = Optional(StockAdvice.idealSize(part: size, twoSided: model.twoSided, topAllowance: model.setup.topAllowance,
                                                                           toolDiameter: small.diameter)),
@@ -449,7 +491,7 @@ struct PlacementSection: View {
             NumberField(title: "Up / down (X)", value: Binding(get: { model.setup.partOffsetX }, set: { v in var s = model.setup; s.partOffsetX = v; model.setup = model.placementLimited(s) }))
             NumberField(title: "Left / right (Y)", value: Binding(get: { model.setup.partOffsetY }, set: { v in var s = model.setup; s.partOffsetY = v; model.setup = model.placementLimited(s) }))
             NumberField(title: "Below the face (Z)", value: Binding(get: { model.setup.topAllowance }, set: { v in var s = model.setup; s.topAllowance = v; model.setup = model.placementLimited(s) }),
-                        tip: "How much stock is faced off above the part's top. More pushes the part toward the back of the stock.")
+                        tip: "Stock above the part's top. Zero keeps the existing face and skips automatic facing. More pushes the part toward the back of the stock.")
             HStack(spacing: 6) {
                 snap("Centre", "dot.squareshape", .centre)
                 snap("To the face", "arrow.up.to.line", .face)
@@ -470,7 +512,7 @@ struct PlacementSection: View {
         } header: {
             HStack {
                 Text("Placement in the stock")
-                InfoTip(text: "Drag the arrows on the part in 3D, or snap it. It never goes closer to an edge than its frame needs (the clamped strips and a cutter-wide channel).")
+                InfoTip(text: "Drag the part in 3D, enter an offset, or snap it to a stock face. Zero allowance is valid for a face that stays as supplied. Grip and fixture clearance depend on your choice in Holding.")
             }
         }
     }

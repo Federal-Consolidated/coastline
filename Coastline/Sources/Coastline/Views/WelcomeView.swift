@@ -5,12 +5,12 @@ struct WelcomeView: View {
     @Environment(\.dismiss) private var dismiss
 
     private let stages: [(String, String, String)] = [
-        ("cube.transparent", "1 · Part & stock", "Import the part (STEP, IGES, Rhino) and pick the bar you have. Move it in the stock with the gumball (arrows move, rings turn it in quarter turns); several copies fit side by side."),
-        ("hand.raised", "2 · Holding", "How the bar is held: straight in the clamp kit, prepped on the bed first, shoulders at its ends, or the whole job flat on the bed. Coastline recommends one and says why."),
-        ("square.3.layers.3d.down.right", "3 · Stock prep", "Each clamping on the bed. Press on the stop or a C-clamp and drag it; a picked C-clamp turns with its red ring. Anything that collides turns red."),
-        ("square.and.arrow.down.on.square", "4 · Clamp kit", "Slide the universal clamps along the T-slots, drag the stock to stand it out. The orange strips are what the jaws hold: never cut."),
-        ("point.topleft.down.to.point.bottomright.curvepath", "5 · Machining", "Operations, the quality ↔ time tuner, generation, the simulation. Add text to engrave."),
-        ("checklist", "6 · Review", "Walk through the job (Tour), export the guided job for the sender, and afterwards record it in the journal: tool wear, stock and feeds learn from it."),
+        ("cube.transparent", "1 · Part", "Load your CAD part and confirm its designed size. New parts start a fresh library-based proposal."),
+        ("shippingbox", "2 · Stock", "Choose a blank you own. Coastline recommends fitting stock from your library, preferring blanks with a defined fixture assembly."),
+        ("sparkles", "3 · Plan", "Build a job using your cutting tools and workholding. Missing fixture information is explained and can be defined here."),
+        ("hand.raised", "4 · Setups", "Review each physical setup: fixture and grip, orientation, allowance, work zero, assigned cuts and tools. Re-clamping and any stock prep belong here."),
+        ("point.topleft.down.to.point.bottomright.curvepath", "5 · Toolpaths", "Inspect the cuts, adjust operations and cutting data, and simulate material removal. Regenerate after changing the setup or cuts."),
+        ("checklist", "6 · Review", "Walk through the complete job, check the results, then export or open the guided runner. Each program still requires your Run action."),
     ]
 
     var body: some View {

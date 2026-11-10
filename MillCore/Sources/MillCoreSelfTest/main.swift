@@ -12,6 +12,7 @@ let suites: [(String, [TestCase])] = [
     ("Mock", mockTests),
     ("SessionCore", sessionCoreTests),
     ("Session", sessionTests),
+    ("ProgramLibrary", programLibraryTests),
     ("ManualControl", manualControlTests),
 ]
 

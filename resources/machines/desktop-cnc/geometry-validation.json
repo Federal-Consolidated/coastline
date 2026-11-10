@@ -1,0 +1,152 @@
+{
+  "geometrySHA256": "7035295044ea6c8e84ef12289cb68a4bb3dab5bb70ad5d86477fa82e9f720cc3",
+  "leafOccurrenceCount": 50,
+  "assembledSolidCount": 52,
+  "coverSolidCount": 9,
+  "tableSurface": {
+    "worldX": 15.865136356549487,
+    "normal": [
+      1,
+      0,
+      0
+    ],
+    "minimum": [
+      15.865136356547922,
+      -389.42275837994146,
+      54.913594125087286
+    ],
+    "maximum": [
+      15.86513635655105,
+      -84.42275837993004,
+      129.84359412512177
+    ]
+  },
+  "stockSeating": {
+    "localDimensionsMM": [
+      203.2,
+      37.0,
+      50.8
+    ],
+    "worldBoundsMM": [
+      [
+        15.865,
+        -343.0,
+        79.04
+      ],
+      [
+        66.66499999999999,
+        -139.8,
+        116.04
+      ]
+    ],
+    "maximumBottomPlaneErrorMM": 0.00013635654948629394,
+    "tableNormal": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "worldFromLocalBasisColumns": [
+      [
+        0.0,
+        1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ],
+      [
+        1.0,
+        0.0,
+        0.0
+      ]
+    ]
+  },
+  "bookendMounting": {
+    "hardwareDefinition": "Bookend M5x0.8 custom T-nut, not a machine-wide screw-size restriction",
+    "nutEnvelopeMM": [
+      11.0,
+      11.6,
+      2.8
+    ],
+    "keyWidthDepthMM": [
+      6.0,
+      1.8
+    ],
+    "slots": [
+      {
+        "centerWorldZ": 78.7585941251,
+        "nutOverlapMM3": 0.0,
+        "keyOverlapMM3": 0.0
+      },
+      {
+        "centerWorldZ": 118.7635941251,
+        "nutOverlapMM3": 0.0,
+        "keyOverlapMM3": 0.0
+      }
+    ],
+    "scope": "Seated geometric fit only; no insertion-path, thread-strength, torque or installed-hardware claim."
+  },
+  "toolAlignment": {
+    "cylinderAxis": [
+      -1.78884684842761e-14,
+      1.3113149387475534e-14,
+      -1.0
+    ],
+    "radialOriginErrorMM": 0.0047944657487663765,
+    "nutNosePlaneErrorMM": 0.0035940250837427357,
+    "toolAxisDotTableNormal": 0.0
+  },
+  "nativeBodyAgreement": {
+    "bodyCount": 52,
+    "maximumBoundsErrorMM": 2.9321777788027248e-06,
+    "nativeAuditSHA256": "11314429b3f36c49e26c277f79fee13659563956c33a870e395396026d9ddeec",
+    "scope": "One-to-one body count and world-bounds agreement; not a proof of identical topology."
+  },
+  "zContactChecks": {
+    "moving": "Z Unibody",
+    "fixed": "YZ Translator Unibody",
+    "samples": [
+      {
+        "qZ": -0.01,
+        "overlapMM3": 4.083996764793019,
+        "separationMM": 0.0
+      },
+      {
+        "qZ": 1.4,
+        "overlapMM3": 0.0,
+        "separationMM": 1.3999999999776946
+      },
+      {
+        "qZ": 79.9,
+        "overlapMM3": 0.0,
+        "separationMM": 0.10000000000894715
+      },
+      {
+        "qZ": 80.01,
+        "overlapMM3": 3.3126315817900047,
+        "separationMM": 0.0
+      }
+    ]
+  },
+  "yUpperContactChecks": {
+    "moving": "Spindle Mount - Lower",
+    "fixed": "Chip Guard - X Top",
+    "samples": [
+      {
+        "qY": 69.0,
+        "qZ": 1.4,
+        "overlapMM3": 0.0,
+        "separationMM": 0.804975900302821
+      },
+      {
+        "qY": 69.84,
+        "qZ": 1.4,
+        "overlapMM3": 0.004724411529748888,
+        "separationMM": 0.0
+      }
+    ]
+  },
+  "scope": "Exact selected CAD contact and seating checks. Not physical controller calibration or a complete travel/collision envelope."
+}

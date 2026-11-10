@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 
 import os
+import threading
 import time
 
 import numpy as np
@@ -77,6 +78,12 @@ class Op:
         ko = d.get("keep_out") or {}
         self.keep_out = [g.rect(*r) for r in ko.get("rects", [])]
         self.keep_out_below = float(ko.get("below", -1e9))
+        # A setup from a side: only the pockets inside this work-XY window (x0, y0, x1, y1).
+        self.window = tuple(float(v) for v in d["window"]) if d.get("window") else None
+        # Roughing from a side: clear only this side's own cavities (pockets, holes, and steps
+        # open to the part's edge), found from the part, inside the window. The stock around the
+        # part's outline belongs to the other setups and is left alone.
+        self.side_cavity = bool(d.get("side_cavity", False))
 
 
 def shank_bottom(op) -> float:
@@ -118,6 +125,8 @@ def levels(top: float, bottom: float, step: float, extra: list[float] = ()) -> l
 def facing(op: Op, stock_min, stock_max, tp: Toolpath) -> Toolpath:
     """Zig-zag passes along Y (the long axis) across the whole stock face, starting and
     ending outside the stock so every pass enters from the side."""
+    if op.face_depth <= 1e-6:
+        return tp
     xmin, ymin, xmax, ymax = stock_min[0], stock_min[1], stock_max[0], stock_max[1]
     r = op.r
     xs = []
@@ -176,6 +185,54 @@ def _swept_by_earlier(hole, rest_from):
     return pc.Execute(pyclipper.CT_UNION, pyclipper.PFT_NONZERO, pyclipper.PFT_NONZERO)
 
 
+_SOLVE_LOCK = threading.Lock()
+
+
+def _near_same(a, b, tol):
+    """True if pyclipper regions a and b are each inside the other grown by `tol` (units)."""
+    for x, y in ((a, b), (b, a)):
+        if not x:
+            if y:
+                return False
+            continue
+        grown = g.offset(y, tol) if y else []
+        if not grown or _difference(x, grown):
+            return False
+    return True
+
+
+def _solve_all(cache: list, jobs, tol_mm=0.01):
+    """The results of jobs [(paths, done, fn)]: fn() once for each region (paths, with `done`
+    already cleared), shared by the level threads. Straight walls give the same region at every
+    level, but its round ends come from different facets each time: a region within `tol_mm` of
+    a solved one takes that one's result (the cut shifts by no more than that). A region another
+    thread is solving is waited for only after this thread has solved its other regions."""
+    from concurrent.futures import Future
+    tol = tol_mm * g.SCALE
+    futs = []
+    for paths, done, fn in jobs:
+        pts = np.vstack([np.asarray(p) for p in paths]) if paths else np.zeros((1, 2))
+        box = (pts.min(axis=0), pts.max(axis=0))
+        with _SOLVE_LOCK:
+            fut = None
+            for (lo, hi), ps, dn, f in cache:
+                if np.abs(lo - box[0]).max() <= tol and np.abs(hi - box[1]).max() <= tol \
+                        and _near_same(ps, paths, tol) and _near_same(dn or [], done or [], tol):
+                    fut = f
+                    break
+            mine = fut is None
+            if mine:
+                fut = Future()
+                cache.append((box, paths, done, fut))
+        if mine:
+            try:
+                fut.set_result(fn())
+            except BaseException as e:
+                fut.set_exception(e)
+        futs.append(fut)
+    return [f.result() for f in futs]
+
+
 def _reach_rect(paths, span, r, fallback):
     """`span` centred on the part (paths: pyclipper units), grown by `r` each side."""
     if paths:
@@ -191,6 +248,17 @@ def _clip_rect(rect_path, box):
     lo = np.maximum(a.min(axis=0), box[:2])
     hi = np.minimum(a.max(axis=0), box[2:])
     return g.rect(lo[0], lo[1], hi[0], hi[1])
+
+
+def level_threads() -> int:
+    """Threads solving roughing levels at once in this engine (COASTLINE_LEVEL_THREADS to
+    measure). Measured 2026-11-09 on an 8-core Mac, three engines: 7 threads each finished
+    three roughing jobs in 73 s, 3 each in 80 s; one engine alone took 50 s per job (a job
+    has few levels, the slowest one sets its time), so the app's 3 engines are worth it."""
+    n = os.environ.get("COASTLINE_LEVEL_THREADS")
+    if n:
+        return max(int(n), 1)
+    return max(min(os.cpu_count() or 4, 8) - 1, 1)
 
 
 def adaptive(op: Op, part: g.PartGeometry, stock_min, stock_max, floor_levels, tp: Toolpath,
@@ -304,18 +372,77 @@ def adaptive(op: Op, part: g.PartGeometry, stock_min, stock_max, floor_levels, t
         a.step_over_factor = min(max(op.stepover / op.tool_d, 0.02), 0.5)
         a.helix_ramp_target_diameter = op.tool_d * 0.9
         a.helix_ramp_min_diameter = op.tool_d * 0.3
-        a.tolerance = 0.05
+        # The solver's accuracy: half the stock left for finishing (never into the part), at
+        # most 0.1 mm. 0.1 instead of 0.05 takes about 45 % less time on a tall part.
+        a.tolerance = float(os.environ.get("COASTLINE_ADAPTIVE_TOL", min(max(op.leave_xy / 2, 0.05), 0.1)))
         a.stock_to_leave = op.leave_xy
         a.finishing_profile = False
         return a
 
     skipped_pockets: list[int] = []
 
+    # A setup from a side: the cavities are what lies inside the part's outline (seen from this
+    # side, inside the window) but isn't part just under its face. Everything else stays solid.
+    cavities: list = []
+    if op.side_cavity:
+        vx = part.mesh.vertices
+        x0, y0 = float(vx[:, 0].min()), float(vx[:, 1].min())
+        x1, y1 = float(vx[:, 0].max()), float(vx[:, 1].max())
+        if op.window is not None:
+            x0, y0 = max(x0, op.window[0]), max(y0, op.window[1])
+            x1, y1 = min(x1, op.window[2]), min(y1, op.window[3])
+        if x1 > x0 and y1 > y0:
+            face = part.shadow(part.zmax - 0.05)
+            box = [g.to_int(g.rect(x0, y0, x1, y1))]
+            open_ = _difference(box, face) if face else box
+            # Slivers from the mesh's facets and the edge rounds are not cavities.
+            cavities = g.offset(g.offset(open_, -0.1), 0.1)
+
+    solved: list = []
+
+    def side_level(z):
+        if not cavities:
+            return [], []
+        shadow = part.shadow(z - op.leave_z)
+        jobs, loops = [], []
+        for piece in (_difference(cavities, shadow) if shadow else cavities):
+            if not pyclipper.Orientation(piece):
+                continue  # an island's outline: its piece is the outer path
+            if not g.offset([piece], -(op.tool_d / 2 + op.leave_xy + 0.02)):
+                skipped_pockets.append(1)
+                continue  # narrower than the tool: drilled, bored or left for a smaller tool
+            # Barely wider than the tool: left to a smaller tool (as in _level; the rest
+            # roughing takes the same rule for what this tool skipped).
+            if op.min_pocket and not g.offset([piece], -op.min_pocket * op.tool_d / 2):
+                skipped_pockets.append(1)
+                continue
+            done = _swept_by_earlier(piece, op.rest_from)
+            if done is not None and not g.offset(_difference([piece], done), -op.tool_d * 0.1):
+                continue
+            # The piece with its islands (the part's bosses inside it).
+            pc = pyclipper.Pyclipper()
+            pc.AddPath(piece, pyclipper.PT_SUBJECT, True)
+            if shadow:
+                pc.AddPaths(shadow, pyclipper.PT_CLIP, True)
+            paths = pc.Execute(pyclipper.CT_DIFFERENCE, pyclipper.PFT_NONZERO, pyclipper.PFT_NONZERO) if shadow else [piece]
+            mm = [g.to_mm(p).tolist() for p in paths]
+            cl = [g.to_mm(p).tolist() for p in done] if done else []
+
+            def solve(mm=mm, cl=cl):
+                b = make()
+                b.op_type = N.OperationType.ClearingInside
+                return b.execute(stock_paths=mm, paths=mm, cleared_paths=cl)
+
+            jobs.append((paths, done, solve))
+            loops.append(g.to_mm(piece).tolist())
+        # Straight walls give the same piece at every level: solved once, cut at each.
+        return [], list(zip(_solve_all(solved, jobs), loops))
+
     def level(z):
         """One level, outside the part and inside its pockets. The native solver releases the
         GIL, so levels run in parallel threads; they're independent (each clears its own band)."""
         t0 = time.time()
-        out = _level(z)
+        out = side_level(z) if op.side_cavity else _level(z)
         if os.environ.get("COASTLINE_ADAPTIVE_DEBUG"):
             n = sum(len(p) for r in out[0] for _, p in r.paths)
             print(f"adaptive level z={z:.2f} {time.time() - t0:.1f}s points={n} keep={len(part.shadow(z - op.leave_z))}", flush=True)
@@ -335,7 +462,11 @@ def adaptive(op: Op, part: g.PartGeometry, stock_min, stock_max, floor_levels, t
         keep = [g.to_mm(p).tolist() for p in outers]
         a = make()
         a.op_type = N.OperationType.ClearingOutside
-        if op.pockets_only:
+        # A blank already at the outside size has no exterior material. Feeding the native
+        # solver a band that is entirely outside the stock can spend minutes clearing air.
+        # Pockets (holes in the shadow) are still handled independently below.
+        outside_material = _difference([g.to_int(real)], list(outers)) if outers else [g.to_int(real)]
+        if op.pockets_only or not outside_material:
             outside = []
         elif frame_wall:
             # The band as a pocket: its outer edge is a wall (the frame stays solid), the part
@@ -351,7 +482,11 @@ def adaptive(op: Op, part: g.PartGeometry, stock_min, stock_max, floor_levels, t
             if region:
                 a.op_type = N.OperationType.ClearingInside
                 outside = a.execute(stock_paths=[g.to_mm(g.to_int(full_real)).tolist()],
-                                    paths=[g.to_mm(p).tolist() for p in region], cleared_paths=[])
+                                    paths=[g.to_mm(p).tolist() for p in region],
+                                    # The air past the stock is clear (not the clamps' keep-out
+                                    # below their face): told nothing was, the solver swept that
+                                    # air at cutting feed, a fifth of the path and 40 % of its time.
+                                    cleared_paths=level_cleared)
         elif keep:
             outside = a.execute(stock_paths=level_stock, paths=keep, cleared_paths=level_cleared)
         else:
@@ -362,8 +497,13 @@ def adaptive(op: Op, part: g.PartGeometry, stock_min, stock_max, floor_levels, t
         # Pockets inside the part (holes in the shadow) need inside clearing with helical entry;
         # pockets narrower than the tool return nothing (holes are drilled or bored separately).
         t_out = time.time()
-        inside = []
+        jobs, loops = [], []
         for hole in holes:
+            if op.window is not None:
+                pts = g.to_mm(hole)
+                x0, y0, x1, y1 = op.window
+                if pts[:, 0].min() < x0 - 1e-6 or pts[:, 0].max() > x1 + 1e-6 or pts[:, 1].min() < y0 - 1e-6 or pts[:, 1].max() > y1 + 1e-6:
+                    continue  # another setup's pocket
             # Pockets barely wider than the tool would be cleared in endless small loops: they're
             # left to a smaller tool (pockets-only roughing, or the finishing contour).
             if op.min_pocket and not g.offset([hole], -op.min_pocket * op.tool_d / 2):
@@ -373,29 +513,34 @@ def adaptive(op: Op, part: g.PartGeometry, stock_min, stock_max, floor_levels, t
             done = _swept_by_earlier(hole, op.rest_from)
             if done is not None and not g.offset(_difference([hole], done), -op.tool_d * 0.1):
                 continue  # the larger tools left nothing worth a pass here
-            b = make()
-            b.op_type = N.OperationType.ClearingInside
-            t_h = time.time()
-            inside.append((b.execute(stock_paths=[loop], paths=[loop],
-                                     cleared_paths=[g.to_mm(p).tolist() for p in done] if done else []), loop))
-            if os.environ.get("COASTLINE_ADAPTIVE_DEBUG") and time.time() - t_h > 2:
-                hb = g.to_mm(hole)
-                print(f"  slow pocket at z={z:.2f}: {time.time() - t_h:.1f}s, size {np.ptp(hb[:, 0]):.1f} x {np.ptp(hb[:, 1]):.1f}", flush=True)
+            cl = [g.to_mm(p).tolist() for p in done] if done else []
+
+            def solve(loop=loop, cl=cl):
+                b = make()
+                b.op_type = N.OperationType.ClearingInside
+                return b.execute(stock_paths=[loop], paths=[loop], cleared_paths=cl)
+
+            jobs.append(([hole], done, solve))
+            loops.append(loop)
         _ = t_out
+        # A pocket with straight walls is the same at every level: solved once, cut at each.
+        inside = list(zip(_solve_all(solved, jobs), loops))
         return outside, inside
 
     from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=max(min(os.cpu_count() or 4, 8) - 1, 1)) as pool:
+    with ThreadPoolExecutor(max_workers=level_threads()) as pool:
         per_level = list(pool.map(level, zs))
     prev = z_top
     ko_mm = [g.to_mm(p) for p in keep_out]
+    fits: dict = {}  # per_level keeps the results (and so their ids) alive
     for z, (outside, inside) in zip(zs, per_level):
         _emit_adaptive(op, outside, z, prev, stock_min, stock_max, tp,
                        avoid=ko_mm if (ko_mm and z < op.keep_out_below) else None)
         for res, loop in inside:
-            _emit_adaptive(op, res, z, prev, stock_min, stock_max, tp, inside=True, walls=[np.asarray(loop, float)])
+            _emit_adaptive(op, res, z, prev, stock_min, stock_max, tp, inside=True, walls=[np.asarray(loop, float)],
+                           fits=fits)
         prev = z
-    if op.max_span and frame_wall and not op.pockets_only:
+    if op.max_span and frame_wall and not op.pockets_only and not op.side_cavity:
         span_c = _reach_rect(silhouette, op.max_span, 0.0,
                              ((stock_min[0] + stock_max[0]) / 2, (stock_min[1] + stock_max[1]) / 2))
         _edge_slivers(op, part, band_outers, full_real, real, span_c, zs, z_top, tabs_kept, keep_out, stock_min, stock_max, tp)
@@ -535,7 +680,8 @@ def _helix_spot(op: Op, hx, hy, hr, res, avoid):
     return hx, hy, hr
 
 
-def _emit_adaptive(op: Op, results, z, prev, stock_min, stock_max, tp: Toolpath, inside=False, avoid=None, walls=None):
+def _emit_adaptive(op: Op, results, z, prev, stock_min, stock_max, tp: Toolpath, inside=False, avoid=None, walls=None,
+                   fits: dict | None = None):
     from .. import _native as N
 
     for res in results:
@@ -561,12 +707,13 @@ def _emit_adaptive(op: Op, results, z, prev, stock_min, stock_max, tp: Toolpath,
             tp.line(sx, sy, z, op.ramp, RAMP)
         else:
             tp.go_to(sx, sy, z, op.plunge, op.link_feed, cleared_down_to=z)
-        for motion, pts in res.paths:
+        for k, (motion, pts) in enumerate(res.paths):
             pts = np.asarray(pts, float)
             if len(pts) == 0:
                 continue
             if motion == int(N.MotionType.Cutting):
-                tp.polyline(pts, z, op.feed, CUT)
+                # A result reused at several levels (the same region) is arc-fitted once.
+                tp.polyline(pts, z, op.feed, CUT, fitted=None if fits is None else ((id(res), k), fits))
             elif motion == int(N.MotionType.LinkClear):
                 tp.polyline(pts, z, op.feed, LINK, arc_tol=None)
             else:  # LinkNotClear: lift over the material
@@ -610,8 +757,48 @@ def _lifted_loop(tp: Toolpath, pts, z, z_lift, inside, op: Op):
         tp.line(p[0], p[1], zz, op.plunge if down else op.feed, PLUNGE if down else CUT)
 
 
+def _stock_runs(pts, stock_min, stock_max, radius):
+    """Open runs where the cutter overlaps the stock, preserving traversal direction.
+
+    A wall already on a stock face has zero material to finish. Do not skim that wall or
+    demand a cutter-wide border there. Curves and recesses inside the blank still get cut.
+    The 0.002 mm tolerance is below contour arc fitting tolerance (0.005 mm).
+    """
+    lo, hi = np.asarray(stock_min[:2]), np.asarray(stock_max[:2])
+
+    def overlap(points):
+        d = np.maximum(np.maximum(lo - points, points - hi), 0)
+        return np.linalg.norm(d, axis=1) < radius - 0.002
+
+    if np.all(overlap(pts)):
+        return [pts]
+    from .surface3d import densify
+
+    dense = densify(pts, 0.1)
+    a, b = dense[:-1], dense[1:]
+    active = overlap(a) | overlap(b) | overlap((a + b) / 2)
+    if not np.any(active):
+        return []
+    if np.all(active):
+        return [pts]
+    runs = []
+    start = None
+    for k, keep in enumerate(active):
+        if keep and start is None:
+            start = k
+        if start is not None and (not keep or k == len(active) - 1):
+            end = k if not keep else k + 1
+            runs.append(dense[start:end + 1])
+            start = None
+    # A closed outline's first and last run are one continuous cut across its seam.
+    if active[0] and active[-1] and len(runs) > 1:
+        runs[0] = np.vstack([runs[-1], runs[0][1:]])
+        runs.pop()
+    return runs
+
+
 def contour(op: Op, part: g.PartGeometry, stock_min, tp: Toolpath, z_top: float = 0.0, lift=None,
-            skin_top: float | None = None) -> Toolpath:
+            skin_top: float | None = None, stock_max=None) -> Toolpath:
     """Finishes the walls level by level following the part's outline at each height, with
     tangent arc lead-in/out and an optional spring pass. `lift` = (tabs, z_lo, z_hi): a part
     cut through on one side keeps its tabs by the tool lifting over them below z_hi; below
@@ -642,16 +829,20 @@ def contour(op: Op, part: g.PartGeometry, stock_min, tp: Toolpath, z_top: float 
             pts = np.vstack([pts, pts[:1]])
             if len(pts) < 4:
                 continue
-            passes = 2 if op.spring else 1
-            air = skin_top if skin_top is not None and z < skin_top else None
-            _lead_in(tp, pts, z, lead, op, keep_clear, air)
-            for _ in range(passes):
-                if lifting is not None and z < lifting[1] - 1e-9:
-                    _lifted_loop(tp, pts, z, lifting[1], lifting[0], op)
-                else:
-                    tp.polyline(pts, z, op.feed, CUT)
-            _lead_out(tp, pts, z, lead, op, keep_clear)
-            tp.retract()
+            runs = _stock_runs(pts, stock_min, stock_max, op.r) if outer and stock_max is not None else [pts]
+            for run in runs:
+                passes = 2 if op.spring else 1
+                air = skin_top if skin_top is not None and z < skin_top else None
+                # Open runs must retract and re-enter for the spring pass: joining their
+                # endpoints at cutting depth could cross the finished part.
+                for _ in range(passes):
+                    _lead_in(tp, run, z, lead, op, keep_clear, air)
+                    if lifting is not None and z < lifting[1] - 1e-9:
+                        _lifted_loop(tp, run, z, lifting[1], lifting[0], op)
+                    else:
+                        tp.polyline(run, z, op.feed, CUT)
+                    _lead_out(tp, run, z, lead, op, keep_clear)
+                    tp.retract()
     return tp
 
 
@@ -716,6 +907,8 @@ def floors(op: Op, floor_list, tp: Toolpath) -> Toolpath:
     too_deep = 0
     for fl in floor_list:
         z = fl["z"]
+        if z >= op.z_top - 1e-6:
+            continue  # an existing stock face, not a floor with material to remove
         if z < op.z_min - 1e-6:
             continue  # the other side's floor
         if op.floor_max_width and g.offset(fl["paths"], -op.floor_max_width / 2):

@@ -71,9 +71,73 @@ def _face_info(params, blobs):
     return face_info(part.shape, tuple(params["point"])), []
 
 
+def _fixture_solids(params, blobs):
+    """Separate closed solids so overlapping screws/washers are unioned, never XORed,
+    when the planner checks whether a fixture fits the remaining material."""
+    from OCP.BRepCheck import BRepCheck_Analyzer
+    from OCP.TopAbs import TopAbs_FACE, TopAbs_SOLID
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS
+    from .cad_import import tessellate
+
+    part = PARTS[params["part_id"]]
+    if part.shape is None:
+        raise ValueError("Automatic fixture planning needs a closed-solid STEP, IGES or exact Rhino assembly.")
+    def count_faces(shape):
+        ex, count = TopExp_Explorer(shape, TopAbs_FACE), 0
+        while ex.More():
+            count += 1
+            ex.Next()
+        return count
+    ex = TopExp_Explorer(part.shape, TopAbs_SOLID)
+    solids, out, faces = [], [], 0
+    while ex.More():
+        solid = TopoDS.Solid(ex.Current())
+        if not BRepCheck_Analyzer(solid).IsValid():
+            raise ValueError("The fixture contains an invalid solid. Repair the CAD before enabling automatic planning.")
+        mesh, _ = tessellate(solid, 0.01)
+        lo, hi = mesh.bounds
+        n = count_faces(solid)
+        solids.append(dict(bounds_min=lo, bounds_max=hi, face_count=n))
+        out += _mesh_blobs(mesh)
+        faces += n
+        ex.Next()
+    if not solids or faces != count_faces(part.shape):
+        raise ValueError("Every fixture surface must belong to a closed solid; open surfaces cannot define occupied volume.")
+    return {"solids": solids}, out
+
+
+def _fixture_assembly(params, blobs):
+    from .fixture_assembly import load_fixture_assembly
+    part = PARTS[params["part_id"]]
+    parts = load_fixture_assembly(part.path, params["definition"])
+    out = []
+    for _, mesh in parts:
+        out += _mesh_blobs(mesh)
+    return {"parts": [metadata for metadata, _ in parts]}, out
+
+
 def _machine_model(params, blobs):
-    """params: {path} → parts [{group, role, color}] with 3 blobs each, plus reference points."""
-    from .machine_model import MODEL_POSE, SPINDLE_NOSE, TABLE_TOP_X, TSLOT_Z, load_machine
+    """Legacy {path}, or portable {manifestPath, machinePosition?}, with three blobs per part.
+
+    Profile meshes remain at their authored reference pose. Per-component translations
+    describe the requested controller position; no legacy frame assumptions are added.
+    """
+    from .machine_model import MODEL_POSE, SPINDLE_NOSE, TABLE_TOP_X, TSLOT_Z, load_machine, load_profile_machine
+
+    if "manifestPath" in params:
+        if "path" in params:
+            raise ValueError("Choose a machine manifest or a legacy STEP path, not both.")
+        parts, definition = load_profile_machine(params["manifestPath"], params.get("cache_dir", CACHE_DIR))
+        out = []
+        for part in parts:
+            out += _mesh_blobs(part.mesh)
+        return {
+            "parts": [{"group": p.group, "role": p.role, "color": list(p.color)} for p in parts],
+            "profile": definition.metadata(),
+            "group_translations": definition.translations(params.get("machinePosition")),
+            "reference_pose": params.get("machinePosition") is None,
+        }, out
 
     parts = load_machine(params["path"], params.get("cache_dir", CACHE_DIR))
     out = []
@@ -195,6 +259,21 @@ def _pocket_widths(geo) -> list:
 _FREEFORM: dict = {}
 
 
+def _windowed(feats, window, g):
+    """The holes whose centre and the floors whose outline lie inside window (x0, y0, x1, y1)."""
+    if not window:
+        return feats
+    x0, y0, x1, y1 = map(float, window)
+    def inside(x, y):
+        return x0 - 1e-6 <= x <= x1 + 1e-6 and y0 - 1e-6 <= y <= y1 + 1e-6
+    floors = []
+    for f in feats["floors"]:
+        pts = [p for path in f["paths"] for p in g.to_mm(path)]
+        if pts and all(inside(p[0], p[1]) for p in pts):
+            floors.append(f)
+    return {"holes": [h for h in feats["holes"] if inside(h["x"], h["y"])], "floors": floors}
+
+
 def _generate(params, blobs):
     """params: {part_id, transform, stock_min, stock_max, safe_z, ops: [...], tabs?} → one move blob
     per operation (float32 rows: role, motion, x, y, z, i, j, feed)."""
@@ -255,10 +334,14 @@ def _generate(params, blobs):
     drill_ds = [float(o["tool"]["diameter"]) for o in params["ops"] if o["kind"] == "drill"]
 
     results, out = [], []
+    all_feats = feats
     for raw in params["ops"]:
         op = O.Op(raw)
         tp = Toolpath(safe_z=safe)
         k = op.kind
+        # A setup from a side cuts only its own features: holes and floors inside its window
+        # (work X/Y min, max). Roughing is kept to it by keep-out rectangles.
+        feats = _windowed(all_feats, raw.get("window"), g)
         if k == "facing":
             O.facing(op, smin, smax, tp)
         elif k == "adaptive":
@@ -266,7 +349,7 @@ def _generate(params, blobs):
         elif k == "contour":
             if lift is not None:
                 skin_top = float(params["tabs"].get("skin_top")) if params["tabs"].get("skin_top") is not None else None
-            O.contour(op, geo, smin, tp, z_top=op.z_top, lift=lift, skin_top=skin_top)
+            O.contour(op, geo, smin, tp, z_top=op.z_top, lift=lift, skin_top=skin_top, stock_max=smax)
         elif k == "floor":
             O.floors(op, feats["floors"], tp)
         elif k == "drill":
@@ -318,7 +401,10 @@ def _generate(params, blobs):
 
 
 def _analyse(params, blobs):
-    """params: {part_id, transform} → limits for machining from +Z, plus undercut triangles."""
+    """params: {part_id, transform, thin_threshold?, access?, nut_radius?} → limits for machining
+    from +Z, plus undercut triangles (blob 0). With access: also "access" (line of sight per
+    face, regions, floors and holes with wall and holder depths; cam/analysis.part_access) and
+    the faces' triangles (blob 1, ranges in access.face_triangles)."""
     from .cam import geometry as g
     from .cam.analysis import analyse
     from .cam.features import transformed
@@ -328,16 +414,30 @@ def _analyse(params, blobs):
         return {"exact": False}, [b""]
     m = _work_transform(params)
     geo = g.PartGeometry(part.mesh.vertices, part.mesh.indices, m)
-    r = analyse(transformed(part.shape, m), geo, float(params.get("thin_threshold", 0.8)))
-    tris = r.pop("undercut_triangles")
-    return dict(r, exact=True), [np.ascontiguousarray(tris, "<f4").tobytes()]
+    access = bool(params.get("access", False))
+    r = analyse(transformed(part.shape, m), geo, float(params.get("thin_threshold", 0.8)),
+                access=access, nut_radius=float(params.get("nut_radius", 8.0)))
+    out = [np.ascontiguousarray(r.pop("undercut_triangles"), "<f4").tobytes()]
+    if access:
+        out.append(np.ascontiguousarray(r.pop("access_triangles"), "<f4").tobytes())
+    return dict(r, exact=True), out
+
+
+def _recognise(params, blobs):
+    """Named features (quiddity) for a STEP file by path: slow on busy parts, so the app asks a
+    separate engine process."""
+    from .cam.recognition import recognise
+    return recognise(params["path"]), []
 
 
 HANDLERS = {
     "nest": _nest,
+    "recognise": _recognise,
     "ping": _ping,
     "import_part": _import_part,
     "face_info": _face_info,
+    "fixture_solids": _fixture_solids,
+    "fixture_assembly": _fixture_assembly,
     "machine_model": _machine_model,
     "features": _features,
     "generate": _generate,

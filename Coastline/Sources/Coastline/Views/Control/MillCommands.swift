@@ -10,6 +10,8 @@ struct MachineCommands: Commands {
         CommandMenu("Machine") {
             Button("Machine Control") { model.page = .control }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
+            Button("Guided Mode") { model.openGuidedMode() }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
             Button("Show Console") {
                 model.page = .control
                 mill.showConsole = true
@@ -29,18 +31,20 @@ struct MachineCommands: Commands {
             }
             .disabled(!mill.canHome)
             Menu("Test Programs") {
-                ForEach(TestProgram.allCases) { program in
+                ForEach(mill.programs.ordered) { program in
                     Button("\(program.title)…") {
                         model.page = .control
                         mill.programToConfirm = program
                     }
+                    .disabled(program.homesFirst ? !mill.canHome : !mill.canRun)
                 }
+                Divider()
+                Button("Manage Programs…") { mill.showProgramLibrary = true }
             }
-            .disabled(!mill.canRun)
             Menu("Go To") {
                 Button("Work Zero (X Y)…") { show(.workZero) }
                 Button("Home Position…") { show(.home(mill.snapshot)) }
-                Button("Tool-Change Position…") { show(.toolChange(model.machine.toolChangeMoves)) }
+                Button("Tool-Change Position…") { show(.toolChange(model.controlMachine.toolChangeMoves)) }
                 Divider()
                 Button("Position…") { show(.position(mill.snapshot)) }
             }

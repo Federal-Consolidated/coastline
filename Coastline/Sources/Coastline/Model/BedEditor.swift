@@ -92,11 +92,11 @@ extension AppModel {
     /// its thickness without chatter.
     func bedAssessment() -> (possible: Bool, why: String) {
         guard let part, let stock else { return (false, "Choose a part and stock first.") }
-        let s = setup.stockSize(stock)
+        let s = setup.rawStockSize(stock)
         let (lo, hi) = setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
         let depth = hi.z - lo.z + setup.topAllowance + 0.5
         let limit = FlatPrep.maxRoundCut(thickness: s.x)
-        let opening = FlatPrep.clampOpening - FlatPrep.tableThickness - FlatPrep.riserHeight
+        let opening = FlatPrep.clampOpening - prepTable.thickness - FlatPrep.riserHeight
         if s.x > opening {
             return (false, "At \(Length.mm(s.x)) mm the stock is taller than a 3\" C-clamp opens over the riser (\(Length.mm(opening)) mm).")
         }
@@ -108,35 +108,19 @@ extension AppModel {
 
     /// Switches the holding path (stage 2).
     func choose(_ path: HoldingPath) {
-        switch path {
-        case .bedOnly:
-            guard bedAssessment().possible else { return }
-            prepAuto = false
+        guard part != nil, stock != nil else { return }
+        // One atomic setup change: automatic prep must never see half of the new selection.
+        let proposedShoulders = shoulderProposal
+        let proposedPrep = stockOptions(forClampKit: true).first { $0.axes == setup.stockAxes }?.prepHeight
+        shouldersAuto = false
+        prepAuto = path == .prepThenKit
+        setup = setup.selectingHolding(path, shoulders: proposedShoulders, prepHeight: proposedPrep)
+        if path == .bedOnly || path == .custom {
             twoSided = false
             twoSidedChosen = true
-            var s = setup
-            s.onBed = true
-            s.downsizeHeight = nil
-            setup = s
-            status = "The whole job flat on the bed: one side, no clamp kit."
-        case .clampKit, .prepThenKit:
-            guard setup.onBed || setup.shoulders != nil else { return }
-            var s = setup
-            s.onBed = false
-            s.shoulders = nil
-            setup = s
-            prepAuto = true
-            autoPlanPrep()
-        case .shoulders:
-            guard let sh = shoulderProposal else { return }
-            prepAuto = false
-            var s = setup
-            s.onBed = false
-            s.downsizeHeight = nil
-            s.shoulders = sh
-            setup = s
-            status = "Shoulders: \(Length.mm(sh.length)) mm at each end milled down to \(Length.mm(sh.height)) mm for the clamp kit."
         }
+        if path == .custom { holdWithTabs = false }
+        status = "\(path.title): \(holdingAssessment(path).why)"
     }
 
     /// How far the stop can slide each way along the T-slots: the cutter must still reach both

@@ -9,6 +9,7 @@
 | rhino3dm (openNURBS) | pip | MIT | Rhino `.3dm` import. |
 | OpenCAMLib | pip | LGPL-2.1 | Drop-cutter and waterline. |
 | pyclipper, numpy, trimesh | pip | MIT / BSD | 2D offsets, arrays, mesh utilities. |
+| quiddity 0.4.9 ([pzfreo/quiddity](https://github.com/pzfreo/quiddity)) | pip (prebuilt wheel) | Apache-2.0 | Feature names and sizes for DFM findings (`engine/coastline_engine/cam/recognition.py`). |
 | MillCore | `MillCore/` | GPL-3.0 (this project); a Swift port of the original controller software, released under CC0 | `.crproj` model/writer, G-code classifier, GRBL protocol, machine session. |
 
 ## Machine and fixture design files

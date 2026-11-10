@@ -151,7 +151,7 @@ struct FirstCutView: View {
                 .disabled(!isCouponOpen || model.programs.isEmpty)
                 .help(isCouponOpen ? "Save the coupon's guided job and open it in the sender" : "Open the coupon first")
         case .material(let m):
-            Button("Open the Coupon in \(MaterialLibrary.material(id: m)?.name ?? m)", systemImage: "arrow.triangle.2.circlepath") {
+            Button("Open the Coupon in \(inventory.inventory.material(id: m)?.name ?? m)", systemImage: "arrow.triangle.2.circlepath") {
                 Task { await openCoupon(material: m) }
             }
             .disabled(model.isBusy || model.isGenerating)
@@ -171,7 +171,7 @@ struct FirstCutView: View {
     private func exportJob() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.init(filenameExtension: "crproj") ?? .data]
-        let material = model.stock.flatMap { MaterialLibrary.material(id: $0.materialID)?.name } ?? "Coupon"
+        let material = model.stock?.material?.name ?? "Coupon"
         panel.nameFieldStringValue = "First-Cut Coupon (\(material)).crproj"
         panel.message = "Save the guided job. Open it in the sender's guided mode."
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -194,7 +194,7 @@ struct FirstCutView: View {
     /// $110–$112 (max rates, mm/min) and $120–$122 (acceleration, mm/s²) as read with $$, against
     /// the firmware defaults Coastline's time estimates use.
     private var settingsSection: some View {
-        let machine = model.machine
+        let machine = model.controlMachine
         let defaults: [(String, String, Double, String)] = [
             ("$110", "X max rate", machine.maxRate.x, "mm/min"), ("$111", "Y max rate", machine.maxRate.y, "mm/min"),
             ("$112", "Z max rate", machine.maxRate.z, "mm/min"), ("$120", "X acceleration", machine.acceleration.x, "mm/s²"),
@@ -261,7 +261,7 @@ extension AppModel {
         }
         let stock = inventory.inventory.stock
         guard let item = stock.first(where: { same($0) && !$0.isSuggestion }) ?? stock.first(where: same) else {
-            return "There's no \(Length.mm(bar.y)) × \(Length.mm(bar.z)) \(MaterialLibrary.material(id: material)?.name ?? material) bar in the inventory: add one (Stock), then try again."
+            return "There's no \(Length.mm(bar.y)) × \(Length.mm(bar.z)) \(inventory.inventory.material(id: material)?.name ?? material) bar in the inventory: add one (Stock), then try again."
         }
         useStock(item)
         await generateToolpaths(inventory: inventory.inventory)

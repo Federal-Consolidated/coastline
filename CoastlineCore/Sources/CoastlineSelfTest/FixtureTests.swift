@@ -4,6 +4,20 @@ import Foundation
 import simd
 
 let fixtureTests: [TestCase] = [
+    TestCase(name: "profileTableThicknessAndBoundsControlClampFitAndOccupancy") {
+        var table = FlatPrep.Table(topX: 15, northZ: 130, backZ: 55, stopNorthZ: 130,
+                                   thickness: 5, minimumY: -400, maximumY: -20)
+        let stage = FlatPrep.Stage(kind: .edge(round: 0, of: 1), title: "Edge", stock: SIMD3(50, 80, 70), cut: 8, protrusion: 10)
+        let thin = SideClamps.place(stage: stage, table: table, frontSlotZ: 119, centreY: -200)
+        try expect(!thin.issues.contains { $0.message.contains("table are more") })
+        table.thickness = 20
+        let thick = SideClamps.place(stage: stage, table: table, frontSlotZ: 119, centreY: -200)
+        try expect(thick.issues.contains { $0.message.contains("table are more") })
+        let solid = SideClamps.solids(thick, table: table, centreY: 0).first { $0.name == "table" }!
+        try expectEqual(solid.min, SIMD3(-5, -400, 55))
+        try expectEqual(solid.max, SIMD3(15, -20, 130))
+        try expectEqual(FlatPrep.Table().thickness, FlatPrep.tableThickness, "Legacy setups retain their previous dimensions")
+    },
     TestCase(name: "clampKitBoltsAcrossBothSlotsAndHoldsTheStockProud") {
         let p = UniversalClamp.place(stock: SIMD3(30, 70, 12), tableTopX: -31.2, frontSlotZ: -13.4, centreY: -112, protrusion: 2)
         try expectEqual(p.clamps.count, 2, "70 mm wide stock: a clamp near each end")

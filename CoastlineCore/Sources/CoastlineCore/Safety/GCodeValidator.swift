@@ -90,7 +90,8 @@ public struct GCodeValidator {
                     case 21: metric = true
                     case 20: add(.error, n, "G20 inches: Coastline programs are in mm.")
                     case 53: isG53 = true
-                    case 17, 54, 4: break
+                    case 17, 54, 4, 40, 91.1, 94: break
+                    case 93: add(.error, n, "G93 inverse-time feed: Coastline programs require G94 feed per minute.")
                     case 28, 30, 43, 92: add(.error, n, "G\(Int(v)) isn't used on the machine and can move to unexpected places.")
                     case 81, 82, 83, 73: add(.error, n, "canned cycle G\(Int(v)): grbl doesn't support it.")
                     default: add(.warning, n, "unusual code G\(v).")

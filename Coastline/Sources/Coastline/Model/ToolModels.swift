@@ -36,6 +36,7 @@ extension Tool {
         case .tiAlN, .alTiN: SceneColor.surface(0.18)
         case .alCrN: SceneColor.surface(0.32)
         case .dlc, .diamond: SceneColor.surface(0.10)
+        case .unspecified, .other: SceneColor.surface(0.55)
         case .none: toolMaterial == .hss ? SceneColor.surface(0.50) : SceneColor.surface(0.60)
         }
     }

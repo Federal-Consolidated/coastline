@@ -1,0 +1,1239 @@
+{
+  "schemaVersion": 1,
+  "sourceFile": "../quick_release_jig_plate.step",
+  "sourceSHA256": "06df20ac25bc5ab5268f1cc4cf124da6e7e32c7f25f91cd8525b316a0bdc83c1",
+  "outputFile": "fixture.step",
+  "outputSHA256": "ff640aa01d3bee5ce4986a2cf4e21977209412a7a9cb0a43397db5ddf82a37cf",
+  "sourceSolidCount": 35,
+  "outputSolidCount": 34,
+  "removed": [
+    {
+      "reason": "Embedded machine table, not fixture hardware",
+      "solidIndex": 0,
+      "occurrencePath": "0/0",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "X Unibody - RevD v1"
+      ],
+      "boundsMM": [
+        [
+          -181.48294863194354,
+          -27.62746143124557,
+          -0.999998000000005
+        ],
+        [
+          203.51705136805734,
+          47.3025385687545,
+          13.605002
+        ]
+      ],
+      "volumeMM3": 289183.3033332892,
+      "faceCount": 102
+    }
+  ],
+  "preservationTolerances": {
+    "boundsMM": 1e-05,
+    "sampledGeometryMM": 1e-05,
+    "relativeVolume": 2e-05,
+    "minimumAbsoluteVolumeMM3": 0.0001
+  },
+  "retainedVolumeMM3": 510479.45802224206,
+  "retainedSolids": [
+    {
+      "solidIndex": 0,
+      "occurrencePath": "0/0/0",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "92981A108_Alloy Steel Shoulder Screws v1",
+        "Component3"
+      ],
+      "boundsMM": [
+        [
+          123.446135028492,
+          3.4009999000000026,
+          18.605408167771046
+        ],
+        [
+          133.446135028492,
+          26.401000100000005,
+          28.605408267771047
+        ]
+      ],
+      "volumeMM3": 727.6803247271254,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 1,
+      "occurrencePath": "0/1",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Mounting Bolt"
+      ],
+      "boundsMM": [
+        [
+          -45.79252248116,
+          25.302160611175,
+          16.1549999
+        ],
+        [
+          -37.29252248116,
+          33.802160611175,
+          101.1550001
+        ]
+      ],
+      "volumeMM3": 1792.9377675816327,
+      "faceCount": 80
+    },
+    {
+      "solidIndex": 2,
+      "occurrencePath": "0/2",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Mounting Bolt (1)"
+      ],
+      "boundsMM": [
+        [
+          34.206677518833004,
+          25.302160611175,
+          16.1549999
+        ],
+        [
+          42.706677518833004,
+          33.802160611175,
+          101.1550001
+        ]
+      ],
+      "volumeMM3": 1792.9377673663244,
+      "faceCount": 80
+    },
+    {
+      "solidIndex": 3,
+      "occurrencePath": "0/3",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Mounting Bolt (2)"
+      ],
+      "boundsMM": [
+        [
+          114.20687751883,
+          25.302160611175,
+          16.1549999
+        ],
+        [
+          122.70687751883,
+          33.802160611175,
+          101.1550001
+        ]
+      ],
+      "volumeMM3": 1792.9377673667805,
+      "faceCount": 80
+    },
+    {
+      "solidIndex": 4,
+      "occurrencePath": "0/4",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Shoulder Bolt"
+      ],
+      "boundsMM": [
+        [
+          123.44613502849,
+          3.400999899999999,
+          52.616008167771
+        ],
+        [
+          133.44613502849,
+          26.4010001,
+          62.616008267771
+        ]
+      ],
+      "volumeMM3": 727.6803247261183,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 5,
+      "occurrencePath": "0/5",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Shoulder Bolt (1)"
+      ],
+      "boundsMM": [
+        [
+          123.44613502849,
+          3.400999899999999,
+          86.62660816777101
+        ],
+        [
+          133.44613502849,
+          26.4010001,
+          96.626608267771
+        ]
+      ],
+      "volumeMM3": 727.6803247261045,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 6,
+      "occurrencePath": "0/6",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Shoulder Bolt (2)"
+      ],
+      "boundsMM": [
+        [
+          -56.5636649715,
+          3.400999899999999,
+          52.616008167771
+        ],
+        [
+          -46.5636649715,
+          26.4010001,
+          62.616008267771
+        ]
+      ],
+      "volumeMM3": 727.6803247261767,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 7,
+      "occurrencePath": "0/7",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Shoulder Bolt (1) (1)"
+      ],
+      "boundsMM": [
+        [
+          -56.5636649715,
+          3.400999899999999,
+          86.62660816777101
+        ],
+        [
+          -46.5636649715,
+          26.4010001,
+          96.626608267771
+        ]
+      ],
+      "volumeMM3": 727.6803247261687,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 8,
+      "occurrencePath": "0/8",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Shoulder Bolt (3)"
+      ],
+      "boundsMM": [
+        [
+          -56.5636649715,
+          3.400999899999999,
+          18.605408167771
+        ],
+        [
+          -46.5636649715,
+          26.4010001,
+          28.605408267771
+        ]
+      ],
+      "volumeMM3": 727.6803247264229,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 9,
+      "occurrencePath": "0/9",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "Component3"
+      ],
+      "boundsMM": [
+        [
+          103.4461350285,
+          3.4009999000000026,
+          18.605408167772044
+        ],
+        [
+          113.4461350285,
+          26.401000100000005,
+          28.605408267772045
+        ]
+      ],
+      "volumeMM3": 727.6803247271255,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 10,
+      "occurrencePath": "0/10",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Shoulder Bolt"
+      ],
+      "boundsMM": [
+        [
+          103.44613502849,
+          3.400999899999999,
+          52.61600816777199
+        ],
+        [
+          113.44613502849,
+          26.4010001,
+          62.61600826777199
+        ]
+      ],
+      "volumeMM3": 727.6803247261173,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 11,
+      "occurrencePath": "0/11",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Shoulder Bolt (1)"
+      ],
+      "boundsMM": [
+        [
+          103.44613502849,
+          3.400999899999999,
+          86.62660816777199
+        ],
+        [
+          113.44613502849,
+          26.4010001,
+          96.62660826777199
+        ]
+      ],
+      "volumeMM3": 727.6803247261048,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 12,
+      "occurrencePath": "0/12",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Shoulder Bolt (3)"
+      ],
+      "boundsMM": [
+        [
+          -36.5636649715,
+          3.400999899999998,
+          18.605408167771
+        ],
+        [
+          -26.563664971500003,
+          26.4010001,
+          28.605408267771
+        ]
+      ],
+      "volumeMM3": 727.6803247264227,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 13,
+      "occurrencePath": "0/13",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Shoulder Bolt (2)"
+      ],
+      "boundsMM": [
+        [
+          -36.5636649715,
+          3.400999899999997,
+          52.616008167771
+        ],
+        [
+          -26.563664971500003,
+          26.4010001,
+          62.616008267771
+        ]
+      ],
+      "volumeMM3": 727.6803247261767,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 14,
+      "occurrencePath": "0/14",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "M5 Shoulder Bolt (1) (1)"
+      ],
+      "boundsMM": [
+        [
+          -36.5636649715,
+          3.400999899999996,
+          86.62660816777101
+        ],
+        [
+          -26.563664971500003,
+          26.401000099999997,
+          96.626608267771
+        ]
+      ],
+      "volumeMM3": 727.6803247261691,
+      "faceCount": 269
+    },
+    {
+      "solidIndex": 15,
+      "occurrencePath": "0/15",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "Insulating Washer StepFile v1"
+      ],
+      "boundsMM": [
+        [
+          -66.30618495843,
+          18.695476510553,
+          16.51
+        ],
+        [
+          -56.781184958429996,
+          28.220476510553,
+          21.272500000000004
+        ]
+      ],
+      "volumeMM3": 144.50716909343512,
+      "faceCount": 6
+    },
+    {
+      "solidIndex": 16,
+      "occurrencePath": "0/16",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "91290A144_Alloy Steel Socket Head Screw v1"
+      ],
+      "boundsMM": [
+        [
+          -65.04368495842999,
+          19.957976510553,
+          11.725649900000002
+        ],
+        [
+          -58.04368495843,
+          26.957976510553,
+          25.725650100000003
+        ]
+      ],
+      "volumeMM3": 229.1955997563658,
+      "faceCount": 49
+    },
+    {
+      "solidIndex": 17,
+      "occurrencePath": "0/17",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "98689A113_General Purpose 18-8 Stainless Steel Washer v1"
+      ],
+      "boundsMM": [
+        [
+          -65.54368505842999,
+          19.457976410552995,
+          21.2725
+        ],
+        [
+          -57.54368485842998,
+          27.457976610553004,
+          21.772500099999906
+        ]
+      ],
+      "volumeMM3": 17.313172882768853,
+      "faceCount": 4
+    },
+    {
+      "solidIndex": 18,
+      "occurrencePath": "0/18",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "91290A144_Alloy Steel Socket Head Screw v1"
+      ],
+      "boundsMM": [
+        [
+          -5.043684958432,
+          19.957976510554,
+          11.725649900000002
+        ],
+        [
+          1.9563150415679997,
+          26.957976510554,
+          25.725650100000003
+        ]
+      ],
+      "volumeMM3": 229.19559975636577,
+      "faceCount": 49
+    },
+    {
+      "solidIndex": 19,
+      "occurrencePath": "0/19",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "98689A113_General Purpose 18-8 Stainless Steel Washer v1"
+      ],
+      "boundsMM": [
+        [
+          -5.543685058432001,
+          19.457976410554,
+          21.2725
+        ],
+        [
+          2.456315141568,
+          27.457976610554002,
+          21.772500099999906
+        ]
+      ],
+      "volumeMM3": 17.313172882768853,
+      "faceCount": 4
+    },
+    {
+      "solidIndex": 20,
+      "occurrencePath": "0/20",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "Insulating Washer StepFile v1"
+      ],
+      "boundsMM": [
+        [
+          -6.306184958432,
+          18.695476510554002,
+          16.51
+        ],
+        [
+          3.218815041568,
+          28.220476510554004,
+          21.272500000000004
+        ]
+      ],
+      "volumeMM3": 144.50716909343518,
+      "faceCount": 6
+    },
+    {
+      "solidIndex": 21,
+      "occurrencePath": "0/21",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "91290A144_Alloy Steel Socket Head Screw v1"
+      ],
+      "boundsMM": [
+        [
+          74.956315041568,
+          19.957976510554,
+          11.725649900000002
+        ],
+        [
+          81.956315041568,
+          26.957976510554,
+          25.725650100000003
+        ]
+      ],
+      "volumeMM3": 229.1955997563658,
+      "faceCount": 49
+    },
+    {
+      "solidIndex": 22,
+      "occurrencePath": "0/22",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "98689A113_General Purpose 18-8 Stainless Steel Washer v1"
+      ],
+      "boundsMM": [
+        [
+          74.45631494156801,
+          19.457976410554,
+          21.2725
+        ],
+        [
+          82.456315141568,
+          27.457976610554002,
+          21.772500099999906
+        ]
+      ],
+      "volumeMM3": 17.313172882768846,
+      "faceCount": 4
+    },
+    {
+      "solidIndex": 23,
+      "occurrencePath": "0/23",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "Insulating Washer StepFile v1"
+      ],
+      "boundsMM": [
+        [
+          73.693815041568,
+          18.695476510554002,
+          16.51
+        ],
+        [
+          83.218815041568,
+          28.220476510554,
+          21.272500000000004
+        ]
+      ],
+      "volumeMM3": 144.50716909343515,
+      "faceCount": 6
+    },
+    {
+      "solidIndex": 24,
+      "occurrencePath": "0/24",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "91290A144_Alloy Steel Socket Head Screw v1"
+      ],
+      "boundsMM": [
+        [
+          134.95631504156,
+          19.957976510554,
+          11.725649900000002
+        ],
+        [
+          141.95631504156,
+          26.957976510554005,
+          25.725650100000003
+        ]
+      ],
+      "volumeMM3": 229.19559975636577,
+      "faceCount": 49
+    },
+    {
+      "solidIndex": 25,
+      "occurrencePath": "0/25",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "98689A113_General Purpose 18-8 Stainless Steel Washer v1"
+      ],
+      "boundsMM": [
+        [
+          134.45631494155998,
+          19.457976410554,
+          21.2725
+        ],
+        [
+          142.45631514156,
+          27.457976610554002,
+          21.772500099999906
+        ]
+      ],
+      "volumeMM3": 17.313172882768868,
+      "faceCount": 4
+    },
+    {
+      "solidIndex": 26,
+      "occurrencePath": "0/26",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "Insulating Washer StepFile v1"
+      ],
+      "boundsMM": [
+        [
+          133.69381504156001,
+          18.695476510554002,
+          16.51
+        ],
+        [
+          143.21881504156,
+          28.220476510554004,
+          21.272500000000004
+        ]
+      ],
+      "volumeMM3": 144.5071690934352,
+      "faceCount": 6
+    },
+    {
+      "solidIndex": 27,
+      "occurrencePath": "0/27",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "Component23"
+      ],
+      "boundsMM": [
+        [
+          -24.54275951179,
+          20.457976510553,
+          10.385000000000002
+        ],
+        [
+          -18.54275951179,
+          26.457976510553,
+          18.384999999999998
+        ]
+      ],
+      "volumeMM3": 197.55372566378668,
+      "faceCount": 4
+    },
+    {
+      "solidIndex": 28,
+      "occurrencePath": "0/28",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "Component24"
+      ],
+      "boundsMM": [
+        [
+          95.457555894796,
+          30.387560611174997,
+          15.435000000000002
+        ],
+        [
+          101.457555894796,
+          36.387560611175,
+          23.435000000000002
+        ]
+      ],
+      "volumeMM3": 197.55372566378662,
+      "faceCount": 4
+    },
+    {
+      "solidIndex": 29,
+      "occurrencePath": "0/29",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "Component25"
+      ],
+      "boundsMM": [
+        [
+          -24.5424441052,
+          30.387560611174997,
+          15.435000000000002
+        ],
+        [
+          -18.5424441052,
+          36.387560611175,
+          23.435000000000002
+        ]
+      ],
+      "volumeMM3": 197.55372566378662,
+      "faceCount": 4
+    },
+    {
+      "solidIndex": 30,
+      "occurrencePath": "0/30",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "Component27"
+      ],
+      "boundsMM": [
+        [
+          95.456750713164,
+          20.457976510553,
+          10.385000000000002
+        ],
+        [
+          101.456750713164,
+          26.457976510553,
+          18.384999999999998
+        ]
+      ],
+      "volumeMM3": 197.5537256637867,
+      "faceCount": 4
+    },
+    {
+      "solidIndex": 31,
+      "occurrencePath": "0/31",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "Insulating Pad Component28"
+      ],
+      "boundsMM": [
+        [
+          -70.13033363194117,
+          10.789478568756,
+          13.605001999999983
+        ],
+        [
+          147.04374636806,
+          41.966558568782,
+          14.605002000000043
+        ]
+      ],
+      "volumeMM3": 6578.675040786703,
+      "faceCount": 16
+    },
+    {
+      "solidIndex": 32,
+      "occurrencePath": "0/32",
+      "solidWithinLeaf": 0,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "COMPOUND"
+      ],
+      "boundsMM": [
+        [
+          -68.54321580084002,
+          12.377968799144,
+          14.605
+        ],
+        [
+          145.45678419915,
+          40.377968799144,
+          100.584
+        ]
+      ],
+      "volumeMM3": 461598.53237285116,
+      "faceCount": 229
+    },
+    {
+      "solidIndex": 33,
+      "occurrencePath": "0/32",
+      "solidWithinLeaf": 1,
+      "names": [
+        "Jig Plate Rev D - Metric v75",
+        "COMPOUND"
+      ],
+      "boundsMM": [
+        [
+          -68.54321580084002,
+          15.551352423205943,
+          14.605
+        ],
+        [
+          145.45678419915,
+          40.377968799144,
+          19.685
+        ]
+      ],
+      "volumeMM3": 25836.994739987815,
+      "faceCount": 18
+    }
+  ],
+  "preservationChecks": [
+    {
+      "sourceSolidIndex": 1,
+      "outputSolidIndex": 0,
+      "sourceOccurrencePath": "0/1/0",
+      "outputOccurrencePath": "0/0/0",
+      "maximumBoundsErrorMM": 4.121147867408581e-13,
+      "volumeDifferenceMM3": 0.009498698756260637,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.121168754706544e-06,
+      "maximumSampledBoundaryErrorMM": 1.2814234324882174e-10
+    },
+    {
+      "sourceSolidIndex": 2,
+      "outputSolidIndex": 1,
+      "sourceOccurrencePath": "0/2",
+      "outputOccurrencePath": "0/1",
+      "maximumBoundsErrorMM": 7.261746759468224e-12,
+      "volumeDifferenceMM3": 8.874394552549347e-10,
+      "faceCount": 80,
+      "edgeCount": 438,
+      "maximumSampledSurfaceErrorMM": 1.240740960294143e-09,
+      "maximumSampledBoundaryErrorMM": 2.645520650271412e-10
+    },
+    {
+      "sourceSolidIndex": 3,
+      "outputSolidIndex": 2,
+      "sourceOccurrencePath": "0/3",
+      "outputOccurrencePath": "0/2",
+      "maximumBoundsErrorMM": 2.4158453015843406e-13,
+      "volumeDifferenceMM3": 1.231683199875988e-09,
+      "faceCount": 80,
+      "edgeCount": 438,
+      "maximumSampledSurfaceErrorMM": 1.2340979282345608e-09,
+      "maximumSampledBoundaryErrorMM": 2.6444009395970714e-10
+    },
+    {
+      "sourceSolidIndex": 4,
+      "outputSolidIndex": 3,
+      "sourceOccurrencePath": "0/4",
+      "outputOccurrencePath": "0/3",
+      "maximumBoundsErrorMM": 2.7426949600339867e-12,
+      "volumeDifferenceMM3": 1.762600732035935e-09,
+      "faceCount": 80,
+      "edgeCount": 438,
+      "maximumSampledSurfaceErrorMM": 1.236122613617986e-09,
+      "maximumSampledBoundaryErrorMM": 2.6471359985679743e-10
+    },
+    {
+      "sourceSolidIndex": 5,
+      "outputSolidIndex": 4,
+      "sourceOccurrencePath": "0/5",
+      "outputOccurrencePath": "0/4",
+      "maximumBoundsErrorMM": 4.021671884402167e-12,
+      "volumeDifferenceMM3": 0.009498699729192595,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.121167455204006e-06,
+      "maximumSampledBoundaryErrorMM": 1.3171651308978423e-10
+    },
+    {
+      "sourceSolidIndex": 6,
+      "outputSolidIndex": 5,
+      "sourceOccurrencePath": "0/6",
+      "outputOccurrencePath": "0/5",
+      "maximumBoundsErrorMM": 4.021671884402167e-12,
+      "volumeDifferenceMM3": 0.009498699768641927,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.12116789638854e-06,
+      "maximumSampledBoundaryErrorMM": 1.317164868336492e-10
+    },
+    {
+      "sourceSolidIndex": 7,
+      "outputSolidIndex": 6,
+      "sourceOccurrencePath": "0/7",
+      "outputOccurrencePath": "0/6",
+      "maximumBoundsErrorMM": 5.9685589803848416e-12,
+      "volumeDifferenceMM3": 0.009498699691448564,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.121168150615914e-06,
+      "maximumSampledBoundaryErrorMM": 1.2176705905310414e-10
+    },
+    {
+      "sourceSolidIndex": 8,
+      "outputSolidIndex": 7,
+      "sourceOccurrencePath": "0/8",
+      "outputOccurrencePath": "0/7",
+      "maximumBoundsErrorMM": 5.9685589803848416e-12,
+      "volumeDifferenceMM3": 0.00949869970850159,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.12116815456656e-06,
+      "maximumSampledBoundaryErrorMM": 1.2176703065160836e-10
+    },
+    {
+      "sourceSolidIndex": 9,
+      "outputSolidIndex": 8,
+      "sourceOccurrencePath": "0/9",
+      "outputOccurrencePath": "0/8",
+      "maximumBoundsErrorMM": 7.496225862269057e-12,
+      "volumeDifferenceMM3": 0.009498699491814477,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.121166532879122e-06,
+      "maximumSampledBoundaryErrorMM": 1.2017024168358466e-10
+    },
+    {
+      "sourceSolidIndex": 10,
+      "outputSolidIndex": 9,
+      "sourceOccurrencePath": "0/10",
+      "outputOccurrencePath": "0/9",
+      "maximumBoundsErrorMM": 7.617018127348274e-12,
+      "volumeDifferenceMM3": 0.00949869875546483,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.121167065648686e-06,
+      "maximumSampledBoundaryErrorMM": 1.2014377705245373e-10
+    },
+    {
+      "sourceSolidIndex": 11,
+      "outputSolidIndex": 10,
+      "sourceOccurrencePath": "0/11",
+      "outputOccurrencePath": "0/10",
+      "maximumBoundsErrorMM": 4.021671884402167e-12,
+      "volumeDifferenceMM3": 0.00949869973078421,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.121167445063453e-06,
+      "maximumSampledBoundaryErrorMM": 1.3171651308978423e-10
+    },
+    {
+      "sourceSolidIndex": 12,
+      "outputSolidIndex": 11,
+      "sourceOccurrencePath": "0/12",
+      "outputOccurrencePath": "0/11",
+      "maximumBoundsErrorMM": 4.021671884402167e-12,
+      "volumeDifferenceMM3": 0.009498699768641927,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.12116789638854e-06,
+      "maximumSampledBoundaryErrorMM": 1.317164868336492e-10
+    },
+    {
+      "sourceSolidIndex": 13,
+      "outputSolidIndex": 12,
+      "sourceOccurrencePath": "0/13",
+      "outputOccurrencePath": "0/12",
+      "maximumBoundsErrorMM": 7.492673148590256e-12,
+      "volumeDifferenceMM3": 0.009498699491246043,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.121166528161312e-06,
+      "maximumSampledBoundaryErrorMM": 1.201773326349695e-10
+    },
+    {
+      "sourceSolidIndex": 14,
+      "outputSolidIndex": 13,
+      "sourceOccurrencePath": "0/14",
+      "outputOccurrencePath": "0/13",
+      "maximumBoundsErrorMM": 5.965006266706041e-12,
+      "volumeDifferenceMM3": 0.009498699691903312,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.121168145898103e-06,
+      "maximumSampledBoundaryErrorMM": 1.2177414947620366e-10
+    },
+    {
+      "sourceSolidIndex": 15,
+      "outputSolidIndex": 14,
+      "sourceOccurrencePath": "0/15",
+      "outputOccurrencePath": "0/14",
+      "maximumBoundsErrorMM": 5.965006266706041e-12,
+      "volumeDifferenceMM3": 0.00949869970850159,
+      "faceCount": 269,
+      "edgeCount": 1544,
+      "maximumSampledSurfaceErrorMM": 8.12116814984875e-06,
+      "maximumSampledBoundaryErrorMM": 1.217741210763616e-10
+    },
+    {
+      "sourceSolidIndex": 16,
+      "outputSolidIndex": 15,
+      "sourceOccurrencePath": "0/16",
+      "outputOccurrencePath": "0/15",
+      "maximumBoundsErrorMM": 2.1742607714259066e-12,
+      "volumeDifferenceMM3": 5.7980287238024175e-12,
+      "faceCount": 6,
+      "edgeCount": 18,
+      "maximumSampledSurfaceErrorMM": 3.0462194388534953e-12,
+      "maximumSampledBoundaryErrorMM": 2.1946484376072387e-12
+    },
+    {
+      "sourceSolidIndex": 17,
+      "outputSolidIndex": 16,
+      "sourceOccurrencePath": "0/17",
+      "outputOccurrencePath": "0/16",
+      "maximumBoundsErrorMM": 2.1742607714259066e-12,
+      "volumeDifferenceMM3": 0.0009484662932663923,
+      "faceCount": 49,
+      "edgeCount": 258,
+      "maximumSampledSurfaceErrorMM": 1.3718985287296864e-09,
+      "maximumSampledBoundaryErrorMM": 1.1398248660499066e-10
+    },
+    {
+      "sourceSolidIndex": 18,
+      "outputSolidIndex": 17,
+      "sourceOccurrencePath": "0/18",
+      "outputOccurrencePath": "0/17",
+      "maximumBoundsErrorMM": 2.1884716261411086e-12,
+      "volumeDifferenceMM3": 1.7479351299698465e-12,
+      "faceCount": 4,
+      "edgeCount": 14,
+      "maximumSampledSurfaceErrorMM": 3.105140857629188e-12,
+      "maximumSampledBoundaryErrorMM": 2.1981911683541295e-12
+    },
+    {
+      "sourceSolidIndex": 19,
+      "outputSolidIndex": 18,
+      "sourceOccurrencePath": "0/19",
+      "outputOccurrencePath": "0/18",
+      "maximumBoundsErrorMM": 4.973799150320701e-13,
+      "volumeDifferenceMM3": 0.0009484662931527055,
+      "faceCount": 49,
+      "edgeCount": 258,
+      "maximumSampledSurfaceErrorMM": 1.3699447110063622e-09,
+      "maximumSampledBoundaryErrorMM": 1.1478812975967063e-10
+    },
+    {
+      "sourceSolidIndex": 20,
+      "outputSolidIndex": 19,
+      "sourceOccurrencePath": "0/20",
+      "outputOccurrencePath": "0/19",
+      "maximumBoundsErrorMM": 4.831690603168681e-13,
+      "volumeDifferenceMM3": 1.7479351299698465e-12,
+      "faceCount": 4,
+      "edgeCount": 14,
+      "maximumSampledSurfaceErrorMM": 1.5551111359738537e-12,
+      "maximumSampledBoundaryErrorMM": 5.129958935923706e-13
+    },
+    {
+      "sourceSolidIndex": 21,
+      "outputSolidIndex": 20,
+      "sourceOccurrencePath": "0/21",
+      "outputOccurrencePath": "0/20",
+      "maximumBoundsErrorMM": 5.009326287108706e-13,
+      "volumeDifferenceMM3": 5.7411853049416095e-12,
+      "faceCount": 6,
+      "edgeCount": 18,
+      "maximumSampledSurfaceErrorMM": 1.6152722960348966e-12,
+      "maximumSampledBoundaryErrorMM": 5.321397053234754e-13
+    },
+    {
+      "sourceSolidIndex": 22,
+      "outputSolidIndex": 21,
+      "sourceOccurrencePath": "0/22",
+      "outputOccurrencePath": "0/21",
+      "maximumBoundsErrorMM": 2.948752353404416e-13,
+      "volumeDifferenceMM3": 0.0009484662931527055,
+      "faceCount": 49,
+      "edgeCount": 258,
+      "maximumSampledSurfaceErrorMM": 1.3699474408955024e-09,
+      "maximumSampledBoundaryErrorMM": 1.1458625037281955e-10
+    },
+    {
+      "sourceSolidIndex": 23,
+      "outputSolidIndex": 22,
+      "sourceOccurrencePath": "0/23",
+      "outputOccurrencePath": "0/22",
+      "maximumBoundsErrorMM": 3.090860900556436e-13,
+      "volumeDifferenceMM3": 1.7550405573274475e-12,
+      "faceCount": 4,
+      "edgeCount": 14,
+      "maximumSampledSurfaceErrorMM": 1.5142147500041785e-12,
+      "maximumSampledBoundaryErrorMM": 3.2284766327951306e-13
+    },
+    {
+      "sourceSolidIndex": 24,
+      "outputSolidIndex": 23,
+      "sourceOccurrencePath": "0/24",
+      "outputOccurrencePath": "0/23",
+      "maximumBoundsErrorMM": 2.984279490192421e-13,
+      "volumeDifferenceMM3": 5.7411853049416095e-12,
+      "faceCount": 6,
+      "edgeCount": 18,
+      "maximumSampledSurfaceErrorMM": 1.4077445832465551e-12,
+      "maximumSampledBoundaryErrorMM": 3.227499106314736e-13
+    },
+    {
+      "sourceSolidIndex": 25,
+      "outputSolidIndex": 24,
+      "sourceOccurrencePath": "0/25",
+      "outputOccurrencePath": "0/24",
+      "maximumBoundsErrorMM": 7.929656931082718e-12,
+      "volumeDifferenceMM3": 0.0009484662931242838,
+      "faceCount": 49,
+      "edgeCount": 258,
+      "maximumSampledSurfaceErrorMM": 1.37700310052116e-09,
+      "maximumSampledBoundaryErrorMM": 1.1467862266568574e-10
+    },
+    {
+      "sourceSolidIndex": 26,
+      "outputSolidIndex": 25,
+      "sourceOccurrencePath": "0/26",
+      "outputOccurrencePath": "0/25",
+      "maximumBoundsErrorMM": 7.958078640513122e-12,
+      "volumeDifferenceMM3": 1.723066134218243e-12,
+      "faceCount": 4,
+      "edgeCount": 14,
+      "maximumSampledSurfaceErrorMM": 9.337405490772574e-12,
+      "maximumSampledBoundaryErrorMM": 7.930040525745707e-12
+    },
+    {
+      "sourceSolidIndex": 27,
+      "outputSolidIndex": 26,
+      "sourceOccurrencePath": "0/27",
+      "outputOccurrencePath": "0/26",
+      "maximumBoundsErrorMM": 7.929656931082718e-12,
+      "volumeDifferenceMM3": 5.5422333389287814e-12,
+      "faceCount": 6,
+      "edgeCount": 18,
+      "maximumSampledSurfaceErrorMM": 9.152326913731285e-12,
+      "maximumSampledBoundaryErrorMM": 7.93031985375199e-12
+    },
+    {
+      "sourceSolidIndex": 28,
+      "outputSolidIndex": 27,
+      "sourceOccurrencePath": "0/28",
+      "outputOccurrencePath": "0/27",
+      "maximumBoundsErrorMM": 3.872457909892546e-13,
+      "volumeDifferenceMM3": 3.240074875066057e-12,
+      "faceCount": 4,
+      "edgeCount": 12,
+      "maximumSampledSurfaceErrorMM": 2.9501859315324602e-12,
+      "maximumSampledBoundaryErrorMM": 8.400721854090629e-13
+    },
+    {
+      "sourceSolidIndex": 29,
+      "outputSolidIndex": 28,
+      "sourceOccurrencePath": "0/29",
+      "outputOccurrencePath": "0/28",
+      "maximumBoundsErrorMM": 2.6645352591003757e-13,
+      "volumeDifferenceMM3": 2.6716406864579767e-12,
+      "faceCount": 4,
+      "edgeCount": 12,
+      "maximumSampledSurfaceErrorMM": 2.776361069091693e-12,
+      "maximumSampledBoundaryErrorMM": 6.768921889982534e-13
+    },
+    {
+      "sourceSolidIndex": 30,
+      "outputSolidIndex": 29,
+      "sourceOccurrencePath": "0/30",
+      "outputOccurrencePath": "0/29",
+      "maximumBoundsErrorMM": 3.8333780594257405e-12,
+      "volumeDifferenceMM3": 2.2168933355715126e-12,
+      "faceCount": 4,
+      "edgeCount": 12,
+      "maximumSampledSurfaceErrorMM": 5.694132283275858e-12,
+      "maximumSampledBoundaryErrorMM": 4.2390603857441045e-12
+    },
+    {
+      "sourceSolidIndex": 31,
+      "outputSolidIndex": 30,
+      "sourceOccurrencePath": "0/31",
+      "outputOccurrencePath": "0/30",
+      "maximumBoundsErrorMM": 3.090860900556436e-13,
+      "volumeDifferenceMM3": 2.8137492336099967e-12,
+      "faceCount": 4,
+      "edgeCount": 12,
+      "maximumSampledSurfaceErrorMM": 2.780168138800669e-12,
+      "maximumSampledBoundaryErrorMM": 7.106937100521347e-13
+    },
+    {
+      "sourceSolidIndex": 32,
+      "outputSolidIndex": 31,
+      "sourceOccurrencePath": "0/32",
+      "outputOccurrencePath": "0/31",
+      "maximumBoundsErrorMM": 2.0747847884194925e-12,
+      "volumeDifferenceMM3": 1.355147105641663e-10,
+      "faceCount": 16,
+      "edgeCount": 84,
+      "maximumSampledSurfaceErrorMM": 7.555400285345596e-12,
+      "maximumSampledBoundaryErrorMM": 6.774558757265922e-12
+    },
+    {
+      "sourceSolidIndex": 33,
+      "outputSolidIndex": 32,
+      "sourceOccurrencePath": "0/33",
+      "outputOccurrencePath": "0/32",
+      "maximumBoundsErrorMM": 8.355982572538778e-12,
+      "volumeDifferenceMM3": 1.949956640601158e-08,
+      "faceCount": 229,
+      "edgeCount": 708,
+      "maximumSampledSurfaceErrorMM": 8.36170920996595e-12,
+      "maximumSampledBoundaryErrorMM": 8.387309175952059e-12
+    },
+    {
+      "sourceSolidIndex": 34,
+      "outputSolidIndex": 33,
+      "sourceOccurrencePath": "0/33",
+      "outputOccurrencePath": "0/32",
+      "maximumBoundsErrorMM": 8.355982572538778e-12,
+      "volumeDifferenceMM3": 1.4988472685217857e-09,
+      "faceCount": 18,
+      "edgeCount": 72,
+      "maximumSampledSurfaceErrorMM": 8.35772325114659e-12,
+      "maximumSampledBoundaryErrorMM": 8.387297325125745e-12
+    }
+  ],
+  "sourcePose": "Exploded view: source FILE_NAME is Jig Plate Rev D - Metric Exploded View.step",
+  "qualification": "Only the source-bound machine-table occurrence is excluded. All other hardware, plates and unnamed bodies are retained. This cleaned display/reference geometry does not establish their assembled placement, independent adjustment or load suitability."
+}

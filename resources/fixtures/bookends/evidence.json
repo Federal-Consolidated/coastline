@@ -1,0 +1,212 @@
+[
+ {
+  "path": "0/0",
+  "name": "Bookend - Fixed Stop:1 / Bookend - Fixed Stop / solid0",
+  "min": [
+   14.065,
+   -353.0,
+   73.044
+  ],
+  "max": [
+   34.865,
+   -333.0,
+   124.844
+  ]
+ },
+ {
+  "path": "1/0",
+  "name": "Bookend - Clamp:1 / Bookend - Clamp / solid0",
+  "min": [
+   14.065,
+   -145.8,
+   73.044
+  ],
+  "max": [
+   34.865,
+   -125.8,
+   124.844
+  ]
+ },
+ {
+  "path": "2/0",
+  "name": "Hardware - Workholding:1 / M4 x 25 set 05:1 / M4 x 25 SHCS (ISO 4762):2 / M4 x 25 SHCS (ISO 4762) / solid0",
+  "min": [
+   10.665,
+   -351.5,
+   75.259
+  ],
+  "max": [
+   39.665,
+   -344.5,
+   82.259
+  ]
+ },
+ {
+  "path": "3/0",
+  "name": "Hardware - Workholding:1 / M4 x 25 set 05:1 / M4 Flat Washer:1 / M4 Flat Washer / solid0",
+  "min": [
+   34.865,
+   -352.5,
+   74.259
+  ],
+  "max": [
+   35.665,
+   -343.5,
+   83.259
+  ]
+ },
+ {
+  "path": "4/0",
+  "name": "Hardware - Workholding:1 / M4 x 25 set 06:1 / M4 x 25 SHCS (ISO 4762):3 / M4 x 25 SHCS (ISO 4762) / solid0",
+  "min": [
+   10.665,
+   -351.5,
+   115.264
+  ],
+  "max": [
+   39.665,
+   -344.5,
+   122.264
+  ]
+ },
+ {
+  "path": "5/0",
+  "name": "Hardware - Workholding:1 / M4 x 25 set 06:1 / M4 Flat Washer:2 / M4 Flat Washer / solid0",
+  "min": [
+   34.865,
+   -352.5,
+   114.264
+  ],
+  "max": [
+   35.665,
+   -343.5,
+   123.264
+  ]
+ },
+ {
+  "path": "6/0",
+  "name": "Hardware - Workholding:1 / M4 x 25 set 07:1 / M4 x 25 SHCS (ISO 4762):4 / M4 x 25 SHCS (ISO 4762) / solid0",
+  "min": [
+   10.665,
+   -134.3,
+   75.259
+  ],
+  "max": [
+   39.665,
+   -127.3,
+   82.259
+  ]
+ },
+ {
+  "path": "7/0",
+  "name": "Hardware - Workholding:1 / M4 x 25 set 07:1 / M4 Flat Washer:3 / M4 Flat Washer / solid0",
+  "min": [
+   34.865,
+   -135.3,
+   74.259
+  ],
+  "max": [
+   35.665,
+   -126.3,
+   83.259
+  ]
+ },
+ {
+  "path": "8/0",
+  "name": "Hardware - Workholding:1 / M4 x 25 set 08:1 / M4 x 25 SHCS (ISO 4762):5 / M4 x 25 SHCS (ISO 4762) / solid0",
+  "min": [
+   10.665,
+   -134.3,
+   115.264
+  ],
+  "max": [
+   39.665,
+   -127.3,
+   122.264
+  ]
+ },
+ {
+  "path": "9/0",
+  "name": "Hardware - Workholding:1 / M4 x 25 set 08:1 / M4 Flat Washer:4 / M4 Flat Washer / solid0",
+  "min": [
+   34.865,
+   -135.3,
+   114.264
+  ],
+  "max": [
+   35.665,
+   -126.3,
+   123.264
+  ]
+ },
+ {
+  "path": "10/0",
+  "name": "Hardware - Workholding:1 / M4 x 25 SHCS (ISO 4762):6 / M4 x 25 SHCS (ISO 4762) / solid0",
+  "min": [
+   21.865,
+   -139.8,
+   100.944
+  ],
+  "max": [
+   28.865,
+   -110.8,
+   107.944
+  ]
+ },
+ {
+  "path": "11/0",
+  "name": "T-Slot Nut - M4 (Fairway JPPNM04016):2 / T-Slot Nut - M4 (Fairway JPPNM04016) / solid0",
+  "min": [
+   10.725,
+   -352.5,
+   73.259
+  ],
+  "max": [
+   14.365,
+   -336.63,
+   84.259
+  ]
+ },
+ {
+  "path": "12/0",
+  "name": "T-Slot Nut - M4 (Fairway JPPNM04016):3 / T-Slot Nut - M4 (Fairway JPPNM04016) / solid0",
+  "min": [
+   10.725,
+   -352.5,
+   113.264
+  ],
+  "max": [
+   14.365,
+   -336.63,
+   124.264
+  ]
+ },
+ {
+  "path": "13/0",
+  "name": "T-Slot Nut - M4 (Fairway JPPNM04016):4 / T-Slot Nut - M4 (Fairway JPPNM04016) / solid0",
+  "min": [
+   10.725,
+   -142.17,
+   73.259
+  ],
+  "max": [
+   14.365,
+   -126.3,
+   84.259
+  ]
+ },
+ {
+  "path": "14/0",
+  "name": "T-Slot Nut - M4 (Fairway JPPNM04016):5 / T-Slot Nut - M4 (Fairway JPPNM04016) / solid0",
+  "min": [
+   10.725,
+   -142.17,
+   113.264
+  ],
+  "max": [
+   14.365,
+   -126.3,
+   124.264
+  ]
+ }
+]

@@ -1,3 +1,4 @@
+import CoastlineCore
 import MillCore
 import SwiftUI
 
@@ -56,7 +57,11 @@ struct SetWorkPopover: View {
         let mill = app.mill
         let values = Dictionary(uniqueKeysWithValues: [(MillCore.Axis.x, x), (.y, y), (.z, z)].compactMap { a, v in v.map { (a, $0) } })
         VStack(alignment: .leading, spacing: 10) {
-            Text("This position in G\(mill.snapshot.activeWCS) is").font(.headline)
+            HStack {
+                Text("This position in G\(mill.snapshot.activeWCS) is").font(.headline)
+                Spacer()
+                UnitsPicker()
+            }
             OptionalNumberField(title: "X", value: $x, unit: "mm")
             OptionalNumberField(title: "Y", value: $y, unit: "mm")
             OptionalNumberField(title: "Z", value: $z, unit: "mm")
@@ -74,7 +79,7 @@ struct SetWorkPopover: View {
             }
         }
         .padding(16)
-        .frame(width: 260)
+        .frame(width: 300)
     }
 }
 
@@ -231,7 +236,11 @@ struct GoToSheet: View {
         let s = mill.snapshot
         let plan = mill.lines(for: request)
         VStack(alignment: .leading, spacing: 14) {
-            Label(request.title, systemImage: "location.fill").font(.headline)
+            HStack {
+                Label(request.title, systemImage: "location.fill").font(.headline)
+                Spacer()
+                UnitsPicker()
+            }
             if request.fixedLines == nil {
                 Picker("Coordinates", selection: $request.frame) {
                     Text("Work (G\(s.activeWCS))").tag(GoTo.Frame.work)
@@ -251,7 +260,7 @@ struct GoToSheet: View {
                         ForEach(Array(lines.compactMap(Self.describe).enumerated()), id: \.offset) { i, text in
                             Text("\(i + 1). \(text)").font(.callout)
                         }
-                        Text(lines.joined(separator: "  ")).font(.caption.monospaced()).foregroundStyle(.secondary)
+                        Text("G-code (mm): " + lines.joined(separator: "  ")).font(.caption.monospaced()).foregroundStyle(.secondary)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -291,8 +300,11 @@ struct GoToSheet: View {
     private static func describe(_ line: String) -> String? {
         if line == "M5" { return "Spindle off" }
         guard line.contains("G53") else { return nil }
-        let words = line.matches(of: /([XYZ])(-?[0-9.]+)/).map { "\($0.output.1) \($0.output.2)" }
-        return "Rapid to machine " + words.joined(separator: " ")
+        let units = AppSettings.shared.units
+        let words = line.matches(of: /([XYZ])(-?[0-9.]+)/).map {
+            "\($0.output.1) \(units.format(Double($0.output.2) ?? 0))"
+        }
+        return "Rapid to machine " + words.joined(separator: " ") + " " + units.symbol
     }
 }
 

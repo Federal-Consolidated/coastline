@@ -31,6 +31,7 @@ import numpy as np
 
 from OCP.BRepBndLib import BRepBndLib
 from OCP.Bnd import Bnd_Box
+from OCP.IFSelect import IFSelect_RetDone
 from OCP.STEPCAFControl import STEPCAFControl_Reader
 from OCP.TCollection import TCollection_ExtendedString
 from OCP.TDF import TDF_Label
@@ -71,7 +72,7 @@ DEFAULT_ROLE = ("aluminium", (0.32, 0.33, 0.35))
 
 @dataclass
 class MachinePart:
-    group: str      # static | x | y | z
+    group: str      # Legacy static/x/y/z group, or a portable profile's component ID.
     role: str       # enclosure | motor | steel | aluminium | …
     color: tuple
     mesh: Mesh
@@ -162,6 +163,77 @@ def load_machine(step_path: str | Path, cache_dir: str | Path | None = None) -> 
         cache.parent.mkdir(parents=True, exist_ok=True)
         _write_cache(cache, parts)
     return parts
+
+
+def load_profile_machine(manifest_path: str | Path, cache_dir: str | Path | None = None):
+    """Load a portable profile without the legacy machine's names or transforms.
+
+    Explicit occurrence paths assign CAD to components. A binding applies to its
+    descendants unless a more specific binding overrides it. Cache identity includes
+    the manifest and its hash-verified geometry; a different mapping cannot reuse
+    meshes grouped under an old definition.
+    """
+    from .machine_profile import MAXIMUM_COORDINATE_MAGNITUDE, load_definition
+
+    def validate_meshes(parts):
+        for part in parts:
+            mesh = part.mesh
+            if (not np.all(np.isfinite(mesh.vertices)) or not np.all(np.isfinite(mesh.normals))
+                    or np.any(np.abs(mesh.vertices) > MAXIMUM_COORDINATE_MAGNITUDE)):
+                raise ValueError("Machine geometry exceeds the preview's supported numeric range.")
+        return parts
+
+    definition = load_definition(manifest_path)
+    cache = None
+    if cache_dir:
+        cache = Path(cache_dir) / f"machine-profile-{definition.fingerprint}-v1.npz"
+        if cache.exists():
+            return validate_meshes(_read_cache(cache)), definition
+
+    doc = TDocStd_Document(TCollection_ExtendedString("profile-machine"))
+    reader = STEPCAFControl_Reader()
+    reader.SetNameMode(True)
+    if reader.ReadFile(str(definition.geometry_path)) != IFSelect_RetDone or not reader.Transfer(doc):
+        raise ValueError("Could not read the machine profile's STEP geometry.")
+    st = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
+    seen_paths: set[str] = set()
+    buckets: dict[tuple[str, str], tuple[tuple, list[Mesh]]] = {}
+
+    def visit(label, location, occurrence_path):
+        seen_paths.add(occurrence_path)
+        components = Sequence_TDF_Label()
+        st.GetComponents_s(label, components)
+        if len(components):
+            for index, occurrence in enumerate(components):
+                reference = TDF_Label()
+                if not st.GetReferredShape_s(occurrence, reference):
+                    reference = occurrence
+                visit(reference, location.Multiplied(st.GetLocation_s(occurrence)), f"{occurrence_path}/{index}")
+            return
+        group = definition.component_for_path(occurrence_path)
+        shape = st.GetShape_s(label).Moved(location)
+        if shape.IsNull():
+            raise ValueError(f"Machine geometry occurrence {occurrence_path} is empty.")
+        role, color = _role(_name(label))
+        mesh, _ = tessellate(shape, min(max(0.02, _diag(shape) * 0.001), 0.5), 0.35)
+        if len(mesh.indices):
+            buckets.setdefault((group, role), (color, []))[1].append(mesh)
+
+    roots = Sequence_TDF_Label()
+    st.GetFreeShapes(roots)
+    for index, root in enumerate(roots):
+        visit(root, st.GetLocation_s(root), str(index))
+    missing = set(definition.bindings) - seen_paths
+    if missing:
+        raise ValueError("Machine component assignments do not exist in the STEP assembly: " + ", ".join(sorted(missing)))
+    parts = [MachinePart(group, role, color, Mesh.concat(meshes)) for (group, role), (color, meshes) in buckets.items()]
+    if not parts:
+        raise ValueError("Machine profile geometry contains no displayable parts.")
+    validate_meshes(parts)
+    if cache:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        _write_cache(cache, parts)
+    return parts, definition
 
 
 def _attach_to_enclosure(leaves: list[dict], pitch: float = 1.0) -> None:

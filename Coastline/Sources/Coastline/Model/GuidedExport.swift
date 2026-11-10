@@ -85,9 +85,19 @@ extension AppModel {
             partName: part.fileName, material: material, stock: stock, stockSize: setup.stockSize(stock), setupName: "Setup 1",
             programs: guidedPrograms(),
             checkpoints: checkpoints(), measuring: measuring, setupImage: setupSnapshot(),
-            squareStockFirst: stock.finish == .sawn)
+            squareStockFirst: setup.holding != .custom && setup.topAllowance > 1e-6 && stock.finish == .sawn,
+            faceAllowance: setup.topAllowance)
         input.shoulders = setup.shoulders
-        if setup.onBed, let st = bedJobStage, let p = bedJobPlacement {
+        if setup.holding == .custom {
+            if let first = libraryWorkholdingPlan?.steps.first, setup.planFromFixtureLibrary {
+                var custom = Setup.CustomFixture()
+                custom.name = first.fixture.name
+                custom.height = first.fixture.height
+                custom.faceProtrusion = first.fixture.planning?.facePastTable ?? 0
+                custom.notes = first.instructions
+                input.customHolding = custom
+            } else { input.customHolding = setup.customFixture }
+        } else if setup.onBed, let st = bedJobStage, let p = bedJobPlacement {
             input.bed = .init(protrusion: st.protrusion, clampAngles: p.clampAngles)
         } else if let p = clampPlacement(stockSize: setup.stockSize(stock)) {
             input.clampCount = p.clamps.count
@@ -117,7 +127,7 @@ extension AppModel {
             input.tabs?.count = placedTabs.count
         }
         if twoSided {
-            input.tabs = holdWithTabs && !placedTabs.isEmpty ? tabs : nil
+            input.tabs = setup.usesClampKit && holdWithTabs && !placedTabs.isEmpty ? tabs : nil
             input.tabs?.count = placedTabs.count  // as placed (a side without frame gets none)
             input.flipImage = setupSnapshot(side: 1)
         }
@@ -127,7 +137,7 @@ extension AppModel {
         input.toolChangeZ = spot.z > tc.z + 1e-9 ? spot.z : nil
         input.toolChangeY = abs(spot.y - tc.y) > 1e-9 ? spot.y : nil
         // The kit left of the middle: where its stock's right end goes, from the spindle there.
-        if kitShiftY < -1e-9, !setup.onBed, let mm = machineModel {
+        if kitShiftY < -1e-9, setup.usesClampKit, let mm = machineModel {
             let spindleY = mm.spindleNose.y + (spot.y - mm.modelPose.y)
             input.stockRightOfToolChange = spindleY - (kitCentreY + setup.stockSize(stock).y / 2)
         }
@@ -144,6 +154,7 @@ extension AppModel {
             g.touchZ = -(faced[p.side] ?? 0)
             g.reference = p.operations.lazy.compactMap(\.reference).first
             g.surfaceProbe = p.surfaceProbe
+            g.workholding = p.workholdingStep.flatMap { saved in libraryWorkholdingPlan?.steps.first { $0.id == saved.id } } ?? p.workholdingStep
             for o in p.operations where o.kind == .facing { faced[p.side, default: 0] += o.faceDepth }
             return g
         }
@@ -154,7 +165,8 @@ extension AppModel {
     /// and the reference bores.
     func probing(stockSize size: SIMD3<Double>) -> GuidedJobBuilder.Probing {
         var pr = GuidedJobBuilder.Probing()
-        pr.electrical = !setup.onBed && AppSettings.shared.clampKitProbing == .electrical
+        let conductive = stock?.material.map { ![.wax, .plastic, .printedResin].contains($0.family) } ?? false
+        pr.electrical = setup.usesClampKit && conductive && AppSettings.shared.clampKitProbing == .electrical
         if let xr = kitWorkXRange {
             for side in 0..<2 {
                 let tool = programs.first { $0.side == side }?.tool
@@ -172,21 +184,51 @@ extension AppModel {
         return pr
     }
 
+    /// The job's tools you don't have yet: on your list to buy (quantity 0), or only in the job.
+    var unownedJobTools: [Tool] {
+        var seen = Set<UUID>()
+        return (programs + prepPrograms).map(\.tool).filter { tool in
+            guard seen.insert(tool.id).inserted else { return false }
+            if let owned = toolLookup(tool.id) { return owned.quantity <= 0 }
+            return tool.isSuggestion
+        }
+    }
+
     /// Writes the guided job as a `.crproj` package (for a sender that runs guided jobs).
     func exportGuidedJob(to url: URL, measuring: [MeasuringTool]) throws {
-        guard programs.allSatisfy(\.report.passed) else {
+        let input = try checkedGuidedInput(measuring: measuring)
+        try GuidedJobBuilder.write(input, to: url, machine: machine)
+    }
+
+    /// The same safety gate applies to full export, selected code and the native runner.
+    func checkedGuidedInput(measuring: [MeasuringTool]) throws -> GuidedJobBuilder.Input {
+        try requirePlanningMachine()
+        try validateLibraryPlanForExport()
+        guard !isGenerating else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Wait for toolpath generation to finish."])
+        }
+        guard !programs.isEmpty else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Generate toolpaths first."])
+        }
+        guard (programs + prepPrograms).allSatisfy(\.report.passed) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Fix the safety errors before exporting."])
+        }
+        // A plan may use tools still to buy; the machine can't run them until you have them.
+        let missing = unownedJobTools.map(\.name)
+        if !missing.isEmpty {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey:
+                "Buy \(missing.count == 1 ? "this tool" : "these tools") first, then set \(missing.count == 1 ? "it" : "them") as owned in Tools: \(missing.joined(separator: ", "))."])
         }
         guard let input = guidedInput(measuring: measuring) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Generate toolpaths first."])
         }
         if let m = input.millDown {
-            for it in m.programs(material: input.material, sawn: input.squareStockFirst).items where !it.report.passed {
+            for it in m.programs(material: input.material, sawn: input.squareStockFirst, machine: machine).items where !it.report.passed {
                 throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey:
                     "The prep program “\(it.title)” failed the safety check: " + it.report.issues.filter { $0.severity == .error }.map(\.message).joined(separator: " ")])
             }
         }
-        try GuidedJobBuilder.write(input, to: url)
+        return input
     }
 
     /// The app this Mac opens guided-job packages with, if there is one (not Coastline itself).

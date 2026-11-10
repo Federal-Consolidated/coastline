@@ -25,12 +25,13 @@ struct ToolProgram: Identifiable {
     var title: String?
     /// The surface probing that comes first, for an engraving that follows the real face.
     var surfaceProbe: String?
+    var workholdingStep: LibraryWorkholdingPlan.Step? = nil
     var opsTitle: String { title ?? operations.map(\.title).joined(separator: ", ") }
 
     var fileName: String {
         let toolName = tool.name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: "\"", with: "in")
             .replacingOccurrences(of: "·", with: "-")
-        return String(format: "%02d %@%@ - %@.nc", index + 1, side == 1 ? "Side B " : "", operations.map(\.title).joined(separator: " + "), toolName)
+        return String(format: "%02d %@%@ - %@.nc", index + 1, side == 1 ? "Side B " : side >= 2 ? SetupSide.words(side).capitalized + " " : "", operations.map(\.title).joined(separator: " + "), toolName)
     }
 }
 
@@ -48,17 +49,33 @@ extension AppModel {
 
     /// Asks the engine for holes and floors, then proposes operations from the inventory.
     func suggestOperations(inventory: Inventory) async {
+        guard planningMachineReady else { errorMessage = planningMachineProblem ?? "Load a machine before planning."; return }
+        let machineReference = planningMachineReference
         guard let part, let stock else { return }
         status = "Finding features…"
         do {
             let engine = try await liveEngine()
             let m = workTransform(part)
-            let f = try await engine.features(partID: part.partID, transform: m)
-            features = f
-            if analysis == nil { analysis = try? await engine.analyse(partID: part.partID, transform: m) }
+            let f: PartFeatures
+            if let cached = cachedFeatures(part, transform: m) {
+                f = cached
+            } else {
+                f = try await engine.features(partID: part.partID, transform: m)
+                guard planningMachineReady, planningMachineReference == machineReference else { return }
+                features = f
+                featuresKey = (part.partID, m)
+            }
+            if analysis == nil {
+                // With access, as runAnalysis: the Machinability section reads the same analysis.
+                let result = try? await engine.analyse(partID: part.partID, transform: m, access: true)
+                guard planningMachineReady, planningMachineReference == machineReference else { return }
+                if result != nil { analysisTransform = m }
+                analysis = result
+            }
+            guard planningMachineReady, planningMachineReference == machineReference else { return }
             let p = OperationPlanner.propose(inventory: inventory, holeDiameters: f.holes.map(\.diameter),
-                                             hasFloors: !f.floorLevels.isEmpty, freeform: (analysis?.freeformArea ?? 0) > 1,
-                                             minConcaveRadius: analysis?.minConcaveRadius)
+                                             hasFloors: f.floorLevels.contains { $0 < -1e-6 }, freeform: (analysis?.freeformArea ?? 0) > 1,
+                                             minConcaveRadius: analysis?.minConcaveRadius, faceDepth: min(0.25, setup.topAllowance), machine: machine)
             operations = p.operations + operations.filter { [.thread, .engrave].contains($0.kind) }
             planNotes = p.notes
             _ = stock
@@ -72,10 +89,18 @@ extension AppModel {
         setup.partToWork(partMin: part.boundsMin, partMax: part.boundsMax)
     }
 
+    /// The holes and floors found before, when they were found for this part (engine ID) where
+    /// it sits now: their positions and depths are in that work frame.
+    func cachedFeatures(_ part: PartInfo, transform m: simd_double4x4) -> PartFeatures? {
+        guard let f = features, let key = featuresKey, key.partID == part.partID,
+              (0..<4).allSatisfy({ simd_distance(key.transform[$0], m[$0]) < 1e-9 }) else { return nil }
+        return f
+    }
+
     /// The setup for a side (0 = A, 1 = B, the stock turned front-to-back).
     func setupFor(side: Int) -> Setup {
-        guard side == 1, let part, let stock else { return setup }
-        return setup.sideB(partMin: part.boundsMin, partMax: part.boundsMax, stock: stock)
+        guard side > 0, let part, let stock else { return setup }
+        return setup.forSide(side, partMin: part.boundsMin, partMax: part.boundsMax, stock: stock) ?? setup
     }
 
     /// The split between the sides in side-A work Z: the parting level (widest section).
@@ -141,16 +166,52 @@ extension AppModel {
     /// the text. Two-sided jobs: side A cuts down to the split; side B (turned front-to-back)
     /// cuts from the back through to the split, leaving holding tabs so the part floats in the
     /// frame until it's cut free (or, without tabs, a thin web between the sides).
-    func generateToolpaths(inventory: Inventory) async {
+    func generateToolpaths(inventory library: Inventory) async {
+        captureJobTools()
+        let inventory = planningInventory(library)
+        guard planningMachineReady else { errorMessage = planningMachineProblem ?? "Load a machine before planning."; return }
+        let machine = self.machine, machineReference = planningMachineReference
+        guard fixturePlacement == nil else { errorMessage = "Save or cancel the fixture placement before generating."; return }
+        guard !isGenerating else { return }
         guard let part, let stock, let material = stock.material else {
             errorMessage = "Choose a part and stock first."
             return
+        }
+        guard material.validationIssues.isEmpty else {
+            errorMessage = "\(material.name): " + material.validationIssues.joined(separator: " ")
+            return
+        }
+        for operation in operations where operation.enabled {
+            guard let id = operation.toolID, let tool = inventory.tools.first(where: { $0.id == id }) else {
+                errorMessage = "Choose a tool for \(operation.title) before generating."
+                return
+            }
+            let issues = InventoryChecks.check(tool, machine: machine, inventory: inventory).filter { $0.severity == .error }
+            guard issues.isEmpty else {
+                errorMessage = "\(tool.name): " + issues.map(\.message).joined(separator: " ")
+                return
+            }
+        }
+        isGenerating = true
+        cancelGeneration = false
+        defer { isGenerating = false; generationProgress = nil }
+        var libraryCandidates: [LibraryWorkholdingPlanner.Candidate] = []
+        let inputSignature = generationSignature
+        if setup.planFromFixtureLibrary {
+            libraryWorkholdingPlan = nil
+            selectedLibraryStep = nil
+            status = "Loading eligible fixture assemblies from your library…"
+            let size = setup.stockSize(stock)
+            let turned = sideSetupSides(part: part, stock: stock).map { SetupSide.stockSize(size, side: $0) }
+            do { libraryCandidates = try await prepareLibraryFixtures(inventory: inventory, stock: size, turned: turned) }
+            catch { errorMessage = "\(error)"; return }
+            guard generationSignature == inputSignature else { status = "Setup changed: generate again."; return }
         }
         // Cut free on tabs (one side, a bar barely thicker than the part): the part at the back of
         // the bar, the extra off the face, so the outline cut goes right through around it.
         if let e = oneSidedThroughExcess, holdWithTabs, abs(setup.topAllowance - e) > 0.01 {
             setup.topAllowance = e
-        } else if !twoSided, !setup.onBed, !cutsThroughWithTabs {
+        } else if !twoSided, setup.usesClampKit, !cutsThroughWithTabs {
             // Not cut through: a skin of bar stays behind the part, so it can't come loose in the
             // last cut (the part moved to the back for tabs, then tabs turned off).
             let (lo, hi) = setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
@@ -164,18 +225,19 @@ extension AppModel {
         // the part was last scaled or turned (both sides would cut to the old split).
         if let pending = analysisTask { await pending.value }
         if part.exact, analysisTransform != workTransform(part) { await runAnalysis() }
+        guard planningMachineReady, planningMachineReference == machineReference else { return }
         // Where the kit is bolted (left of the middle when the tools need room on the right):
         // before generating, so the travel checks see it.
         updateKitShift()
         var base: [EngineClient.PlannedOperation] = operations.compactMap { op in
             guard op.enabled, let id = op.toolID, let tool = inventory.tools.first(where: { $0.id == id }) else { return nil }
             // What the journal learned (chatter → slower) scales the feeds for this tool kind.
-            var data = op.cuttingData(tool: tool, material: material)
+            var data = op.cuttingData(tool: tool, material: material, machine: machine)
             let f = learnedFeedFactor(tool: tool, material: material)
             if abs(f - 1) > 1e-6 {
-                data.feed *= f
-                data.plungeFeed *= f
-                data.rampFeed *= f
+                data.feed = min(data.feed * f, machine.maxFeedAnyDirection)
+                data.plungeFeed = min(data.plungeFeed * f, machine.maxFeedAnyDirection)
+                data.rampFeed = min(data.rampFeed * f, machine.maxFeedAnyDirection)
             }
             return .init(operation: op, tool: tool, data: data)
         }
@@ -195,11 +257,8 @@ extension AppModel {
                 planNotes.append("The part's top edge plus the tool's radius was \(Length.mm(r.above)) mm beyond the machine's X travel: the shoulders' bottom now comes off \(Length.mm(after)) mm (was \(Length.mm(before))), so the bar sits lower and every wall is in reach.")
             }
         }
-        isGenerating = true
-        cancelGeneration = false
         errorMessage = nil
         status = "Generating toolpaths…"
-        defer { isGenerating = false; generationProgress = nil }
         do {
             var box = setup.stockBox(stock)
             // Cutting through: the tools may go a little past the bar's back (air there between
@@ -223,19 +282,31 @@ extension AppModel {
             if ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil {
                 print("keepout below \(keepOutBelow) rects \(keepOut.count) stock \(setup.stockSize(stock)) inside the stock: \(keepOut.filter { $0.max.x > -setup.stockSize(stock).x / 2 && $0.min.x < setup.stockSize(stock).x / 2 && $0.max.y > -setup.stockSize(stock).y / 2 && $0.min.y < setup.stockSize(stock).y / 2 }.map { String(format: "x %.1f…%.1f y %.1f…%.1f", $0.min.x, $0.max.x, $0.min.y, $0.max.y) })")
             }
-            let run = GenerationRun(signature: generationSignature)
+            let run = GenerationRun(signature: generationSignature, machine: machine)
             referencePlan = nil
             for side in 0..<(twoSided ? 2 : 1) {
                 let s = setupFor(side: side)
                 // Text is engraved on the side it was put on, never mirrored onto the other.
                 var planned = base.filter { $0.operation.kind != .engrave || ($0.operation.engraving?.side ?? 0) == side }
+                // Placement may have changed since this plan was chosen. Facing can only
+                // remove the allowance that actually exists, never the finished CAD face.
+                var facingLeft = max(s.topAllowance, 0)
+                planned = planned.compactMap { p in
+                    guard p.operation.kind == .facing else { return p }
+                    let depth = min(max(p.operation.faceDepth, 0), facingLeft)
+                    guard depth > 1e-6 else { return nil }
+                    facingLeft -= depth
+                    var p = p
+                    p.operation.faceDepth = depth
+                    return p
+                }
                 // The side nobody sees (the tuner's "hidden side"): coarser 3D finishing there.
                 if twoSided, tuning.hiddenSide == side {
                     planned = planned.map { p in
                         guard p.operation.kind.is3D else { return p }
                         var p = p
                         p.operation.scallop = min(p.operation.scallop * Tuning.hiddenCuspFactor, 0.03)
-                        p.data = p.operation.cuttingData(tool: p.tool, material: material)
+                        p.data = p.operation.cuttingData(tool: p.tool, material: material, machine: machine)
                         return p
                     }
                 }
@@ -244,7 +315,9 @@ extension AppModel {
                 var tabBottom = 0.0
                 if let split = splitZ {
                     let z: Double
-                    if holdWithTabs {
+                    if setup.holding == .custom {
+                        z = side == 0 ? split : s.sideBZ(split, stock: stock) - Self.throughOvershoot
+                    } else if holdWithTabs {
                         z = side == 0 ? split : s.sideBZ(split, stock: stock) - Self.throughOvershoot
                         if side == 1 {
                             let r = tabRange(sideB: s, stock: stock, split: split)
@@ -301,7 +374,7 @@ extension AppModel {
                         var p = p
                         if p.operation.kind == .facing {
                             p.operation.kind = .adaptive
-                            p.data = FeedsEngine.compute(tool: p.tool, material: material, kind: .adaptive)
+                            p.data = FeedsEngine.compute(tool: p.tool, material: material, kind: .adaptive, machine: machine)
                             p.zMin = materialTop
                             p.band = nutBand
                         } else {
@@ -356,6 +429,25 @@ extension AppModel {
                                        tabSpec: tabSpec, tabBottom: tabBottom, transform: transform,
                                        partX: partLo.x...partHi.x, partY: partLo.y...partHi.y))
             }
+            // Setups from the other sides (upper, lower side, ends): each cuts only the features
+            // that need it. They come first at the machine, while the stock is still a whole block.
+            if setup.planFromFixtureLibrary {
+                for sp in sideSetupPlans(base: base, part: part, stock: stock) {
+                    let transform = sp.setup.partToWork(partMin: part.boundsMin, partMax: part.boundsMax)
+                    var partLo = SIMD2<Double>(repeating: .infinity), partHi = -partLo
+                    for i in 0..<8 {
+                        let c = SIMD3(i & 1 == 0 ? part.boundsMin.x : part.boundsMax.x, i & 2 == 0 ? part.boundsMin.y : part.boundsMax.y,
+                                      i & 4 == 0 ? part.boundsMin.z : part.boundsMax.z)
+                        let w = transform * SIMD4(c, 1)
+                        partLo = simd_min(partLo, SIMD2(w.x, w.y)); partHi = simd_max(partHi, SIMD2(w.x, w.y))
+                    }
+                    let sideBox = sp.setup.stockBox(stock)
+                    run.sides.append(.init(side: sp.side, setup: sp.setup, planned: sp.planned, materialTop: 0,
+                                           tabSpec: nil, tabBottom: 0, transform: transform,
+                                           partX: partLo.x...partHi.x, partY: partLo.y...partHi.y,
+                                           boxMin: sideBox.min, boxMax: sideBox.max))
+                }
+            }
             // Machining order: side A's operations, then side B's. Several engines take them in
             // turn; each side shows as soon as the operations from its start are ready.
             run.jobs = run.sides.indices.flatMap { si in run.sides[si].planned.indices.map { (side: si, k: $0) } }
@@ -395,7 +487,7 @@ extension AppModel {
                 publishPartial(run, force: true)
                 let names = run.failed.map { f in
                     let sp = run.sides[f.side]
-                    return "\(twoSided ? (sp.side == 0 ? "A · " : "B · ") : "")\(sp.planned[f.k].operation.title)"
+                    return "\(sp.side >= 2 ? SetupSide.words(sp.side) + " · " : twoSided ? (sp.side == 0 ? "A · " : "B · ") : "")\(sp.planned[f.k].operation.title)"
                 }
                 errorMessage = "\(names.count == 1 ? "One operation" : "\(names.count) operations") failed (\(names.joined(separator: ", "))): \(run.failed[0].message) The rest is ready to look at; Retry redoes only the failed ones."
                 status = "\(run.finished) of \(run.total) operations ready · \(run.failed.count) failed"
@@ -409,28 +501,57 @@ extension AppModel {
                 for k in sp.planned.indices {
                     let ps = run.done[si][k] ?? []
                     guard ps.contains(where: { $0.moves.contains { $0.role == .cut || $0.role == .ramp || $0.role == .plunge } }) else { continue }
-                    planned.append(sp.planned[k])
+                    // Keep every returned path paired with its operation. Some generators
+                    // return more than one path; zip must not drop their later cuts.
+                    planned.append(contentsOf: repeatElement(sp.planned[k], count: ps.count))
                     paths += ps
                 }
                 generated.append((sp.side, sp.setup, planned, paths, sp.materialTop))
+            }
+            // At the machine the side setups come first, on the whole block; then side A and B.
+            generated = generated.filter { $0.side >= 2 } + generated.filter { $0.side < 2 }
+            if setup.planFromFixtureLibrary {
+                status = "Comparing generated cuts with library fixtures and remaining stock…"
+                let cuts = generated.flatMap { g in
+                    zip(g.planned, g.paths).enumerated().map { index, pair in
+                        LibraryWorkholdingPlanner.Cut(key: "\(g.side):\(index)", side: g.side,
+                            operation: pair.0.operation, tool: pair.0.tool, moves: pair.1.moves)
+                    }
+                }
+                let candidates = libraryCandidates, size = setup.stockSize(stock), machine = machine
+                let plan = await Task.detached(priority: .userInitiated) {
+                    LibraryWorkholdingPlanner.plan(cuts: cuts, candidates: candidates, stock: size, machine: machine)
+                }.value
+                guard generationSignature == run.signature, !cancelGeneration else { throw CancellationError() }
+                libraryWorkholdingPlan = plan
+                selectedLibraryStep = plan.steps.first?.id
+                guard plan.complete else {
+                    // Partial/background programs have not been assigned workholding and must
+                    // never remain exportable after a failed sequence search.
+                    programs = []; plannedPrograms = []
+                    errorMessage = "No complete workholding sequence. " + plan.issues.joined(separator: "\n")
+                    status = "Workholding needs attention; no cutting program is ready to run."
+                    return
+                }
             }
             // Toolpaths are relative to the stock face, so where the stock sits in the clamps
             // doesn't change them: stand the face out past the jaws far enough that no tool,
             // shank or collet nut comes near them (parallels behind the stock), then check.
             let t0Check = Date()
             autoProtrusion = nil
-            status = "Checking clearance to the clamps…"
+            status = setup.holding == .custom ? "Checking clearance to the table…" : "Checking clearance to the clamps…"
             let stockSize = setup.stockSize(stock)
-            if let field = clampKitField(stockSize: stockSize) {
+            if !setup.planFromFixtureLibrary, let field = clampKitField(stockSize: stockSize) {
                 let jobs = generated.flatMap { g in zip(g.planned, g.paths).map { ($0.tool, $1.moves) } }
                 let setback = await Task.detached(priority: .userInitiated) {
                     var f = field
                     return jobs.map { FixtureClearance.requiredSetback($0.1, tool: $0.0, field: &f) }.max() ?? 0
                 }.value
+                guard generationSignature == run.signature, !cancelGeneration else { throw CancellationError() }
                 if setback > 0.01, setup.onBed, let st = bedJobStage {
                     // The bar sticks out further past the stop; the clamps still need a grip.
                     autoProtrusion = min(((st.protrusion + setback + 0.25) * 2).rounded(.up) / 2, stockSize.z - 15)
-                } else if setback > 0.01 {
+                } else if setback > 0.01, setup.usesClampKit {
                     let want = ((setup.clampProtrusion + setback + 0.25) * 2).rounded(.up) / 2
                     autoProtrusion = min(want, max(stockSize.z - Self.minimumGrip, setup.clampProtrusion))
                 }
@@ -450,7 +571,7 @@ extension AppModel {
                                 probe: String?)
             // Engraving that follows the probed face: the tool feels the stock electrically, so
             // only conductive stock in the insulated clamp kit (with electrical probing on).
-            let probeBlocked: String? = setup.onBed || AppSettings.shared.clampKitProbing != .electrical
+            let probeBlocked: String? = !setup.usesClampKit || AppSettings.shared.clampKitProbing != .electrical
                 ? "The engraving can't follow the probed face here: that needs the insulated clamp kit with electrical probing (Settings ▸ Machining). It follows the CAD."
                 : [.wax, .plastic, .printedResin].contains(material.family)
                 ? "The engraving can't follow the probed face: \(material.name) doesn't conduct, so the tool can't feel it. It follows the CAD."
@@ -460,25 +581,32 @@ extension AppModel {
                 var group: [(EngineClient.PlannedOperation, OperationToolpath)]
                 var rpm: Double
                 var task: Task<Posted, Never>
+                var workholdingStep: LibraryWorkholdingPlan.Step?
             }
             var pendingBySide: [[Pending]] = []
             for (side, _, planned, paths, materialTop) in generated {
                 // Group consecutive operations with the same tool into programs.
-                var groups: [[(EngineClient.PlannedOperation, OperationToolpath)]] = []
-                for pair in zip(planned, paths) {
-                    if let last = groups.last?.last, last.0.tool.id == pair.0.tool.id,
+                var groups: [(step: LibraryWorkholdingPlan.Step?, cuts: [(EngineClient.PlannedOperation, OperationToolpath)])] = []
+                for (index, pair) in zip(planned, paths).enumerated() {
+                    let step = libraryWorkholdingPlan?.step(for: "\(side):\(index)")
+                    if let last = groups.last?.cuts.last, last.0.tool.id == pair.0.tool.id,
+                       groups.last?.step?.id == step?.id,
                        last.0.operation.reference != .windows, pair.0.operation.reference != .windows {
-                        groups[groups.count - 1].append(pair)
-                    } else { groups.append([pair]) }
+                        groups[groups.count - 1].cuts.append(pair)
+                    } else { groups.append((step, [pair])) }
                 }
-                let setupName = side == 0 ? (twoSided ? "Side A" : "Setup 1") : "Side B (flipped)"
+                let setupName = Self.setupTitle(side: side, twoSided: twoSided)
+                let sideBox = side >= 2 ? setupFor(side: side).stockBox(stock) : box
                 let fileName = part.fileName, stockName = "\(material.name) \(stock.sizeDescription)"
                 var pending: [Pending] = []
-                for group in groups {
+                for grouped in groups {
+                    let group = grouped.cuts, step = grouped.step
                     let tool = group[0].0.tool
-                    let rpm = group.map(\.0.data.rpm).max() ?? 8000
+                    let rpm = group.map(\.0.data.rpm).max() ?? machine.spindleRPM.upperBound
                     let groupPaths = group.map(\.1), names = group.map { $0.0.operation.title }
-                    let top = materialTop, bmin = box.min, bmax = box.max, fixtures = clampField
+                    let top = materialTop, bmin = sideBox.min, bmax = sideBox.max
+                    let fixtures = step.flatMap { libraryFixtureFields[fixtureStateKey($0.fixture)] } ?? clampField
+                    let setupName = step?.title ?? setupName
                     // Posting and the safety check are heavy for 3D programs (tens of thousands of
                     // lines): off the main thread, so the app stays responsive.
                     let probing = group.filter { $0.0.operation.kind == .engrave && $0.0.operation.engraving?.probeSurface == true }
@@ -487,12 +615,12 @@ extension AppModel {
                         var posted = GRBLPost.programWithLineMap(
                             header: .init(programName: fileName, setupName: setupName, tool: tool, operationNames: names,
                                           stockDescription: stockName),
-                            rpm: rpm, paths: groupPaths)
+                            rpm: rpm, paths: groupPaths, machine: machine)
                         // Follow the probed face (SurfaceProbe): on a flat face only.
-                        let (probe, probeNote) = Self.followProbedFace(&posted, probing: probing, blocked: probeBlocked)
+                        let (probe, probeNote) = Self.followProbedFace(&posted, probing: probing, blocked: probeBlocked, machine: machine)
                         var ctx = GCodeValidator.Context(stockMin: bmin, stockMax: bmax, tool: tool)
                         ctx.materialTop = top
-                        var report = GCodeValidator().validate(posted.text, context: ctx)
+                        var report = GCodeValidator(machine: machine).validate(posted.text, context: ctx)
                         // The clamps, parallels and table: the tool, shank and collet nut keep clear.
                         var hits: [FixtureClearance.Hit] = []
                         if var field = fixtures {
@@ -503,9 +631,9 @@ extension AppModel {
                         if probe != nil {
                             report.issues.append(Issue(.info, "The engraving follows the face as probed: a probing step comes first in the guided job (M111), the program turns the sender's compensation on (M112) and off (M113)."))
                         }
-                        return (posted, report, TimeEstimate.seconds(groupPaths), hits, probe)
+                        return (posted, report, TimeEstimate.seconds(groupPaths, machine: machine), hits, probe)
                     }
-                    pending.append(Pending(side: side, group: group, rpm: rpm, task: task))
+                    pending.append(Pending(side: side, group: group, rpm: rpm, task: task, workholdingStep: step))
                 }
                 pendingBySide.append(pending)
             }
@@ -514,13 +642,14 @@ extension AppModel {
                 for p in pending {
                     let index = allPrograms.count
                     let r = await p.task.value
+                    guard generationSignature == run.signature, !cancelGeneration else { throw CancellationError() }
                     opProgram += Array(repeating: index, count: p.group.count)
                     opLines += r.posted.lines
                     allPrograms.append(ToolProgram(index: index, side: side, tool: p.group[0].0.tool, operations: p.group.map(\.0.operation), rpm: p.rpm,
                                                    gcode: r.posted.text, report: r.report, seconds: r.seconds,
                                                    warnings: p.group.flatMap(\.1.warnings),
                                                    minStickout: p.group.compactMap(\.1.minStickout).max(), clearanceHits: r.hits,
-                                                   surfaceProbe: r.probe))
+                                                   surfaceProbe: r.probe, workholdingStep: p.workholdingStep))
                 }
                 results.append(SideResult(side: side, setup: s, planned: planned, paths: paths, operationProgram: opProgram, operationLines: opLines))
             }
@@ -529,7 +658,7 @@ extension AppModel {
             }
             programs = allPrograms
             sideResults = results
-            toolpaths = Dictionary(results[0].paths.map { ($0.operationID, $0) }, uniquingKeysWith: { a, _ in a })
+            toolpaths = Dictionary((results.first { $0.side == 0 } ?? results[0]).paths.map { ($0.operationID, $0) }, uniquingKeysWith: { a, _ in a })
             // Check the whole job against the real travel, with each tool's own stick-out, in the
             // clamping it runs in (not the one on screen). A program with any move outside fails
             // its safety check: a safety net behind the generation keeping inside the travel.
@@ -537,7 +666,10 @@ extension AppModel {
             let env = machine.machineEnvelope
             for r in results {
                 for (k, path) in r.paths.enumerated() where k < r.planned.count {
-                    guard let origin = kitMachineOrigin(stickout: r.planned[k].tool.stickout) else { continue }
+                    let step = libraryWorkholdingPlan?.step(for: "\(r.side):\(k)")
+                    let libraryOrigin = step.flatMap { libraryMachineOrigin(fixture: $0.fixture, stock: r.setup.stockSize(stock)) }
+                        .map { $0 + SIMD3(0, 0, r.planned[k].tool.stickout) } // as kitMachineOrigin(stickout:)
+                    guard let origin = libraryOrigin ?? kitMachineOrigin(stickout: r.planned[k].tool.stickout) else { continue }
                     var outside = 0, first: SIMD3<Double>?
                     for m in path.moves {
                         let q = origin + m.position
@@ -554,12 +686,16 @@ extension AppModel {
                 }
             }
             for i in allPrograms.indices {
+                if setup.holding == .custom && !setup.planFromFixtureLibrary {
+                    allPrograms[i].report.issues.append(Issue(.warning, "Custom fixture geometry is not included in collision checks. Verify clearance to \(setup.customFixture.name), its jaws and fasteners."))
+                }
                 for w in allPrograms[i].warnings where w.hasPrefix(Self.outOfReach) {
                     allPrograms[i].report.issues.append(Issue(.error, w))
                 }
             }
             programs = allPrograms
             await checkTabs()
+            guard generationSignature == run.signature, !cancelGeneration else { throw CancellationError() }
             travelIssue = lo.x.isFinite ? (travelProblem(lo) ?? travelProblem(hi)) : nil
             generatedTuning = Tuning(cusp: operations.first { $0.kind.is3D }?.scallop ?? tuning.cusp,
                                      pace: operations.first?.feedScale ?? 1,
@@ -622,7 +758,7 @@ extension AppModel {
     /// or why it can't (not here, or not on a flat face). Synchronous: kept out of the posting
     /// task's async frame (large async frames trip Swift's task allocator).
     nonisolated static func followProbedFace(_ posted: inout (text: String, lines: [[Int?]]), probing: [(depth: Double, moves: [Move])],
-                                             blocked: String?) -> (probe: String?, note: String?) {
+                                             blocked: String?, machine: MachineProfile) -> (probe: String?, note: String?) {
         guard !probing.isEmpty else { return (nil, nil) }
         if let blocked { return (nil, blocked) }
         let cuts = probing.flatMap { $0.moves.filter { $0.role == .cut } }
@@ -633,7 +769,7 @@ extension AppModel {
         let f = SurfaceProbe.follow(posted.text, face: face)
         posted.text = f.text
         posted.lines = posted.lines.map { $0.map { $0.map { l in f.moved.indices.contains(l - 1) ? f.moved[l - 1] + 1 : l } } }
-        return (SurfaceProbe.program(points: points, face: face), nil)
+        return (SurfaceProbe.program(points: points, face: face, machine: machine), nil)
     }
 
     /// Fixed ids, so the generation cache knows the reference operations again.
@@ -646,7 +782,7 @@ extension AppModel {
     /// job can probe them and set side B's zero from them (ReferenceBores).
     func addReferenceFeatures(_ planned: [EngineClient.PlannedOperation], side: Int, material: Material,
                               stock: StockItem) -> [EngineClient.PlannedOperation] {
-        guard twoSided, AppSettings.shared.referenceBores, let part else { return planned }
+        guard !setup.planFromFixtureLibrary, twoSided, AppSettings.shared.referenceBores, let part else { return planned }
         let flat: (Tool) -> Bool = { $0.kind == .flatEndMill || $0.kind == .bullNoseEndMill }
         if side == 0 {
             // The roughing tool (the biggest flat one that fits the bore with room to helix).
@@ -671,7 +807,7 @@ extension AppModel {
             referencePlan = plan
             var op = Operation(id: Self.referenceBoresID, kind: .bore, toolID: tool.id)
             op.reference = .bores
-            var p = EngineClient.PlannedOperation(operation: op, tool: tool, data: FeedsEngine.compute(tool: tool, material: material, kind: .bore))
+            var p = EngineClient.PlannedOperation(operation: op, tool: tool, data: FeedsEngine.compute(tool: tool, material: material, kind: .bore, machine: machine))
             p.holes = plan.centresA.map { ($0, ReferenceBores.diameter, 0, -plan.depthA) }
             var out = planned
             let at = (out.lastIndex { $0.tool.id == tool.id } ?? out.count - 1) + 1
@@ -691,7 +827,7 @@ extension AppModel {
         }
         var op = Operation(id: Self.referenceWindowsID, kind: .bore, toolID: tool.id)
         op.reference = .windows
-        var p = EngineClient.PlannedOperation(operation: op, tool: tool, data: FeedsEngine.compute(tool: tool, material: material, kind: .bore))
+        var p = EngineClient.PlannedOperation(operation: op, tool: tool, data: FeedsEngine.compute(tool: tool, material: material, kind: .bore, machine: machine))
         p.holes = plan.centresB.map { ($0, ReferenceBores.windowDiameter, 0, -plan.windowDepth) }
         return [p] + planned
     }
@@ -710,7 +846,7 @@ extension AppModel {
 
     func result(forSide side: Int) -> SideResult? {
         if side == -1 { return prepResults.isEmpty || prepStage < 0 ? nil : prepResults[min(prepStage, prepResults.count - 1)] }
-        return sideResults.indices.contains(side) ? sideResults[side] : nil
+        return sideResults.first { $0.side == side }
     }
 
     /// Shows the chosen side's toolpaths, playback and simulation, the playhead at `time`
@@ -731,7 +867,7 @@ extension AppModel {
         let size = displayStockSize ?? stock.map { setup.stockSize($0) } ?? SIMD3(10, 10, 10)
         let protrusion = viewSide == -1 ? (currentPrepStage?.protrusion ?? 3) : effectiveProtrusion
         // In the clamp kit the first tool probes electrically; elsewhere the edge finder.
-        let electrical = viewSide >= 0 && !setup.onBed && AppSettings.shared.clampKitProbing == .electrical
+        let electrical = viewSide >= 0 && setup.usesClampKit && AppSettings.shared.clampKitProbing == .electrical
         let probeTool = electrical ? (r.planned.first?.tool ?? EdgeFinding.tool) : EdgeFinding.tool
         var probeMoves = EdgeFinding.moves(stock: size, depth: min(electrical ? 1.0 : 1.5, max(protrusion - 0.5, 0.5)), radius: probeTool.diameter / 2)
         if viewSide >= 0, let xr = kitWorkXRange {
@@ -740,9 +876,14 @@ extension AppModel {
         }
         let probe = OperationToolpath(operationID: UUID(), moves: probeMoves)
         let probeProgram = Self.edgeFindProgram(side: viewSide, stage: prepStage)
-        plannedTools = [probeTool] + plannedTools
-        timelineTitles = [electrical ? "Probing" : "Edge finding"] + r.planned.map { $0.operation.title }
-        timeline = ToolpathTimeline(paths: [probe] + r.paths, programOf: [probeProgram] + r.operationProgram, lines: [[]] + r.operationLines)
+        if setup.planFromFixtureLibrary {
+            timelineTitles = r.planned.map { $0.operation.title }
+            timeline = ToolpathTimeline(paths: r.paths, programOf: r.operationProgram, lines: r.operationLines, machine: machine)
+        } else {
+            plannedTools = [probeTool] + plannedTools
+            timelineTitles = [electrical ? "Probing" : "Edge finding"] + r.planned.map { $0.operation.title }
+            timeline = ToolpathTimeline(paths: [probe] + r.paths, programOf: [probeProgram] + r.operationProgram, lines: [[]] + r.operationLines, machine: machine)
+        }
         lap("timeline")
         playhead = min(max(time ?? timeline.duration, 0), timeline.duration)
         layoutScene()
@@ -766,6 +907,14 @@ extension AppModel {
 
     /// Writes one .nc file per tool program into a folder.
     func exportPrograms(to folder: URL) throws -> [URL] {
+        try requirePlanningMachine()
+        try validateLibraryPlanForExport()
+        guard !isGenerating else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Wait for toolpath generation to finish."])
+        }
+        guard !programs.isEmpty else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Generate toolpaths first."])
+        }
         guard programs.allSatisfy(\.report.passed) else {
             throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "Fix the safety errors before exporting."])
         }
@@ -799,12 +948,12 @@ extension AppModel {
     /// Everything that shapes one operation's toolpath (the part as imported, the operation,
     /// tool, feeds, depth window, keep-outs, band, transform, stock box and tabs).
     nonisolated static func generationKey(partID: String, _ p: EngineClient.PlannedOperation, _ transform: simd_double4x4,
-                                          _ lo: SIMD3<Double>, _ hi: SIMD3<Double>, _ tabs: HoldingTabs?, _ tabBottom: Double) -> String {
-        [partID, String(describing: p.operation), String(describing: p.tool), String(describing: p.data),
+                                          _ lo: SIMD3<Double>, _ hi: SIMD3<Double>, _ tabs: HoldingTabs?, _ tabBottom: Double, machine: MachineProfile) -> String {
+        [partID, String(describing: machine), String(describing: p.operation), String(describing: p.tool), String(describing: p.data),
          String(describing: p.zMin), String(describing: p.through), String(describing: p.zTop), String(describing: p.keepOut), String(describing: p.keepOutBelow),
          String(describing: p.band), String(describing: p.frameTop), String(describing: p.refTool), String(describing: transform),
          String(describing: lo), String(describing: hi), String(describing: tabs), String(describing: tabBottom),
-         String(describing: p.tile), String(describing: p.restFrom), String(describing: p.holes)].joined(separator: "|")
+         String(describing: p.tile), String(describing: p.restFrom), String(describing: p.holes), String(describing: p.window)].joined(separator: "|")
     }
 
     func storeInCache(_ key: String, _ value: ([OperationToolpath], [PlacedTab])) {

@@ -7,9 +7,9 @@ import Foundation
 public enum StockCatalog {
     public static let source = "Coastline suggestion · standard size"
     /// Bumped when sizes are added: inventories that saw an older catalog get the new ones.
-    public static let version = 1
-    /// Bars are suggested cut to this length (most suppliers saw to length; the machine's Y
-    /// travel is 241 mm, and the clamp kit wants a bar no longer than the job needs).
+    public static let version = 2
+    /// A convenient catalog cut length. Actual stock fit uses the selected machine's
+    /// physical envelope and fixture mounting geometry, not just controller travel.
     public static let cutLength = 150.0
 
     private static func id(_ n: Int) -> UUID { UUID(uuidString: String(format: "C0A57200-0000-4000-8000-%012d", n))! }
@@ -26,6 +26,15 @@ public enum StockCatalog {
         StockItem(id: id(n), materialID: material, shape: .roundBar, sizeX: d, sizeY: length, sizeZ: 0, quantity: 0, finish: .sawn,
                   supplier: source, notes: "Not in your inventory: a standard size. \(note)")
     }
+
+    /// Shorter blanks of the reviewed Bookend's 2-inch square section. They remain
+    /// suggestions until the user confirms ownership; tool reach is checked per job.
+    public static let basicBookendBlanks: [StockItem] = [
+        bar(16, "al-6061", w: 50.8, t: 50.8, length: 101.6,
+            note: "2 × 2 × 4 in square-bar blank for smaller jobs with the reviewed Bookends. Check the part's tool access when planning."),
+        bar(17, "al-6061", w: 50.8, t: 50.8, length: 152.4,
+            note: "2 × 2 × 6 in square-bar blank for general jobs with the reviewed Bookends. Check the part's tool access when planning."),
+    ]
 
     public static let suggestions: [StockItem] = [
         // Aluminium flat bar (6061 / 6082, metric sections).
@@ -47,7 +56,7 @@ public enum StockCatalog {
         // Plastics and wax for test cuts.
         bar(14, "pom", w: 40, t: 20, length: 100, note: "POM (Delrin) bar: cheap, kind to small tools, ideal for a first cut of a new part."),
         bar(15, "wax-machinable", w: 38, t: 25, length: 100, note: "Machinable wax block: try a toolpath at full speed without risking a tool."),
-    ]
+    ] + basicBookendBlanks
 }
 
 extension StockItem {

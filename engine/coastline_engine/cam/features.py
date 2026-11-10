@@ -12,7 +12,7 @@ from OCP.BRepBuilderAPI import BRepBuilderAPI_Transform
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRepBndLib import BRepBndLib
 from OCP.Bnd import Bnd_Box
-from OCP.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
+from OCP.GeomAbs import GeomAbs_Cone, GeomAbs_Cylinder, GeomAbs_Plane
 from OCP.GeomAdaptor import GeomAdaptor_Surface
 from OCP.GeomConvert import GeomConvert_SurfToAnaSurf
 from OCP.TopAbs import TopAbs_FACE, TopAbs_REVERSED
@@ -50,15 +50,21 @@ def _bounds(face):
     return np.array([lo.X(), lo.Y(), lo.Z()]), np.array([hi.X(), hi.Y(), hi.Z()])
 
 
-def find_features(shape_work, part_zmin: float) -> dict:
+def find_features(shape_work, part_zmin: float, with_faces: bool = False) -> dict:
+    """`with_faces`: also name each feature's B-rep faces (index in TopExp_Explorer order) and
+    bounds, for highlighting: holes gain "faces" (with coaxial cones and a flat bottom), floors
+    "face", "min" and "max". A floor that is a hole's flat bottom then belongs to the hole."""
     holes: dict = {}
     angles: dict = {}   # key → angles (deg) of the face's mesh points around the axis
     floors = []
+    cones = []          # (face index, axis x, axis y, z lo, z hi): drill points and countersinks
     BRepMesh_IncrementalMesh(shape_work, 0.01, False, 0.2, True)
     exp = TopExp_Explorer(shape_work, TopAbs_FACE)
+    index = -1
     while exp.More():
         face = TopoDS.Face(exp.Current())
         exp.Next()
+        index += 1
         surf, t = _analytic(face)
         lo, hi = _bounds(face)
         reversed_ = face.Orientation() == TopAbs_REVERSED
@@ -82,6 +88,8 @@ def find_features(shape_work, part_zmin: float) -> dict:
             h["z_top"] = max(h["z_top"], hi[2])
             h["z_bottom"] = min(h["z_bottom"], lo[2])
             angles.setdefault(key, []).extend(_angles_around(face, loc.X(), loc.Y()))
+            if with_faces:
+                h.setdefault("faces", []).append(index)
         elif t == GeomAbs_Plane:
             n = surf.Plane().Axis().Direction()
             nz = -n.Z() if reversed_ else n.Z()
@@ -89,6 +97,12 @@ def find_features(shape_work, part_zmin: float) -> dict:
                 poly = _face_polygon(face)
                 if poly:
                     floors.append({"z": float(hi[2]), "paths": poly, "area": sum(abs(_area(p)) for p in poly)})
+                    if with_faces:
+                        floors[-1].update(face=index, min=lo.tolist(), max=hi.tolist())
+        elif with_faces and t == GeomAbs_Cone:
+            ax = surf.Cone().Axis()
+            if abs(ax.Direction().Z()) > 0.999:
+                cones.append((index, ax.Location().X(), ax.Location().Y(), lo[2], hi[2]))
     # A hole goes (nearly) all the way round. Concave arcs that don't (inside corner fillets,
     # the curved walls of a pocket) aren't holes: boring them would cut the part.
     hole_list = [h for k, h in holes.items() if _coverage(angles.get(k, [])) >= 300.0]
@@ -97,7 +111,27 @@ def find_features(shape_work, part_zmin: float) -> dict:
         for k in ("x", "y", "diameter", "z_top", "z_bottom"):
             h[k] = float(h[k])
         h["through"] = bool(h["z_bottom"] <= part_zmin + 1e-3)
+    if with_faces:
+        _attach_hole_faces(hole_list, floors, cones)
     return {"holes": hole_list, "floors": floors}
+
+
+def _attach_hole_faces(holes: list, floors: list, cones: list) -> None:
+    """A hole's coaxial cones (drill point, countersink) and its flat bottom are the hole too:
+    one feature, not a hole plus a floor."""
+    tol = 1e-3
+    for h in holes:
+        r = h["diameter"] / 2
+        for i, x, y, zlo, zhi in cones:
+            if math.hypot(x - h["x"], y - h["y"]) < tol and zhi >= h["z_bottom"] - tol and zlo <= h["z_top"] + tol:
+                h["faces"].append(i)
+        for f in list(floors):
+            lo, hi = f["min"], f["max"]
+            if (abs(f["z"] - h["z_bottom"]) < tol and lo[0] >= h["x"] - r - tol and hi[0] <= h["x"] + r + tol
+                    and lo[1] >= h["y"] - r - tol and hi[1] <= h["y"] + r + tol):
+                h["faces"].append(f["face"])
+                floors.remove(f)
+        h["faces"] = sorted(set(h["faces"]))
 
 
 def _angles_around(face, cx: float, cy: float) -> list:

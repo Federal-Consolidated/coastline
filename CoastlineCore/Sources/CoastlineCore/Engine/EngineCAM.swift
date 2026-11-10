@@ -66,6 +66,8 @@ extension EngineClient {
         public var restFrom: [(diameter: Double, minPocket: Double, leave: Double)] = []
         /// 3D finishing in strips: only this work-Y stretch (each strip its own job).
         public var tile: ClosedRange<Double>?
+        /// A setup from a side: only the holes and floors inside this work-XY window.
+        public var window: (min: SIMD2<Double>, max: SIMD2<Double>)?
         /// Boring at these circles instead of the part's own holes (reference bores): centre,
         /// diameter, from `top` down to `bottom` (work Z).
         public var holes: [(centre: SIMD2<Double>, diameter: Double, top: Double, bottom: Double)] = []
@@ -80,15 +82,19 @@ extension EngineClient {
     /// Generates toolpaths for the operations (work frame). The engine does geometry only;
     /// feeds come from `FeedsEngine` via `data`.
     public func generate(partID: String, transform: simd_double4x4, stockMin: SIMD3<Double>, stockMax: SIMD3<Double>,
-                         operations: [PlannedOperation], safeZ: Double = 3) throws -> [OperationToolpath] {
+                         operations: [PlannedOperation], safeZ: Double = 3, machine: MachineProfile = .standard) throws -> [OperationToolpath] {
         try generate(partID: partID, transform: transform, stockMin: stockMin, stockMax: stockMax, operations: operations,
-                     safeZ: safeZ, tabs: nil, tabBottom: 0).paths
+                     safeZ: safeZ, tabs: nil, tabBottom: 0, machine: machine).paths
     }
 
     /// As above, keeping holding tabs between `tabBottom` and `tabBottom + tabs.height` (work Z).
     public func generate(partID: String, transform: simd_double4x4, stockMin: SIMD3<Double>, stockMax: SIMD3<Double>,
                          operations: [PlannedOperation], safeZ: Double = 3, tabs: HoldingTabs?,
-                         tabBottom: Double) throws -> (paths: [OperationToolpath], tabs: [PlacedTab]) {
+                         tabBottom: Double, machine: MachineProfile = .standard) throws -> (paths: [OperationToolpath], tabs: [PlacedTab]) {
+        if operations.contains(where: { $0.operation.kind == .adaptive }),
+           machine.travel.x <= 1.5 || machine.travel.y <= 1.5 {
+            throw EngineError(type: "MachineTravel", message: "Adaptive roughing needs more than 1.5 mm of X and Y travel for its clearance margin.")
+        }
         let ops: [[String: Any]] = operations.map { p in
             // An engraver cuts with its tip: that's the cutter that touches the surface.
             let engraveTip = p.operation.kind == .engrave && [.engraver, .chamferMill].contains(p.tool.kind)
@@ -125,11 +131,16 @@ extension EngineClient {
                 // Roughing never asks for more travel than the machine has (less 1.5 mm for the
                 // edge finding and the solver's overshoot): on a bar nearly as wide as the X
                 // travel, a strip at its outer edge stays uncut instead.
-                let t = MachineProfile.standard.travel
-                d["max_span"] = [t.x - 1.5, t.y - 1.5]
+                let t = machine.travel
+                d["max_span"] = [max(t.x - 1.5, 0), max(t.y - 1.5, 0)]
             }
             if let f = p.frameTop { d["frame_top"] = f }
             if let t = p.tile { d["tile"] = [t.lowerBound, t.upperBound] }
+            if let w = p.window {
+                d["window"] = [w.min.x, w.min.y, w.max.x, w.max.y]
+                // A setup from a side roughs only that side's own cavities.
+                if p.operation.kind == .adaptive { d["side_cavity"] = true }
+            }
             if !p.holes.isEmpty {
                 d["holes"] = p.holes.map { ["x": $0.centre.x, "y": $0.centre.y, "diameter": $0.diameter, "z_top": $0.top, "z_bottom": $0.bottom] }
             }

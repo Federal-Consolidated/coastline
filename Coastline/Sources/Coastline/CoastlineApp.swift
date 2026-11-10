@@ -16,14 +16,21 @@ struct CoastlineApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Coastline") {
+        WindowGroup(ProcessInfo.processInfo.environment["COASTLINE_DEV"] == "1" ? "Coastline · Debug" : "Coastline") {
             ContentView()
                 .containerBackground(Theme.windowBackground, for: .window)
                 .environment(model)
                 .environment(inventory)
                 .tint(Theme.accent)
                 .frame(minWidth: 1040, minHeight: 640)
-                .task { await Automation.runIfRequested(model, inventory) }
+                .task {
+                    model.stockLookup = { [inventory] id in inventory.inventory.stock.first { $0.id == id } }
+                    model.toolLookup = { [inventory] id in inventory.inventory.tools.first { $0.id == id } }
+                    model.fixtureLookup = { [inventory] id in inventory.inventory.fixtures.first { $0.id == id } }
+                    model.inventoryLookup = { [inventory] in inventory.inventory }
+                    await model.restoreDevelopmentSession()
+                    await Automation.runIfRequested(model, inventory)
+                }
                 // A .coastline file double-clicked in Finder (the packaged app declares the type).
                 .sheet(isPresented: Binding(get: { model.showWelcome }, set: { model.showWelcome = $0 })) {
                     WelcomeView().onDisappear {
@@ -42,6 +49,7 @@ struct CoastlineApp: App {
                     Task { await model.openProject(url); model.page = .workspace }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    model.saveDevelopmentSession()
                     model.mill.shutdown()
                     inventory.saveNow()
                 }
@@ -84,7 +92,7 @@ struct CoastlineApp: App {
             }
             CommandGroup(after: .sidebar) {
                 // ⌘1…⌘9 for the first nine pages (a key is one character).
-                ForEach(Array(SidebarItem.allCases.enumerated()), id: \.element) { index, item in
+                ForEach(Array(SidebarItem.allCases.enumerated()).filter { $0.element != .materials }, id: \.element) { index, item in
                     if index < 9 {
                         Button(item.title) { model.page = item }
                             .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
@@ -150,7 +158,7 @@ enum Automation {
                 if words.count > 1, let w = Double(words[1]) { t.width = w; t.height = w * 0.6 }
                 e.texture = t
                 op.engraving = e
-                op.toolID = OperationPlanner.usableTools(inventory.inventory)
+                op.toolID = OperationPlanner.usableTools(inventory.inventory, machine: model.machine)
                     .filter { [.engraver, .chamferMill, .ballEndMill, .flatEndMill].contains($0.kind) && $0.diameter <= 3.2 }
                     .min { ($0.kind == .engraver ? 0 : 1, $0.diameter) < ($1.kind == .engraver ? 0 : 1, $1.diameter) }?.id
                 model.justAddedOperation = op.id
@@ -288,7 +296,7 @@ enum Automation {
                 for r in model.sideResults {
                     for (k, path) in r.paths.enumerated() where k < r.planned.count {
                         let p = r.planned[k]
-                        rows.append(("side \(r.side) \(p.operation.title)\(p.operation.pocketsOnly == true ? " (pockets)" : "") · \(p.tool.name.prefix(24)) · \(path.moves.count) moves", TimeEstimate.seconds([path]) / 60))
+                        rows.append(("side \(r.side) \(p.operation.title)\(p.operation.pocketsOnly == true ? " (pockets)" : "") · \(p.tool.name.prefix(24)) · \(path.moves.count) moves", TimeEstimate.seconds([path], machine: model.machine) / 60))
                     }
                 }
                 for (name, m) in rows.sorted(by: { $0.1 > $1.1 }) { print(String(format: "optimes %6.1f min  ", m) + name) }
@@ -368,6 +376,12 @@ enum Automation {
                 if let a = model.analysis {
                     print("analysis corner=\(a.minCornerRadius ?? -1) concave=\(a.minConcaveRadius ?? -1) undercut=\(a.undercutArea) tris=\(a.undercutTriangles.count / 9) thin=\(a.thinnestWall ?? -1) undercutMesh=\(model.renderer.scene.mesh("undercuts") != nil)")
                 } else { print("analysis none") }
+                // Machinability: "analysis <finding id>" also selects that finding (its highlight).
+                if let findings = model.dfmFindings(inventory: inventory.inventory) {
+                    if !arg.isEmpty { model.selectFinding(findings.first { $0.id == arg }) }
+                    print("dfm " + findings.map { "\($0.id):\($0.category)" }.joined(separator: " "))
+                    print("dfm selected \(model.selectedFindingID ?? "-") highlight \(model.renderer.scene.mesh("dfm.highlight") != nil) access \(model.analysis?.access.map { "faces \($0.faces.count) regions \($0.regions.count) floors \($0.floors.count) holes \($0.holes.count) tris \($0.triangles.count / 9)" } ?? "none")")
+                } else { print("dfm checking\(model.analysisFailed ? " (failed)" : "")") }
             case "seek": model.seek((Double(arg) ?? 0.5) * model.timeline.duration)  // fraction of the job
             case "bridges": print("bridges \(model.bridgeNote ?? "none") standout \(model.autoProtrusion.map { "\($0)" } ?? "-")")
             case "cancelafter":  // "cancelafter 8": cancel the next generation after 8 s
@@ -405,7 +419,7 @@ enum Automation {
                 var op = Operation(kind: .engrave)
                 op.engraving = Engraving(text: arg, height: 3, depth: 0.15)
                 if parts.first == "engraveprobe" { op.engraving?.probeSurface = true }
-                op.toolID = OperationPlanner.usableTools(inventory.inventory)
+                op.toolID = OperationPlanner.usableTools(inventory.inventory, machine: model.machine)
                     .filter { [.engraver, .chamferMill, .flatEndMill, .ballEndMill].contains($0.kind) && $0.diameter <= 3.2 }
                     .min { $0.diameter < $1.diameter }?.id
                 model.operations.append(op)

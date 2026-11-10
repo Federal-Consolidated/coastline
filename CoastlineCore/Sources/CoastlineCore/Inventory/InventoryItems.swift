@@ -37,6 +37,9 @@ public struct StockItem: Identifiable, Hashable, Sendable, Codable {
 
     public var id: UUID
     public var materialID: String
+    /// Complete definition selected for this stock. A saved job remains usable when the
+    /// installed custom material is edited or removed on this or another computer.
+    public var materialSnapshot: Material? = nil
     public var shape: Shape
     /// Block/plate: x × y × z. Round bar: x = diameter, y = length (z unused).
     public var sizeX: Double
@@ -49,6 +52,7 @@ public struct StockItem: Identifiable, Hashable, Sendable, Codable {
     /// Where it is in the workshop ("Drawer 2").
     public var location: String
     public var notes: String
+
     /// Offcut from an earlier job (the job journal creates these automatically).
     public var isRemnant: Bool
     /// For printed blanks: the STEP the blank was printed from.
@@ -67,9 +71,10 @@ public struct StockItem: Identifiable, Hashable, Sendable, Codable {
     public init(id: UUID = UUID(), materialID: String, shape: Shape = .block, sizeX: Double, sizeY: Double,
                 sizeZ: Double, quantity: Int = 1, finish: Finish = .sawn, unitCost: Double? = nil,
                 supplier: String = "", location: String = "", notes: String = "", isRemnant: Bool = false,
-                modelPath: String? = nil) {
+                modelPath: String? = nil, materialSnapshot: Material? = nil) {
         self.id = id
         self.materialID = materialID
+        self.materialSnapshot = materialSnapshot
         self.shape = shape
         self.sizeX = sizeX
         self.sizeY = sizeY
@@ -84,7 +89,10 @@ public struct StockItem: Identifiable, Hashable, Sendable, Codable {
         self.modelPath = modelPath
     }
 
-    public var material: Material? { MaterialLibrary.material(id: materialID) }
+    public var material: Material? {
+        if let materialSnapshot, materialSnapshot.id == materialID { return materialSnapshot }
+        return MaterialLibrary.material(id: materialID)
+    }
 
     /// Bounding box of the stock, mm.
     public var envelope: Vec3 {
@@ -165,6 +173,9 @@ public struct Fixture: Identifiable, Hashable, Sendable, Codable {
     /// STEP/3MF/STL for the 3D view and collision checks (relative to `resources/` or absolute).
     public var modelPath: String?
     public var notes: String
+    public var planning: FixturePlanningProfile? = nil
+    /// Exact CAD bindings and mechanical constraints for a vetted assembly.
+    public var assembly: FixtureAssemblyDefinition? = nil
 
     public init(id: UUID = UUID(), name: String, kind: Kind, quantity: Int = 1, clampAxis: ClampAxis = .none,
                 gripRange: ClosedRange<Double>? = nil, height: Double = 0, isolated: Bool = false,

@@ -5,7 +5,9 @@ import SwiftUI
 /// The smart planner's result: every plan it costed (time vs finish), and the three worth
 /// choosing between, each with its reasons.
 struct PlanOptionsView: View {
+    var ownedOnly = false
     @Environment(AppModel.self) private var model
+    @Environment(InventoryModel.self) private var inventory
     @State private var expanded: UUID?
     @State private var showChart = false
 
@@ -35,9 +37,10 @@ struct PlanOptionsView: View {
                                 .help("The plan in use").accessibilityLabel("In use")
                         }
                         Spacer()
-                        Button("Use This Plan") { model.usePlan(c) }
+                        Button("Use This Plan") { Task { await model.usePlanAndBuild(c, inventory: inventory.inventory) } }
                             .buttonStyle(.glassProminent)
                             .controlSize(.small)
+                            .disabled(ownedOnly && !c.needsTools.isEmpty)
                     }
                     HStack(spacing: 12) {
                         Label("≈ \(AppModel.duration(c.minutes * 60))", systemImage: "clock").fixedSize()

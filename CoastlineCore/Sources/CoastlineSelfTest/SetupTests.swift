@@ -3,6 +3,91 @@ import Foundation
 import simd
 
 let setupTests: [TestCase] = [
+    TestCase(name: "exactSizeBlankFitsWithoutMachiningAllowance") {
+        let stock = StockItem(materialID: "al-6061", sizeX: 60, sizeY: 30, sizeZ: 10)
+        var s = Setup()
+        s.topAllowance = 0
+        let size = SIMD3<Double>(30, 60, 10)
+        let issues = SetupChecks.check(s, partMin: .zero, partMax: size, stock: stock)
+        try expect(!issues.contains { $0.severity >= .warning }, "\(issues)")
+        let limits = s.placementLimits(partMin: .zero, partMax: size, stock: stock)
+        try expectEqual(limits.depth, 0...0, "zero allowance must remain editable")
+        try expectEqual(limits.x, 0...0)
+        try expectEqual(limits.y, 0...0)
+        let physical = StockOrientation.options(stock: stock, part: size, twoSided: false, topAllowance: 0,
+                                               softJaw: true, toolDiameter: 6.35, requiresClampFrame: false)
+        try expect(physical.contains { $0.axes == s.stockAxes && $0.workable })
+        let kit = StockOrientation.options(stock: stock, part: size, twoSided: false, topAllowance: 0,
+                                          softJaw: true, toolDiameter: 6.35)
+        try expect(!kit.contains( where: \.workable), "stock containment must not imply a safe clamp-kit frame")
+        try expect(!Feasibility.assess(PartAnalysis(), inventory: Inventory(), partSize: size, stockSize: size)
+            .contains { $0.severity == .error })
+        var inventory = Inventory()
+        inventory.stock = [stock]
+        try expectEqual(Feasibility.fittingStock(partSize: size, inventory: inventory).count, 1)
+    },
+    TestCase(name: "zeroAllowanceDoesNotAllowAnOversizedOrShiftedPart") {
+        let stock = StockItem(materialID: "al-6061", sizeX: 60, sizeY: 30, sizeZ: 10)
+        var s = Setup()
+        s.topAllowance = 0
+        for size in [SIMD3<Double>(30.01, 60, 10), SIMD3(30, 60.01, 10), SIMD3(30, 60, 10.01)] {
+            try expect(SetupChecks.check(s, partMin: .zero, partMax: size, stock: stock).contains { $0.severity == .error })
+        }
+        s.partOffsetX = 0.01
+        try expect(SetupChecks.check(s, partMin: .zero, partMax: SIMD3(30, 60, 10), stock: stock).contains { $0.severity == .error })
+    },
+    TestCase(name: "squareBlankKeepsItsSelectedStockOrientation") {
+        let stock = StockItem(materialID: "al-6061", sizeX: 30, sizeY: 30, sizeZ: 10)
+        for axes in [[0, 1, 2], [1, 0, 2]] {
+            let options = StockOrientation.options(stock: stock, part: SIMD3(30, 30, 10), twoSided: false,
+                topAllowance: 0, softJaw: true, toolDiameter: 6.35, requiresClampFrame: false, preferredAxes: axes)
+            try expect(options.contains { $0.axes == axes && $0.workable }, "\(axes)")
+            try expectEqual(options.filter { $0.raw == SIMD3(30, 30, 10) }.count, 1, "deduplicate equivalent menu entries")
+        }
+    },
+    TestCase(name: "clampKitCanKeepFinishedThicknessAndShouldersCanKeepFinishedHeight") {
+        let stock = StockItem(materialID: "al-6061", sizeX: 80, sizeY: 40, sizeZ: 10)
+        for twoSided in [false, true] {
+            let options = StockOrientation.options(stock: stock, part: SIMD3(20, 40, 10), twoSided: twoSided,
+                topAllowance: 0, softJaw: true, toolDiameter: 6.35)
+            try expect(options.contains { $0.axes == [1, 0, 2] && $0.workable && !$0.viaShoulders })
+        }
+        try expect(Shoulders.fit(raw: SIMD3(40, 120, 10), part: SIMD3(40, 50, 10)) != nil)
+        try expect(Shoulders.fit(raw: SIMD3(40, 120, 10), part: SIMD3(40.01, 50, 10)) == nil)
+    },
+    TestCase(name: "placementMayMeetAnyExistingStockFace") {
+        let stock = StockItem(materialID: "al-6061", sizeX: 60, sizeY: 30, sizeZ: 10)
+        let s = Setup()
+        let limits = s.placementLimits(partMin: .zero, partMax: SIMD3(20, 40, 8), stock: stock)
+        try expectEqual(limits.x, -5...5)
+        try expectEqual(limits.y, -10...10)
+        try expectEqual(limits.depth, 0...2)
+    },
+    TestCase(name: "changingHoldingClearsThePreviousFixturePrepAndPersists") {
+        var s = Setup()
+        s.onBed = true
+        s.downsizeHeight = 20
+        s.prepLength = 50
+        s.shoulders = .init(height: 20)
+        s.customFixture.name = "Test vise"
+        s.customFixture.height = 12
+        let custom = s.selectingHolding(.custom)
+        try expect(!custom.onBed && !custom.usesClampKit && custom.shoulders == nil && custom.downsizeHeight == nil && custom.prepLength == nil)
+        let decoded = try JSONDecoder().decode(Setup.self, from: JSONEncoder().encode(custom))
+        try expectEqual(decoded, custom)
+        try expectEqual(decoded.holding, .custom)
+        try expectEqual(decoded.customFixture.name, "Test vise")
+        let kit = custom.selectingHolding(.clampKit)
+        try expect(kit.usesClampKit && kit.holding == .clampKit && kit.downsizeHeight == nil)
+        let bed = kit.selectingHolding(.bedOnly)
+        try expect(bed.onBed && !bed.usesClampKit && bed.holding == .bedOnly)
+        let prep = bed.selectingHolding(.prepThenKit, prepHeight: 25)
+        try expect(prep.usesClampKit && prep.downsizeHeight == 25 && !prep.onBed)
+        let shoulders = prep.selectingHolding(.shoulders, shoulders: .init(height: 22))
+        try expect(shoulders.shoulders?.height == 22 && shoulders.downsizeHeight == nil)
+        let legacy = try JSONDecoder().decode(Setup.self, from: Data("{\"onBed\":true,\"downsizeHeight\":20,\"shoulders\":{\"height\":22,\"length\":25}}".utf8))
+        try expect(legacy.onBed && legacy.holding == nil && !legacy.usesClampKit && legacy.shoulders == nil && legacy.downsizeHeight == nil)
+    },
     TestCase(name: "facingPutsTheChosenAxisTowardTheSpindle") {
         for facing in Setup.Facing.allCases {
             var s = Setup()

@@ -1,0 +1,478 @@
+[
+ {
+  "path": "0/0",
+  "name": "Quick Release Jig Plate_1/Body1:1 / Quick Release Jig Plate_1/Body1 / solid0",
+  "min": [
+   16.865,
+   -371.362,
+   61.838
+  ],
+  "max": [
+   102.844,
+   -157.362,
+   89.838
+  ]
+ },
+ {
+  "path": "1/0",
+  "name": "Quick Release Jig Plate_1/Body2:1 / Quick Release Jig Plate_1/Body2 / solid0",
+  "min": [
+   16.865,
+   -371.362,
+   61.838
+  ],
+  "max": [
+   21.945,
+   -157.362,
+   86.665
+  ]
+ },
+ {
+  "path": "2/0",
+  "name": "Quick Release Jig Plate_1/92981A108_Alloy Steel Shoulder Screws v1_1/Component3_1/Body1:1 / Quick Release Jig Plate_1/92981A108_Alloy Steel Shoulder Screws v1_1/Component3_1/Body1 / solid0",
+  "min": [
+   20.865,
+   -359.351,
+   75.815
+  ],
+  "max": [
+   30.865,
+   -349.351,
+   98.815
+  ]
+ },
+ {
+  "path": "3/0",
+  "name": "Quick Release Jig Plate_1/M5 Mounting Bolt_1/Body1:1 / Quick Release Jig Plate_1/M5 Mounting Bolt_1/Body1 / solid0",
+  "min": [
+   18.415,
+   -188.613,
+   68.414
+  ],
+  "max": [
+   103.415,
+   -180.113,
+   76.914
+  ]
+ },
+ {
+  "path": "4/0",
+  "name": "Quick Release Jig Plate_1/M5 Mounting Bolt (1)_1/Body1:1 / Quick Release Jig Plate_1/M5 Mounting Bolt (1)_1/Body1 / solid0",
+  "min": [
+   18.415,
+   -268.612,
+   68.414
+  ],
+  "max": [
+   103.415,
+   -260.112,
+   76.914
+  ]
+ },
+ {
+  "path": "5/0",
+  "name": "Quick Release Jig Plate_1/M5 Mounting Bolt (2)_1/Body1:1 / Quick Release Jig Plate_1/M5 Mounting Bolt (2)_1/Body1 / solid0",
+  "min": [
+   18.415,
+   -348.612,
+   68.414
+  ],
+  "max": [
+   103.415,
+   -340.112,
+   76.914
+  ]
+ },
+ {
+  "path": "6/0",
+  "name": "Quick Release Jig Plate_1/M5 Shoulder Bolt_1/Body1:1 / Quick Release Jig Plate_1/M5 Shoulder Bolt_1/Body1 / solid0",
+  "min": [
+   54.876,
+   -359.351,
+   75.815
+  ],
+  "max": [
+   64.876,
+   -349.351,
+   98.815
+  ]
+ },
+ {
+  "path": "7/0",
+  "name": "Quick Release Jig Plate_1/M5 Shoulder Bolt (1)_1/Body1:1 / Quick Release Jig Plate_1/M5 Shoulder Bolt (1)_1/Body1 / solid0",
+  "min": [
+   88.887,
+   -359.351,
+   75.815
+  ],
+  "max": [
+   98.887,
+   -349.351,
+   98.815
+  ]
+ },
+ {
+  "path": "8/0",
+  "name": "Quick Release Jig Plate_1/M5 Shoulder Bolt (2)_1/Body1:1 / Quick Release Jig Plate_1/M5 Shoulder Bolt (2)_1/Body1 / solid0",
+  "min": [
+   54.876,
+   -179.342,
+   75.815
+  ],
+  "max": [
+   64.876,
+   -169.342,
+   98.815
+  ]
+ },
+ {
+  "path": "9/0",
+  "name": "Quick Release Jig Plate_1/M5 Shoulder Bolt (1) (1)_1/Body1:1 / Quick Release Jig Plate_1/M5 Shoulder Bolt (1) (1)_1/Body1 / solid0",
+  "min": [
+   88.887,
+   -179.342,
+   75.815
+  ],
+  "max": [
+   98.887,
+   -169.342,
+   98.815
+  ]
+ },
+ {
+  "path": "10/0",
+  "name": "Quick Release Jig Plate_1/M5 Shoulder Bolt (3)_1/Body1:1 / Quick Release Jig Plate_1/M5 Shoulder Bolt (3)_1/Body1 / solid0",
+  "min": [
+   20.865,
+   -179.342,
+   75.815
+  ],
+  "max": [
+   30.865,
+   -169.342,
+   98.815
+  ]
+ },
+ {
+  "path": "11/0",
+  "name": "Quick Release Jig Plate_1/Insulating Washer StepFile v1_1/Body1:1 / Quick Release Jig Plate_1/Insulating Washer StepFile v1_1/Body1 / solid0",
+  "min": [
+   18.77,
+   -169.124,
+   73.996
+  ],
+  "max": [
+   23.533,
+   -159.599,
+   83.521
+  ]
+ },
+ {
+  "path": "12/0",
+  "name": "Quick Release Jig Plate_1/91290A144_Alloy Steel Socket Head Screw v1_1/Body1:1 / Quick Release Jig Plate_1/91290A144_Alloy Steel Socket Head Screw v1_1/Body1 / solid0",
+  "min": [
+   13.986,
+   -167.862,
+   75.258
+  ],
+  "max": [
+   27.986,
+   -160.862,
+   82.258
+  ]
+ },
+ {
+  "path": "13/0",
+  "name": "Quick Release Jig Plate_1/98689A113_General Purpose 18-8 Stainless Steel Washer v1_1/Body1:1 / Quick Release Jig Plate_1/98689A113_General Purpose 18-8 Stainless Steel Washer v1_1/Body1 / solid0",
+  "min": [
+   23.533,
+   -168.362,
+   74.758
+  ],
+  "max": [
+   24.033,
+   -160.362,
+   82.758
+  ]
+ },
+ {
+  "path": "14/0",
+  "name": "Quick Release Jig Plate_1/Component23_1/Body1:1 / Quick Release Jig Plate_1/Component23_1/Body1 / solid0",
+  "min": [
+   12.645,
+   -207.362,
+   75.758
+  ],
+  "max": [
+   20.645,
+   -201.362,
+   81.758
+  ]
+ },
+ {
+  "path": "15/0",
+  "name": "Quick Release Jig Plate_1/Component24_1/Body1:1 / Quick Release Jig Plate_1/Component24_1/Body1 / solid0",
+  "min": [
+   17.695,
+   -327.363,
+   65.828
+  ],
+  "max": [
+   25.695,
+   -321.363,
+   71.828
+  ]
+ },
+ {
+  "path": "16/0",
+  "name": "Quick Release Jig Plate_1/Component25_1/Body1:1 / Quick Release Jig Plate_1/Component25_1/Body1 / solid0",
+  "min": [
+   17.695,
+   -207.363,
+   65.828
+  ],
+  "max": [
+   25.695,
+   -201.363,
+   71.828
+  ]
+ },
+ {
+  "path": "17/0",
+  "name": "Quick Release Jig Plate_1/Component27_1/Body1:1 / Quick Release Jig Plate_1/Component27_1/Body1 / solid0",
+  "min": [
+   12.645,
+   -327.362,
+   75.758
+  ],
+  "max": [
+   20.645,
+   -321.362,
+   81.758
+  ]
+ },
+ {
+  "path": "18/0",
+  "name": "Quick Release Jig Plate_1/Insulating Pad Component28_1/Body1:1 / Quick Release Jig Plate_1/Insulating Pad Component28_1/Body1 / solid0",
+  "min": [
+   15.865,
+   -372.949,
+   60.249
+  ],
+  "max": [
+   16.865,
+   -155.775,
+   91.427
+  ]
+ },
+ {
+  "path": "19/0",
+  "name": "Quick Release Jig Plate_1/Component3_2/Body1:1 / Quick Release Jig Plate_1/Component3_2/Body1 / solid0",
+  "min": [
+   20.865,
+   -339.351,
+   75.815
+  ],
+  "max": [
+   30.865,
+   -329.351,
+   98.815
+  ]
+ },
+ {
+  "path": "20/0",
+  "name": "Quick Release Jig Plate_1/M5 Shoulder Bolt_2/Body1:1 / Quick Release Jig Plate_1/M5 Shoulder Bolt_2/Body1 / solid0",
+  "min": [
+   54.876,
+   -339.351,
+   75.815
+  ],
+  "max": [
+   64.876,
+   -329.351,
+   98.815
+  ]
+ },
+ {
+  "path": "21/0",
+  "name": "Quick Release Jig Plate_1/M5 Shoulder Bolt (1)_2/Body1:1 / Quick Release Jig Plate_1/M5 Shoulder Bolt (1)_2/Body1 / solid0",
+  "min": [
+   88.887,
+   -339.351,
+   75.815
+  ],
+  "max": [
+   98.887,
+   -329.351,
+   98.815
+  ]
+ },
+ {
+  "path": "22/0",
+  "name": "Quick Release Jig Plate_1/M5 Shoulder Bolt (3)_2/Body1:1 / Quick Release Jig Plate_1/M5 Shoulder Bolt (3)_2/Body1 / solid0",
+  "min": [
+   20.865,
+   -199.342,
+   75.815
+  ],
+  "max": [
+   30.865,
+   -189.342,
+   98.815
+  ]
+ },
+ {
+  "path": "23/0",
+  "name": "Quick Release Jig Plate_1/M5 Shoulder Bolt (2)_2/Body1:1 / Quick Release Jig Plate_1/M5 Shoulder Bolt (2)_2/Body1 / solid0",
+  "min": [
+   54.876,
+   -199.342,
+   75.815
+  ],
+  "max": [
+   64.876,
+   -189.342,
+   98.815
+  ]
+ },
+ {
+  "path": "24/0",
+  "name": "Quick Release Jig Plate_1/M5 Shoulder Bolt (1) (1)_2/Body1:1 / Quick Release Jig Plate_1/M5 Shoulder Bolt (1) (1)_2/Body1 / solid0",
+  "min": [
+   88.887,
+   -199.342,
+   75.815
+  ],
+  "max": [
+   98.887,
+   -189.342,
+   98.815
+  ]
+ },
+ {
+  "path": "25/0",
+  "name": "Quick Release Jig Plate_1/91290A144_Alloy Steel Socket Head Screw v1_2/Body1:1 / Quick Release Jig Plate_1/91290A144_Alloy Steel Socket Head Screw v1_2/Body1 / solid0",
+  "min": [
+   13.986,
+   -227.862,
+   75.258
+  ],
+  "max": [
+   27.986,
+   -220.862,
+   82.258
+  ]
+ },
+ {
+  "path": "26/0",
+  "name": "Quick Release Jig Plate_1/98689A113_General Purpose 18-8 Stainless Steel Washer v1_2/Body1:1 / Quick Release Jig Plate_1/98689A113_General Purpose 18-8 Stainless Steel Washer v1_2/Body1 / solid0",
+  "min": [
+   23.533,
+   -228.362,
+   74.758
+  ],
+  "max": [
+   24.033,
+   -220.362,
+   82.758
+  ]
+ },
+ {
+  "path": "27/0",
+  "name": "Quick Release Jig Plate_1/Insulating Washer StepFile v1_2/Body1:1 / Quick Release Jig Plate_1/Insulating Washer StepFile v1_2/Body1 / solid0",
+  "min": [
+   18.77,
+   -229.124,
+   73.996
+  ],
+  "max": [
+   23.533,
+   -219.599,
+   83.521
+  ]
+ },
+ {
+  "path": "28/0",
+  "name": "Quick Release Jig Plate_1/91290A144_Alloy Steel Socket Head Screw v1_3/Body1:1 / Quick Release Jig Plate_1/91290A144_Alloy Steel Socket Head Screw v1_3/Body1 / solid0",
+  "min": [
+   13.986,
+   -307.862,
+   75.258
+  ],
+  "max": [
+   27.986,
+   -300.862,
+   82.258
+  ]
+ },
+ {
+  "path": "29/0",
+  "name": "Quick Release Jig Plate_1/98689A113_General Purpose 18-8 Stainless Steel Washer v1_3/Body1:1 / Quick Release Jig Plate_1/98689A113_General Purpose 18-8 Stainless Steel Washer v1_3/Body1 / solid0",
+  "min": [
+   23.533,
+   -308.362,
+   74.758
+  ],
+  "max": [
+   24.033,
+   -300.362,
+   82.758
+  ]
+ },
+ {
+  "path": "30/0",
+  "name": "Quick Release Jig Plate_1/Insulating Washer StepFile v1_3/Body1:1 / Quick Release Jig Plate_1/Insulating Washer StepFile v1_3/Body1 / solid0",
+  "min": [
+   18.77,
+   -309.124,
+   73.996
+  ],
+  "max": [
+   23.533,
+   -299.599,
+   83.521
+  ]
+ },
+ {
+  "path": "31/0",
+  "name": "Quick Release Jig Plate_1/91290A144_Alloy Steel Socket Head Screw v1_4/Body1:1 / Quick Release Jig Plate_1/91290A144_Alloy Steel Socket Head Screw v1_4/Body1 / solid0",
+  "min": [
+   13.986,
+   -367.862,
+   75.258
+  ],
+  "max": [
+   27.986,
+   -360.862,
+   82.258
+  ]
+ },
+ {
+  "path": "32/0",
+  "name": "Quick Release Jig Plate_1/98689A113_General Purpose 18-8 Stainless Steel Washer v1_4/Body1:1 / Quick Release Jig Plate_1/98689A113_General Purpose 18-8 Stainless Steel Washer v1_4/Body1 / solid0",
+  "min": [
+   23.533,
+   -368.362,
+   74.758
+  ],
+  "max": [
+   24.033,
+   -360.362,
+   82.758
+  ]
+ },
+ {
+  "path": "33/0",
+  "name": "Quick Release Jig Plate_1/Insulating Washer StepFile v1_4/Body1:1 / Quick Release Jig Plate_1/Insulating Washer StepFile v1_4/Body1 / solid0",
+  "min": [
+   18.77,
+   -369.124,
+   73.996
+  ],
+  "max": [
+   23.533,
+   -359.599,
+   83.521
+  ]
+ }
+]

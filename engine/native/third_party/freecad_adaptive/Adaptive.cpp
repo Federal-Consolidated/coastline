@@ -2181,6 +2181,14 @@ std::list<AdaptiveOutput> Adaptive2d::Execute(
             Clipper2Lib::FillRule::EvenOdd,
             nonclearedPaths
         );
+        // Coastline: tag the clip (noncleared) vertices with z = -1, so the z callback below can
+        // tell the input path's edge from the clip edge (Clipper2 gives them in either order; a
+        // clip edge's z values are not path positions, and looking them up failed: map::at).
+        for (auto& p : nonclearedPaths) {
+            for (auto& pt : p) {
+                pt.z = -1;
+            }
+        }
 
         Paths updatedPaths;
         for (const auto& path : inputPaths) {
@@ -2206,14 +2214,23 @@ std::list<AdaptiveOutput> Adaptive2d::Execute(
             // Create a new clipper object to avoid overwriting the z callback of the main one
             Clipper2Lib::Clipper64 clip2;
             clip2.SetZCallback([&nextNewZ, &newZPosition, &newZNeedsFinishing, &path](
-                                   const Clipper2Lib::Point64& e1bot,
-                                   const Clipper2Lib::Point64& e1top,
-                                   const Clipper2Lib::Point64& e2bot,
-                                   const Clipper2Lib::Point64& e2top,
+                                   const Clipper2Lib::Point64& a1,
+                                   const Clipper2Lib::Point64& a2,
+                                   const Clipper2Lib::Point64& b1,
+                                   const Clipper2Lib::Point64& b2,
                                    Clipper2Lib::Point64& pt
                                ) {
-                (void)e2bot;
-                (void)e2top;
+                // Coastline: e1 is the input path's edge (clip vertices have z = -1).
+                const bool aIsPath = a1.z > 0 && a2.z > 0;
+                const Clipper2Lib::Point64& e1bot = aIsPath ? a1 : b1;
+                const Clipper2Lib::Point64& e1top = aIsPath ? a2 : b2;
+                if (e1bot.z <= 0 || e1top.z <= 0) {
+                    // Two clip edges (should not happen): a new point that is not finished.
+                    pt.z = nextNewZ++;
+                    newZPosition[pt.z] = 0;
+                    newZNeedsFinishing[pt.z] = 0;
+                    return;
+                }
                 // If the split-edge point is actuall at an edge then we have no need for a new
                 // z-value. Otherwise, generate a new z value
                 if (pt.x == e1bot.x && pt.y == e1bot.y) {
@@ -2290,6 +2307,9 @@ std::list<AdaptiveOutput> Adaptive2d::Execute(
             bool hasZ1 = false;
             for (const auto& nonclearedPath : nonclearedInputs) {
                 for (const auto& pt : nonclearedPath) {
+                    if (pt.z <= 0 || (pt.z >= firstNewZ && !newZPosition.count(pt.z))) {
+                        continue;  // Coastline: not a point of the input path
+                    }
                     if (pt.z != 1 || !hasZ1) {
                         nonclearedPoints.push_back({pt.x, pt.y, pt.z});
                     }
@@ -2310,6 +2330,16 @@ std::list<AdaptiveOutput> Adaptive2d::Execute(
                     double val2 = (p2.Z >= firstNewZ) ? newZPosition.at(p2.Z) : (double)p2.Z;
                     return val1 < val2;
                 }
+            );
+            // Coastline: a vertex can come back twice (the end of one open piece and the start
+            // of the next). Keep one copy, or the second is taken for a new point: map::at.
+            nonclearedPoints.erase(
+                std::unique(
+                    nonclearedPoints.begin(),
+                    nonclearedPoints.end(),
+                    [](const IntPoint& p1, const IntPoint& p2) { return p1.Z == p2.Z; }
+                ),
+                nonclearedPoints.end()
             );
 
             // Reassemble the updated input path with new z-values.

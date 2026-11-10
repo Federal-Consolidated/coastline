@@ -51,7 +51,15 @@ final class MillControl {
     /// The Home confirmation sheet (opened from the page, the toolbar or the Machine menu).
     var showHomeConfirm = false
     /// The test program waiting for the operator's confirmation.
-    var programToConfirm: TestProgram?
+    var programToConfirm: SavedTestProgram?
+    var showProgramLibrary = false
+    private(set) var programs: TestProgramLibrary = {
+        guard let data = UserDefaults.standard.data(forKey: "millTestPrograms"),
+              let saved = try? JSONDecoder().decode(TestProgramLibrary.self, from: data) else {
+            return TestProgramLibrary()
+        }
+        return saved
+    }()
     /// The go-to waiting for the operator's confirmation.
     var goTo: GoToRequest?
     /// The spindle speed for Spindle On (RPM).
@@ -286,10 +294,62 @@ final class MillControl {
         }
     }
 
-    func run(_ program: TestProgram) {
-        allowJog = false
-        report(session.run(program.title, lines: program.lines))
+    /// Saving is available offline; the complete code is checked against the live machine
+    /// immediately before running.
+    func saveProgram(_ program: SavedTestProgram) {
+        guard program.validationMessage == nil else { return }
+        programs.save(program)
+        savePrograms()
     }
+
+    func removeProgram(_ id: UUID) {
+        programs.remove(id: id)
+        savePrograms()
+    }
+
+    func favoriteProgram(_ id: UUID) {
+        programs.toggleFavorite(id: id)
+        savePrograms()
+    }
+
+    private func savePrograms() {
+        guard ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil,
+              let data = try? JSONEncoder().encode(programs) else { return }
+        UserDefaults.standard.set(data, forKey: "millTestPrograms")
+    }
+
+    func check(_ program: SavedTestProgram) -> Result<[String], MillRefusal> {
+        if let why = program.validationMessage { return .failure(.blocked(why)) }
+        guard let envelope = snapshot.envelope else {
+            return .failure(snapshot.isOpen ? .statusStale : .notConnected)
+        }
+        switch program.kind {
+        case .motionCheck:
+            if let why = snapshot.gates.run { return .failure(why) }
+            guard let start = snapshot.status?.machinePosition else { return .failure(.statusStale) }
+            return ProgramCheck.clean(program.lines, start: start, envelope: envelope)
+        case .setup:
+            return JobProgramCheck.clean(program.lines, settings: snapshot.settings, envelope: envelope).flatMap { checked in
+                if let why = checked.startsWithHome ? snapshot.gates.home : snapshot.gates.run { return .failure(why) }
+                return .success(checked.lines)
+            }
+        }
+    }
+
+    @discardableResult func run(_ program: SavedTestProgram) -> Bool {
+        if let why = program.validationMessage {
+            message = why
+            return false
+        }
+        allowJog = false
+        let refusal = program.kind == .motionCheck
+            ? session.run(program.title, lines: program.lines)
+            : session.runJob(program.title, lines: program.lines)
+        report(refusal)
+        return refusal == nil
+    }
+
+    func run(_ program: TestProgram) { run(SavedTestProgram(program)) }
 
     /// One program of a guided job (a G-code project). Returns false (and sets `message`) if refused.
     @discardableResult func runJob(_ name: String, lines: [String]) -> Bool {

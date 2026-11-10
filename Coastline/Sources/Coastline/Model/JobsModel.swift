@@ -475,6 +475,14 @@ final class JobsModel {
         showCurrent()
     }
 
+    /// Reopen the current program's controls; the operator must confirm and press Run again.
+    func retryCurrent() {
+        guard var r = run, let item = r.current, item.step.kind == .run else { return }
+        r.done.remove(item.id)
+        r.started = nil
+        run = r
+    }
+
     /// The current step's program in the 3D view.
     func showCurrent() {
         guard let r = run, let entry = entries.first(where: { $0.folder == r.folder }), let step = r.current?.step else { return }

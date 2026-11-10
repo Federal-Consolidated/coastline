@@ -93,8 +93,12 @@ public struct GCodeLine: Equatable, Sendable {
                 group = .motion
             case "17", "18", "19": group = .planeSelection
             case "90", "91":
-                group = .distance
-                distance = number == "90" ? 90 : 91
+                // G91.1 selects incremental arc centres; it does not make XYZ moves relative.
+                let word = upper.dropFirst().prefix { $0.isASCII && ($0.isNumber || $0 == ".") }
+                if let mode = Double(word), mode == 90 || mode == 91 {
+                    group = .distance
+                    distance = Int(mode)
+                }
             case "93", "94": group = .feedRateMode
             case "20", "21":
                 group = .units

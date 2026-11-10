@@ -157,6 +157,41 @@ extension AppModel {
     /// Whether the spindle head, the translator and the tool keep clear of what's on the table
     /// at machine position q (the table moves X; the translator Y; the spindle Y and Z).
     func headClear(at q: SIMD3<Double>, tool: Tool?, bed other: TriangleTree? = nil) -> Bool {
+        if let geometry = planningGeometry, let mm = machineModel, let bed = other ?? bedTreeBuilt() {
+            if profileCollisionTrees == nil {
+                var trees: [String: TriangleTree] = [:]
+                let byGroup = Dictionary(grouping: mm.parts, by: \.group)
+                for (id, parts) in byGroup where !geometry.movesWithTable(componentID: id) {
+                    // A fixed table may have no motion ancestors. Exclude its own
+                    // assembly here; seated contact is checked by the fixture checks.
+                    var current: String? = id
+                    var onTable = false
+                    while let componentID = current,
+                          let component = geometry.definition.components.first(where: { $0.id == componentID }) {
+                        if componentID == geometry.tableComponentID { onTable = true; break }
+                        current = component.parentID
+                    }
+                    if onTable { continue }
+                    var triangles: [SIMD3<Double>] = []
+                    for part in parts {
+                        for index in part.mesh.indices {
+                            let k = Int(index) * 3
+                            triangles.append(SIMD3(Double(part.mesh.vertices[k]), Double(part.mesh.vertices[k + 1]), Double(part.mesh.vertices[k + 2])))
+                        }
+                    }
+                    trees[id] = TriangleTree(triangles)
+                }
+                profileCollisionTrees = trees
+            }
+            guard let translations = try? geometry.componentTranslations(at: Vec3(q.x, q.y, q.z)),
+                  let table = translations[geometry.tableComponentID], let head = translations[geometry.headComponentID] else { return false }
+            for (id, tree) in profileCollisionTrees ?? [:] {
+                guard let t = translations[id] else { return false }
+                if tree.touches(bed, offset: SIMD3(table.x - t.x, table.y - t.y, table.z - t.z)) { return false }
+            }
+            if let tool = toolTree(tool), tool.touches(bed, offset: SIMD3(table.x - head.x, table.y - head.y, table.z - head.z)) { return false }
+            return true
+        }
         guard let mm = machineModel, let head = headTreesBuilt(), let bed = other ?? bedTreeBuilt() else { return true }
         let m = SIMD3(mm.modelPose.x, mm.modelPose.y, mm.modelPose.z)
         // The table relative to each moving group at its modelled pose.
@@ -270,8 +305,8 @@ extension AppModel {
     /// relative to the stock, so they don't change; only where the kit is bolted does. Found
     /// before generating (the travel checks use it).
     func updateKitShift() {
-        guard !setup.onBed, let stock, machineModel != nil else { kitShiftCache = nil; return }
-        let tools = operations.compactMap { $0.toolID.flatMap(toolLookup) } + [EdgeFinding.tool]
+        guard setup.usesClampKit, let stock, machineModel != nil else { kitShiftCache = nil; return }
+        let tools = operations.compactMap { $0.toolID.flatMap(jobTool) } + [EdgeFinding.tool]
         let longest = tools.max { $0.stickout < $1.stickout }
         let key = "\(setup)|\(stock.id)|\(tools.map(\.id))|\(twoSided)"
         if let c = kitShiftCache, c.key == key { return }

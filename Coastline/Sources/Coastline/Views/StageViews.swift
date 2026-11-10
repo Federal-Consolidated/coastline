@@ -8,18 +8,18 @@ struct StageBar: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 2) {
-            ForEach(JobStage.allCases) { stage in
+            ForEach(JobStage.workflow) { stage in
                 let st = model.status(stage)
-                let current = model.stage == stage
+                let current = model.stage.workflowStage == stage
                 Button { model.enter(stage) } label: {
                     VStack(spacing: 3) {
                         ZStack {
-                            Circle().fill(fill(st.state, current: model.stage == stage)).frame(width: 24, height: 24)
+                            Circle().fill(fill(st.state, current: current)).frame(width: 24, height: 24)
                             Image(systemName: icon(st.state, stage))
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(st.state == .later || st.state == .notNeeded ? Color.secondary : .white)
                         }
-                        .overlay(Circle().strokeBorder(model.stage == stage ? Color.primary.opacity(0.7) : .clear, lineWidth: 1.5).frame(width: 28, height: 28))
+                        .overlay(Circle().strokeBorder(current ? Color.primary.opacity(0.7) : .clear, lineWidth: 1.5).frame(width: 28, height: 28))
                         // One short word at caption size (the full name is the tooltip and what
                         // VoiceOver reads): a long name in a narrow cell broke as "Machin-ing".
                         Text(shortTitle(stage)).font(.caption.weight(current ? .semibold : .medium))
@@ -29,6 +29,7 @@ struct StageBar: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
+                .disabled(!model.canVisit(stage) || model.isPlanningJob)
                 .help("\(model.title(stage)): \(st.why)")
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(model.title(stage))
@@ -44,10 +45,12 @@ struct StageBar: View {
     private func shortTitle(_ stage: JobStage) -> String {
         switch stage {
         case .partStock: "Part"
+        case .stock: "Stock"
+        case .planning: "Plan"
         case .holding: "Holding"
         case .prep: "Prep"
-        case .clampKit: model.setup.onBed ? "Bed" : "Clamps"
-        case .machining: "Machining"
+        case .clampKit: "Setups"
+        case .machining: "Paths"
         case .review: "Review"
         }
     }
@@ -94,16 +97,21 @@ struct StageHeader: View {
     var body: some View {
         let st = model.status(model.stage)
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("\(model.stage.rawValue + 1)").font(.caption.weight(.bold).monospacedDigit())
+            Text("\(model.stage.number)").font(.caption.weight(.bold).monospacedDigit())
                 .frame(width: 18, height: 18).background(Circle().fill(Theme.accent.opacity(0.25)))
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.title(model.stage)).font(.headline)
-                Text(st.why).font(.caption).foregroundStyle(.secondary).lineLimit(3).help(st.why)
+                Text(st.why).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            if let next = JobStage(rawValue: model.stage.rawValue + 1) {
+            if model.stage == .holding || model.stage == .prep {
+                Button("Done") { model.enter(.clampKit) }.controlSize(.small)
+            } else if let next = model.stage.next {
                 Button { model.enter(next) } label: { Label("Next", systemImage: "chevron.right").labelStyle(.titleAndIcon) }
                     .controlSize(.small)
+                    .disabled(!model.canVisit(next) || st.state == .blocked || model.isPlanningJob
+                              || (model.stage == .planning && model.programs.isEmpty)
+                              || (model.stage == .stock && st.state != .done))
                     .help("Go to \(model.title(next))")
                     .accessibilityLabel("Next: \(model.title(next))")
             }
@@ -120,9 +128,17 @@ struct HoldingInspector: View {
     var body: some View {
         Form {
             Section {
+                Button("Plan with My Fixture Library", systemImage: "sparkles") {
+                    model.enableLibraryPlanning()
+                    model.enter(.planning)
+                }
+                Text("The job planner selects fixtures for the generated cuts. Choose a manual holding method below only when setting up the job yourself.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
                 ForEach(HoldingPath.allCases) { path in
                     let a = model.holdingAssessment(path)
-                    let current = model.holdingPath == path
+                    let current = !model.setup.planFromFixtureLibrary && model.holdingPath == path
                     Button { model.choose(path) } label: {
                     HStack(alignment: .top, spacing: 10) {
                         Text(path.letter).font(.headline.monospaced())
@@ -134,6 +150,9 @@ struct HoldingInspector: View {
                                 Text(path.title).font(.callout.weight(.semibold))
                                 if a.recommended { Text("Recommended").font(.caption.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
                                     .background(Capsule().fill(Theme.ok.opacity(0.25))) }
+                                if !a.possible, model.part != nil, model.stock != nil {
+                                    Text("Needs changes").font(.caption).foregroundStyle(Theme.warning)
+                                }
                                 if let r = path.arrives { Text("Coming in \(r)").font(.caption).foregroundStyle(.secondary) }
                             }
                             Text(a.why).font(.caption).foregroundStyle(.secondary)
@@ -149,14 +168,55 @@ struct HoldingInspector: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(current ? .isSelected : [])
-                    .disabled(!(a.possible || current))
-                    .opacity(a.possible || current ? 1 : 0.55)
+                    .disabled(model.part == nil || model.stock == nil)
+                    .accessibilityHint(a.why)
                 }
             } header: {
                 HStack {
                     Text("How the stock is held")
-                    InfoTip(text: "Coastline picks the path from the part's size, the stock and the clamp kit's grip range; click another one to use it instead.")
+                    InfoTip(text: "Choose the workholding you actually use. Recommendations never replace your choice. A method that needs more grip or clearance shows what must change before generation.")
                 }
+            }
+        }
+        .formStyle(.grouped)
+        .darkPanel()
+    }
+}
+
+/// Custom workholding keeps stock containment separate from built-in clamp-kit assumptions.
+struct CustomHoldingInspector: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        @Bindable var model = model
+        Form {
+            if !model.setup.planFromFixtureLibrary {
+            Section("Vise / custom fixture") {
+                TextField("Fixture", text: $model.setup.customFixture.name)
+                NumberField(title: "Stock above the table", value: Binding(
+                    get: { model.setup.customFixture.height },
+                    set: { model.setup.customFixture.height = max($0, 0) }),
+                    tip: "Distance from the machine table to the bottom of your stock, including the fixture and parallels, in mm.")
+                NumberField(title: "Face past table edge", value: Binding(
+                    get: { model.setup.customFixture.faceProtrusion },
+                    set: { model.setup.customFixture.faceProtrusion = $0 }),
+                    tip: "Position of the stock face toward the spindle, relative to the front edge of the table, in mm.")
+                TextField("Setup notes", text: $model.setup.customFixture.notes, axis: .vertical)
+                    .lineLimit(3...6)
+                Text("Custom fixture geometry is not modelled. Machine and table checks still apply; verify clearance to your vise, jaws and fasteners. These notes are included in the guided job.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            }
+            Section("Sides") {
+                Toggle("Machine both sides", isOn: Binding(get: { model.twoSided }, set: {
+                    model.twoSided = $0; model.twoSidedChosen = true
+                }))
+                Text("Secure the part independently of any material the toolpaths remove. Coastline does not add a clamp-kit frame or automatic holding tabs for a custom fixture.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            IssuesSection(issues: model.setupIssues)
+            Section {
+                Button("Change Workholding") { model.enter(.holding) }
             }
         }
         .formStyle(.grouped)
@@ -200,7 +260,11 @@ struct PrepInspector: View {
                 ShoulderSummary()
             } else {
                 Section {
-                    Label("No prep: the stock fits the clamp kit as it is.", systemImage: "checkmark.circle")
+                    Label(model.setup.usesClampKit ? "No prep: the stock fits the clamp kit as it is."
+                          : "No automatic stock prep for this holding method.", systemImage: "checkmark.circle")
+                    if !model.setup.usesClampKit {
+                        Button("Continue to \(model.title(.clampKit))") { model.enter(.clampKit) }
+                    }
                 }
             }
         }
@@ -495,6 +559,13 @@ struct ReviewInspector: View {
 
     var body: some View {
         Form {
+            if model.setup.planFromFixtureLibrary && model.libraryWorkholdingPlan?.reviewed != true {
+                Section("Finish setup review") {
+                    Text("Review the placement, secure grip and work zero of every setup before exporting or running.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("Review Setups", systemImage: "hand.raised") { model.enter(.clampKit) }
+                }
+            }
             Section {
                 Button { model.startTour() } label: { Label("Walk Through the Job (Tour)", systemImage: "play.rectangle.fill").frame(maxWidth: .infinity) }
                     .buttonStyle(.glassProminent)

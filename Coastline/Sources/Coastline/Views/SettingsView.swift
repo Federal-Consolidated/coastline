@@ -1,4 +1,5 @@
 import AppKit
+import CoastlineCore
 import SwiftUI
 
 /// Coastline ▸ Settings… (⌘,)
@@ -21,6 +22,14 @@ struct SettingsView: View {
                         .pickerStyle(.segmented)
                     }
                     Section {
+                        Picker("Units", selection: $settings.units) {
+                            ForEach(DisplayUnits.allCases) { Text($0.title).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                    } footer: {
+                        Text("Applies to dimension fields and Machine Control positions, work coordinates and jogging.")
+                    }
+                    Section {
                         Button("Show “How Coastline Works” on Next Launch") {
                             UserDefaults.standard.set(false, forKey: "seenWelcome")
                         }
@@ -33,7 +42,7 @@ struct SettingsView: View {
             Tab("Machining", systemImage: "gearshape.2") {
                 Form {
                     Section {
-                        Picker("Edge finding in the clamp kit", selection: $settings.clampKitProbing) {
+                        Picker("Probing method in the clamp kit", selection: $settings.clampKitProbing) {
                             ForEach(AppSettings.ClampKitProbing.allCases) { Text($0.title).tag($0) }
                         }
                     } footer: {

@@ -1,0 +1,1669 @@
+{
+  "sourceSHA256": "7035295044ea6c8e84ef12289cb68a4bb3dab5bb70ad5d86477fa82e9f720cc3",
+  "inputLengthUnit": "cm",
+  "reportedLengthUnit": "mm",
+  "pathConvention": "Zero-based free-shape/occurrence indices; longest ancestor binding wins. Paths are valid only for this source hash.",
+  "componentBindings": [
+    {
+      "path": "0/0",
+      "componentID": "base",
+      "expectedName": "01 Fixed Frame and Drives"
+    },
+    {
+      "path": "0/1",
+      "componentID": "y",
+      "expectedName": "02 Y Carriage and Z Guides"
+    },
+    {
+      "path": "0/2",
+      "componentID": "z",
+      "expectedName": "03 Spindle Head"
+    },
+    {
+      "path": "0/2/0",
+      "componentID": "head",
+      "expectedName": "Spindle Cartridge"
+    },
+    {
+      "path": "0/3",
+      "componentID": "table",
+      "expectedName": "04 X Table"
+    },
+    {
+      "path": "0/4",
+      "componentID": "cover",
+      "expectedName": "Cover"
+    }
+  ],
+  "shapeCount": 50,
+  "assembledSolidCount": 52,
+  "entities": [
+    {
+      "path": "0/0",
+      "name": "01 Fixed Frame and Drives",
+      "ancestors": [
+        "CNC simplified v31"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0",
+      "name": "Internal Frame",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/0",
+      "name": "Y Drive",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/0/0",
+      "name": "Base Plate",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/0/0/0",
+      "name": "Top Plate",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive",
+        "Base Plate"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          195.935136,
+          -434.422758,
+          197.563594
+        ],
+        "maximum": [
+          205.460136,
+          -39.422758,
+          349.963594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/0/1",
+      "name": "Y Motor End and Belt Drive",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/0/1/0",
+      "name": "Alumerang - NEMA",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive",
+        "Y Motor End and Belt Drive"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          139.110136,
+          -52.122758,
+          88.693594
+        ],
+        "maximum": [
+          199.110136,
+          -29.122758,
+          374.343594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/0/1/1",
+      "name": "NEMA 17 Motor",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive",
+        "Y Motor End and Belt Drive"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          156.459397,
+          -92.122758,
+          274.952855
+        ],
+        "maximum": [
+          209.055136,
+          -27.622758,
+          317.253594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/0/2",
+      "name": "Y Idler End Support",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/0/2/0",
+      "name": "Alumerang - Standard",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive",
+        "Y Idler End Support"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          139.110136,
+          -444.222758,
+          88.693594
+        ],
+        "maximum": [
+          199.110136,
+          -421.722758,
+          374.343594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/0/3",
+      "name": "Y Ballscrew Support",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/0/3/0",
+      "name": "Ballscrew Shaft Mount",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive",
+        "Y Ballscrew Support"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          156.254173,
+          -68.471158,
+          227.247631
+        ],
+        "maximum": [
+          199.9661,
+          -31.152758,
+          264.643594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/0/3/1",
+      "name": "Ballscrew Subassembly - Y",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive",
+        "Y Ballscrew Support"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/0/3/1/0",
+      "name": "Ballscrew - Y",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive",
+        "Y Ballscrew Support",
+        "Ballscrew Subassembly - Y"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          172.110136,
+          -359.422758,
+          243.103594
+        ],
+        "maximum": [
+          184.110136,
+          -25.422758,
+          255.103594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/0/4",
+      "name": "Y Guide Shafts",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/0/4/0",
+      "name": "Shaft Y",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive",
+        "Y Guide Shafts"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          168.610136,
+          -434.422758,
+          177.103594
+        ],
+        "maximum": [
+          184.610136,
+          -39.422758,
+          193.103594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/0/4/1",
+      "name": "Shaft Y",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "Y Drive",
+        "Y Guide Shafts"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          168.610136,
+          -434.422758,
+          349.343594
+        ],
+        "maximum": [
+          184.610136,
+          -39.422758,
+          365.343594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/1",
+      "name": "X Drive and Frame - Left",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/1/0",
+      "name": "Shaft X",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Left"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          -48.389864,
+          -419.422758,
+          107.843594
+        ],
+        "maximum": [
+          141.610136,
+          -407.422758,
+          119.843594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/1/1",
+      "name": "Ballscrew - X",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Left"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          -13.889864,
+          -419.422758,
+          68.843594
+        ],
+        "maximum": [
+          144.110136,
+          -407.422758,
+          80.843594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/1/2",
+      "name": "X Shaft Support",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Left"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          -46.899864,
+          -434.422758,
+          98.078594
+        ],
+        "maximum": [
+          -36.739864,
+          -404.422758,
+          122.843594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/1/3",
+      "name": "X Motor Mount and Coupler - Left",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Left"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/1/3/0",
+      "name": "Stepper Mount - X Left",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Left",
+        "X Motor Mount and Coupler - Left"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          114.260136,
+          -434.422758,
+          55.843594
+        ],
+        "maximum": [
+          141.610136,
+          -394.422758,
+          128.843594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/1/3/1",
+      "name": "NEMA 17 Motor",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Left",
+        "X Motor Mount and Coupler - Left"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          152.110136,
+          -444.867759,
+          53.693593
+        ],
+        "maximum": [
+          216.610136,
+          -392.272018,
+          95.994334
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/1/4",
+      "name": "X Arm - Left with side tapped holes",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Left"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          -46.910516,
+          -444.312232,
+          93.743907
+        ],
+        "maximum": [
+          175.845484,
+          -434.512232,
+          130.573907
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/2",
+      "name": "X Drive and Frame - Right",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/2/0",
+      "name": "X Motor Mount and Coupler - Right",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Right"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/0/2/0/0",
+      "name": "Stepper Mount - X Right",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Right",
+        "X Motor Mount and Coupler - Right"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          114.260136,
+          -79.422758,
+          55.843594
+        ],
+        "maximum": [
+          141.610136,
+          -39.422758,
+          128.843594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/2/0/1",
+      "name": "NEMA 17 Motor",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Right",
+        "X Motor Mount and Coupler - Right"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          152.110136,
+          -81.573499,
+          53.692856
+        ],
+        "maximum": [
+          216.610136,
+          -28.97776,
+          95.993595
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/2/1",
+      "name": "X Arm - Right with side tapped holes",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Right"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          -47.010268,
+          -39.348367,
+          93.753047
+        ],
+        "maximum": [
+          175.745732,
+          -25.548367,
+          130.583047
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/2/2",
+      "name": "Shaft X",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Right"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          -48.389864,
+          -66.422758,
+          107.843594
+        ],
+        "maximum": [
+          141.610136,
+          -54.422758,
+          119.843594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/2/3",
+      "name": "Ballscrew - X",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Right"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          -13.889864,
+          -66.422758,
+          68.843594
+        ],
+        "maximum": [
+          144.110136,
+          -54.422758,
+          80.843594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/2/4",
+      "name": "X Shaft Support",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame",
+        "X Drive and Frame - Right"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          -46.899864,
+          -69.422758,
+          98.078594
+        ],
+        "maximum": [
+          -36.739864,
+          -39.422758,
+          122.843594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/0/3",
+      "name": "-34 X Linkage - Machined",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Internal Frame"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          -46.899863,
+          -444.222768,
+          130.583594
+        ],
+        "maximum": [
+          54.700137,
+          -25.622768,
+          140.108594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/1",
+      "name": "Electronics",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/1/0",
+      "name": "Emergency-Stop Actuator",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Electronics"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          178.741216,
+          -465.941678,
+          16.017633
+        ],
+        "maximum": [
+          202.341216,
+          -417.941678,
+          39.617633
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/0/1/1",
+      "name": "IEC AC Power Inlet",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Electronics"
+      ],
+      "kind": "assembly",
+      "componentID": "base"
+    },
+    {
+      "path": "0/0/1/1/0",
+      "name": "IEC C14 Inlet - Draft Leads",
+      "ancestors": [
+        "CNC simplified v31",
+        "01 Fixed Frame and Drives",
+        "Electronics",
+        "IEC AC Power Inlet"
+      ],
+      "kind": "shape",
+      "componentID": "base",
+      "boundsMM": {
+        "minimum": [
+          92.526107,
+          -52.657801,
+          354.927714
+        ],
+        "maximum": [
+          128.340107,
+          -28.273801,
+          382.867714
+        ]
+      },
+      "solidCount": 2
+    },
+    {
+      "path": "0/1",
+      "name": "02 Y Carriage and Z Guides",
+      "ancestors": [
+        "CNC simplified v31"
+      ],
+      "kind": "assembly",
+      "componentID": "y"
+    },
+    {
+      "path": "0/1/0",
+      "name": "Z Drive Motor and Belt",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides"
+      ],
+      "kind": "assembly",
+      "componentID": "y"
+    },
+    {
+      "path": "0/1/0/0",
+      "name": "NEMA 17 Motor",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides",
+        "Z Drive Motor and Belt"
+      ],
+      "kind": "shape",
+      "componentID": "y",
+      "boundsMM": {
+        "minimum": [
+          156.387373,
+          -226.246617,
+          278.883594
+        ],
+        "maximum": [
+          209.460775,
+          -168.138487,
+          343.383594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/1/1",
+      "name": "Z Ballscrew Support",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides"
+      ],
+      "kind": "assembly",
+      "componentID": "y"
+    },
+    {
+      "path": "0/1/1/0",
+      "name": "Ballscrew Subassembly - Z",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides",
+        "Z Ballscrew Support"
+      ],
+      "kind": "assembly",
+      "componentID": "y"
+    },
+    {
+      "path": "0/1/1/0/0",
+      "name": "Ballscrew - Z",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides",
+        "Z Ballscrew Support",
+        "Ballscrew Subassembly - Z"
+      ],
+      "kind": "shape",
+      "componentID": "y",
+      "boundsMM": {
+        "minimum": [
+          137.560136,
+          -183.121707,
+          194.953594
+        ],
+        "maximum": [
+          149.560136,
+          -171.121707,
+          365.953594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/1/1/1",
+      "name": "Ballscrew Shaft Mount",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides",
+        "Z Ballscrew Support"
+      ],
+      "kind": "shape",
+      "componentID": "y",
+      "boundsMM": {
+        "minimum": [
+          125.810136,
+          -194.871707,
+          322.905194
+        ],
+        "maximum": [
+          161.310136,
+          -159.371707,
+          360.223594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/1/2",
+      "name": "Carriage and Z Guides",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides"
+      ],
+      "kind": "assembly",
+      "componentID": "y"
+    },
+    {
+      "path": "0/1/2/0",
+      "name": "YZ Translator Unibody",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides",
+        "Carriage and Z Guides"
+      ],
+      "kind": "shape",
+      "componentID": "y",
+      "boundsMM": {
+        "minimum": [
+          132.190136,
+          -240.992708,
+          168.563594
+        ],
+        "maximum": [
+          193.150136,
+          -127.992707,
+          373.883594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/1/2/1",
+      "name": "Shaft Z",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides",
+        "Carriage and Z Guides"
+      ],
+      "kind": "shape",
+      "componentID": "y",
+      "boundsMM": {
+        "minimum": [
+          135.655136,
+          -143.121707,
+          168.563594
+        ],
+        "maximum": [
+          147.655136,
+          -131.121707,
+          374.563594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/1/2/2",
+      "name": "Shaft Z",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides",
+        "Carriage and Z Guides"
+      ],
+      "kind": "shape",
+      "componentID": "y",
+      "boundsMM": {
+        "minimum": [
+          135.655136,
+          -237.863707,
+          168.563594
+        ],
+        "maximum": [
+          147.655136,
+          -225.863707,
+          374.563594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/1/3",
+      "name": "Chip Guards - Y Carriage",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides"
+      ],
+      "kind": "assembly",
+      "componentID": "y"
+    },
+    {
+      "path": "0/1/3/0",
+      "name": "Chip Guard - YZ",
+      "ancestors": [
+        "CNC simplified v31",
+        "02 Y Carriage and Z Guides",
+        "Chip Guards - Y Carriage"
+      ],
+      "kind": "shape",
+      "componentID": "y",
+      "boundsMM": {
+        "minimum": [
+          64.675136,
+          -262.552707,
+          168.053054
+        ],
+        "maximum": [
+          152.290136,
+          -127.992707,
+          168.563594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/2",
+      "name": "03 Spindle Head",
+      "ancestors": [
+        "CNC simplified v31"
+      ],
+      "kind": "assembly",
+      "componentID": "z"
+    },
+    {
+      "path": "0/2/0",
+      "name": "Spindle Cartridge",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head"
+      ],
+      "kind": "assembly",
+      "componentID": "head"
+    },
+    {
+      "path": "0/2/0/0",
+      "name": "Spindle Shaft",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head",
+        "Spindle Cartridge"
+      ],
+      "kind": "shape",
+      "componentID": "head",
+      "boundsMM": {
+        "minimum": [
+          92.730136,
+          -189.495207,
+          118.263594
+        ],
+        "maximum": [
+          118.130136,
+          -164.095207,
+          295.963594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/2/0/1",
+      "name": "Spindle ER11A Nut",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head",
+        "Spindle Cartridge"
+      ],
+      "kind": "shape",
+      "componentID": "head",
+      "boundsMM": {
+        "minimum": [
+          95.430136,
+          -186.795208,
+          112.263594
+        ],
+        "maximum": [
+          115.430136,
+          -166.795207,
+          127.263594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/2/0/2",
+      "name": "ER 11 Collet 250 thou",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head",
+        "Spindle Cartridge"
+      ],
+      "kind": "shape",
+      "componentID": "head",
+      "boundsMM": {
+        "minimum": [
+          99.717324,
+          -182.508019,
+          111.967146
+        ],
+        "maximum": [
+          111.142948,
+          -171.082396,
+          129.967147
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/2/0/3",
+      "name": "Spindle Outer Tube",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head",
+        "Spindle Cartridge"
+      ],
+      "kind": "shape",
+      "componentID": "head",
+      "boundsMM": {
+        "minimum": [
+          87.967636,
+          -194.257708,
+          153.763594
+        ],
+        "maximum": [
+          122.892636,
+          -159.332707,
+          282.263594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/2/1",
+      "name": "Z Head Body",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head"
+      ],
+      "kind": "assembly",
+      "componentID": "z"
+    },
+    {
+      "path": "0/2/1/0",
+      "name": "Z Unibody",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head",
+        "Z Head Body"
+      ],
+      "kind": "shape",
+      "componentID": "z",
+      "boundsMM": {
+        "minimum": [
+          124.675136,
+          -246.405207,
+          178.723594
+        ],
+        "maximum": [
+          155.155136,
+          -122.580207,
+          283.723594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/2/2",
+      "name": "Upper Spindle Clamp",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head"
+      ],
+      "kind": "assembly",
+      "componentID": "z"
+    },
+    {
+      "path": "0/2/2/0",
+      "name": "Spindle - Upper Mount",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head",
+        "Upper Spindle Clamp"
+      ],
+      "kind": "shape",
+      "componentID": "z",
+      "boundsMM": {
+        "minimum": [
+          65.675136,
+          -262.552707,
+          271.023594
+        ],
+        "maximum": [
+          126.892636,
+          -142.795207,
+          283.723594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/2/3",
+      "name": "Lower Spindle Clamp",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head"
+      ],
+      "kind": "assembly",
+      "componentID": "z"
+    },
+    {
+      "path": "0/2/3/0",
+      "name": "Spindle Mount - Lower",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head",
+        "Lower Spindle Clamp"
+      ],
+      "kind": "shape",
+      "componentID": "z",
+      "boundsMM": {
+        "minimum": [
+          83.967636,
+          -201.510207,
+          150.723594
+        ],
+        "maximum": [
+          126.580136,
+          -152.080207,
+          208.223594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/2/4",
+      "name": "Spindle Motor and Belt Drive",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head"
+      ],
+      "kind": "assembly",
+      "componentID": "z"
+    },
+    {
+      "path": "0/2/4/0",
+      "name": "Spindle Motor - NEMA 23",
+      "ancestors": [
+        "CNC simplified v31",
+        "03 Spindle Head",
+        "Spindle Motor and Belt Drive"
+      ],
+      "kind": "shape",
+      "componentID": "z",
+      "boundsMM": {
+        "minimum": [
+          66.975136,
+          -259.152708,
+          169.023594
+        ],
+        "maximum": [
+          123.375136,
+          -202.752707,
+          294.023594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/3",
+      "name": "04 X Table",
+      "ancestors": [
+        "CNC simplified v31"
+      ],
+      "kind": "assembly",
+      "componentID": "table"
+    },
+    {
+      "path": "0/3/0",
+      "name": "X Unibody",
+      "ancestors": [
+        "CNC simplified v31",
+        "04 X Table"
+      ],
+      "kind": "shape",
+      "componentID": "table",
+      "boundsMM": {
+        "minimum": [
+          1.260136,
+          -429.422758,
+          54.913594
+        ],
+        "maximum": [
+          15.865136,
+          -44.422758,
+          129.843594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/3/1",
+      "name": "Chip Guards - X Table",
+      "ancestors": [
+        "CNC simplified v31",
+        "04 X Table"
+      ],
+      "kind": "assembly",
+      "componentID": "table"
+    },
+    {
+      "path": "0/3/1/0",
+      "name": "Table Chip Guard - Right",
+      "ancestors": [
+        "CNC simplified v31",
+        "04 X Table",
+        "Chip Guards - X Table"
+      ],
+      "kind": "assembly",
+      "componentID": "table"
+    },
+    {
+      "path": "0/3/1/0/0",
+      "name": "Chip Guard - X Right - RevC",
+      "ancestors": [
+        "CNC simplified v31",
+        "04 X Table",
+        "Chip Guards - X Table",
+        "Table Chip Guard - Right"
+      ],
+      "kind": "shape",
+      "componentID": "table",
+      "boundsMM": {
+        "minimum": [
+          9.260575,
+          -83.877952,
+          40.961399
+        ],
+        "maximum": [
+          121.020575,
+          -33.077952,
+          144.961399
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/3/1/1",
+      "name": "Table Chip Guard - Left",
+      "ancestors": [
+        "CNC simplified v31",
+        "04 X Table",
+        "Chip Guards - X Table"
+      ],
+      "kind": "assembly",
+      "componentID": "table"
+    },
+    {
+      "path": "0/3/1/1/0",
+      "name": "Chip Guard - X Left - RevC",
+      "ancestors": [
+        "CNC simplified v31",
+        "04 X Table",
+        "Chip Guards - X Table",
+        "Table Chip Guard - Left"
+      ],
+      "kind": "shape",
+      "componentID": "table",
+      "boundsMM": {
+        "minimum": [
+          9.311657,
+          -440.784448,
+          40.86058
+        ],
+        "maximum": [
+          121.071657,
+          -389.984448,
+          144.86058
+        ]
+      },
+      "solidCount": 2
+    },
+    {
+      "path": "0/4",
+      "name": "Cover",
+      "ancestors": [
+        "CNC simplified v31"
+      ],
+      "kind": "assembly",
+      "componentID": "cover"
+    },
+    {
+      "path": "0/4/0",
+      "name": "Back Plate",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover"
+      ],
+      "kind": "assembly",
+      "componentID": "cover"
+    },
+    {
+      "path": "0/4/0/0",
+      "name": "Rear Cover",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover",
+        "Back Plate"
+      ],
+      "kind": "shape",
+      "componentID": "cover",
+      "boundsMM": {
+        "minimum": [
+          -47.248024,
+          -445.914758,
+          365.057714
+        ],
+        "maximum": [
+          217.206136,
+          -23.422758,
+          379.057714
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/4/1",
+      "name": "Enclosure",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover"
+      ],
+      "kind": "assembly",
+      "componentID": "cover"
+    },
+    {
+      "path": "0/4/1/0",
+      "name": "Outer Enclosure",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover",
+        "Enclosure"
+      ],
+      "kind": "shape",
+      "componentID": "cover",
+      "boundsMM": {
+        "minimum": [
+          -50.539864,
+          -447.941678,
+          -0.175326
+        ],
+        "maximum": [
+          218.979056,
+          -21.903838,
+          379.343594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/4/1/1",
+      "name": "Handle",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover",
+        "Enclosure"
+      ],
+      "kind": "shape",
+      "componentID": "cover",
+      "boundsMM": {
+        "minimum": [
+          148.401216,
+          -449.211678,
+          165.738594
+        ],
+        "maximum": [
+          160.466216,
+          -445.084178,
+          248.288594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/4/1/2",
+      "name": "Handle",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover",
+        "Enclosure"
+      ],
+      "kind": "shape",
+      "componentID": "cover",
+      "boundsMM": {
+        "minimum": [
+          148.401216,
+          -24.761338,
+          165.738594
+        ],
+        "maximum": [
+          160.466216,
+          -20.633838,
+          248.288594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/4/2",
+      "name": "Chip Guards",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover"
+      ],
+      "kind": "assembly",
+      "componentID": "cover"
+    },
+    {
+      "path": "0/4/2/0",
+      "name": "Chip Guard - X Top",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover",
+        "Chip Guards"
+      ],
+      "kind": "shape",
+      "componentID": "cover",
+      "boundsMM": {
+        "minimum": [
+          109.510136,
+          -419.942758,
+          5.788594
+        ],
+        "maximum": [
+          217.460136,
+          -386.922758,
+          159.293594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/4/2/1",
+      "name": "Chip Guard - Y Sides - RevA",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover",
+        "Chip Guards"
+      ],
+      "kind": "shape",
+      "componentID": "cover",
+      "boundsMM": {
+        "minimum": [
+          205.379624,
+          -267.437482,
+          265.139332
+        ],
+        "maximum": [
+          216.879624,
+          -104.117482,
+          277.839332
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/4/2/2",
+      "name": "Chip Guard - X Top",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover",
+        "Chip Guards"
+      ],
+      "kind": "shape",
+      "componentID": "cover",
+      "boundsMM": {
+        "minimum": [
+          109.510136,
+          -86.922758,
+          5.788594
+        ],
+        "maximum": [
+          217.460136,
+          -53.902758,
+          159.293594
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/4/2/3",
+      "name": "Y Upper Chip Guard",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover",
+        "Chip Guards"
+      ],
+      "kind": "assembly",
+      "componentID": "cover"
+    },
+    {
+      "path": "0/4/2/3/0",
+      "name": "Chip Guard - Y Top",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover",
+        "Chip Guards",
+        "Y Upper Chip Guard"
+      ],
+      "kind": "shape",
+      "componentID": "cover",
+      "boundsMM": {
+        "minimum": [
+          192.110136,
+          -421.722758,
+          150.603594
+        ],
+        "maximum": [
+          216.960136,
+          -52.122758,
+          205.053054
+        ]
+      },
+      "solidCount": 1
+    },
+    {
+      "path": "0/4/3",
+      "name": "Front Cover",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover"
+      ],
+      "kind": "assembly",
+      "componentID": "cover"
+    },
+    {
+      "path": "0/4/3/0",
+      "name": "Chip Guard - Front Cover - RevC .500 longer all sides",
+      "ancestors": [
+        "CNC simplified v31",
+        "Cover",
+        "Front Cover"
+      ],
+      "kind": "shape",
+      "componentID": "cover",
+      "boundsMM": {
+        "minimum": [
+          -7.293529,
+          -415.536652,
+          -4.337173
+        ],
+        "maximum": [
+          223.106471,
+          -59.707452,
+          185.743827
+        ]
+      },
+      "solidCount": 1
+    }
+  ]
+}

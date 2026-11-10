@@ -8,6 +8,8 @@ public enum ToolLibraryImport {
         public var tools: [Tool]
         /// Entries that were skipped, with the reason (e.g. holders, probes, unknown types).
         public var skipped: [String]
+        /// Defaults inferred from incomplete Fusion geometry, for review before installation.
+        public var warnings: [String] = []
     }
 
     public enum ImportError: Error, CustomStringConvertible {
@@ -43,6 +45,8 @@ public enum ToolLibraryImport {
         }
         var tools: [Tool] = []
         var skipped: [String] = []
+        var warnings: [String] = []
+        var convertedInches = false
         for e in entries {
             let typeName = e["type"] as? String ?? "?"
             let description = (e["description"] as? String ?? "").trimmingCharacters(in: .whitespaces)
@@ -52,9 +56,17 @@ public enum ToolLibraryImport {
             }
             let g = e["geometry"] as? [String: Any] ?? [:]
             // Fusion stores lengths in the library's unit ("inches" or "millimeters").
-            let scale = (e["unit"] as? String ?? "").lowercased().hasPrefix("inch") ? 25.4 : 1.0
+            let unit = (e["unit"] as? String ?? "").lowercased()
+            let scale: Double
+            switch unit {
+            case "inches", "inch", "in": scale = 25.4
+            case "millimeters", "millimetres", "millimeter", "millimetre", "mm": scale = 1
+            default:
+                skipped.append("\(typeName) \(description): missing or unsupported units \(unit)")
+                continue
+            }
             func len(_ key: String) -> Double? { (g[key] as? Double).map { $0 * scale } }
-            guard let diameter = len("DC"), diameter > 0 else {
+            guard let diameter = len("DC"), diameter.isFinite, diameter > 0 else {
                 skipped.append("\(typeName) \(description): no diameter")
                 continue
             }
@@ -63,6 +75,11 @@ public enum ToolLibraryImport {
             let number = (e["post-process"] as? [String: Any])?["number"] as? Int
             let fluteLength = len("LCF") ?? diameter * 2
             let stickout = len("LB") ?? len("assemblyGaugeLength") ?? fluteLength + 5
+            let rawFlutes = (g["NOF"] as? NSNumber)?.doubleValue
+            guard rawFlutes == nil || (rawFlutes!.isFinite && rawFlutes! > 0 && rawFlutes! <= Double(Int32.max) && rawFlutes!.rounded() == rawFlutes!) else {
+                skipped.append("\(typeName) \(description): invalid flute count")
+                continue
+            }
 
             var tool = Tool(
                 name: displayName(vendor: vendor, product: product, description: description, kind: kind, diameter: diameter),
@@ -72,7 +89,7 @@ public enum ToolLibraryImport {
                 productLink: e["product-link"] as? String ?? "",
                 diameter: diameter,
                 shankDiameter: len("SFDM") ?? diameter,
-                flutes: g["NOF"] as? Int ?? (g["NOF"] as? Double).map(Int.init) ?? 2,
+                flutes: rawFlutes.map(Int.init) ?? 2,
                 fluteLength: fluteLength,
                 stickout: stickout,
                 overallLength: len("OAL") ?? stickout + 20,
@@ -86,9 +103,41 @@ public enum ToolLibraryImport {
                 source: "Fusion library \(sourceName)" + (number.map { ", T\($0)" } ?? "")
             )
             tool.presets = presets(e, scale: scale)
+            // Fusion GUIDs are stable across exports, filenames and cutting-data edits.
+            // For vendors without a GUID, normalized geometry gives repeatable identities.
+            if let guid = e["guid"] as? String, !guid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let normalized = guid.trimmingCharacters(in: CharacterSet(charactersIn: "{} ")).lowercased()
+                tool.id = UUID(uuidString: normalized) ?? ResourceLibraryImport.stableID("fusion-guid:" + normalized)
+            } else {
+                var identity = tool
+                identity.id = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+                identity.source = ""; identity.presets = []; identity.productLink = ""
+                // The generated display name already includes the vendor and part number.
+                // Keep the description only for uncatalogued tools of otherwise identical geometry.
+                identity.intendedFor = product.isEmpty ? description : ""
+                tool.id = ResourceLibraryImport.stableID("fusion-tool:" + (try ResourceLibraryImport.canonicalString(identity)))
+            }
+            let problems = ResourceLibraryValidation.issues(for: tool)
+            guard problems.isEmpty else {
+                skipped.append("\(tool.name): " + problems.joined(separator: " "))
+                continue
+            }
+            var inferred: [String] = []
+            if len("SFDM") == nil { inferred.append("shank diameter") }
+            if len("LCF") == nil { inferred.append("flute length") }
+            if len("LB") == nil && len("assemblyGaugeLength") == nil { inferred.append("stickout") }
+            if len("OAL") == nil { inferred.append("overall length") }
+            if rawFlutes == nil { inferred.append("flute count") }
+            if !inferred.isEmpty { warnings.append("\(tool.name): inferred \(inferred.joined(separator: ", ")); check these dimensions before cutting.") }
+            if tools.contains(where: { $0.id == tool.id }) {
+                skipped.append("\(tool.name): repeated tool identity in this Fusion library")
+                continue
+            }
             tools.append(tool)
+            if scale == 25.4 { convertedInches = true }
         }
-        return Result(tools: tools, skipped: skipped)
+        if convertedInches { warnings.append("Converted Fusion inch tool dimensions and feeds to millimetres and mm/min.") }
+        return Result(tools: tools, skipped: skipped, warnings: warnings)
     }
 
     static func kind(for fusionType: String) -> Tool.Kind? {
@@ -124,7 +173,9 @@ public enum ToolLibraryImport {
     }
 
     static func displayName(vendor: String, product: String, description: String, kind: Tool.Kind, diameter: Double) -> String {
-        let size = Length.inchFraction(diameter) ?? "\(Length.mm(diameter)) mm"
+        // Avoid an integer conversion overflow in inch-fraction formatting for malformed huge values.
+        let fraction = diameter < Double(Int.max) / 64 ? Length.inchFraction(diameter) : nil
+        let size = fraction ?? "\(Length.mm(diameter)) mm"
         let what = "\(size) \(kind.title.lowercased())"
         let maker = [vendor, product].filter { !$0.isEmpty }.joined(separator: " ")
         return maker.isEmpty ? what : "\(what) · \(maker)"

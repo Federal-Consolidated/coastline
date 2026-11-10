@@ -43,7 +43,9 @@ public actor EngineClient {
         let tail = log
         errors.fileHandleForReading.readabilityHandler = { handle in
             let data = handle.availableData
-            if !data.isEmpty { tail.append(data) }
+            // Empty at end of file (the engine stopped): stop reading, or this is called
+            // again at once, forever (a whole core per stopped engine).
+            if data.isEmpty { handle.readabilityHandler = nil } else { tail.append(data) }
         }
         try process.run()
     }
@@ -140,12 +142,64 @@ public struct MeshData: Sendable {
     public var partID: String = ""
     public var warnings: [String] = []
 
+    public init(vertices: [Float], normals: [Float], indices: [UInt32], boundsMin: Vec3, boundsMax: Vec3,
+                exact: Bool, faceCount: Int, partID: String = "", warnings: [String] = []) {
+        self.vertices = vertices; self.normals = normals; self.indices = indices
+        self.boundsMin = boundsMin; self.boundsMax = boundsMax; self.exact = exact
+        self.faceCount = faceCount; self.partID = partID; self.warnings = warnings
+    }
+
     public var vertexCount: Int { vertices.count / 3 }
     public var triangleCount: Int { indices.count / 3 }
     public var size: Vec3 { Vec3(boundsMax.x - boundsMin.x, boundsMax.y - boundsMin.y, boundsMax.z - boundsMin.z) }
 }
 
 extension EngineClient {
+    /// Import exact STEP occurrences using an audited mechanical definition. Unlike the
+    /// legacy solid list, these IDs never depend on flattened solid traversal order.
+    public func fixtureAssembly(partID: String, definition: FixtureAssemblyDefinition) throws -> [FixtureAssemblyPart] {
+        try definition.validate()
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(definition))
+        let response = try call("fixture_assembly", ["part_id": partID, "definition": object])
+        guard let metadata = response.result["parts"] as? [[String: Any]], !metadata.isEmpty,
+              response.blobs.count == metadata.count * 3 else {
+            throw EngineError(type: "Fixture", message: "The vetted fixture did not return its exact CAD bodies.")
+        }
+        return try metadata.enumerated().map { index, item in
+            guard let component = item["component_id"] as? String, let path = item["entity_path"] as? String,
+                  let solidIndex = item["solid_index"] as? Int, solidIndex >= 0,
+                  let lo = item["bounds_min"] as? [Double], lo.count == 3,
+                  let hi = item["bounds_max"] as? [Double], hi.count == 3,
+                  (lo + hi).allSatisfy(\.isFinite),
+                  let faces = item["face_count"] as? Int, faces > 0,
+                  (0..<3).allSatisfy({ response.blobs[index * 3 + $0].count % 4 == 0 }) else {
+                throw EngineError(type: "Fixture", message: "The fixture engine returned invalid CAD body metadata.")
+            }
+            let mesh = MeshData(vertices: response.blobs[index * 3].littleEndianArray(of: Float.self),
+                                normals: response.blobs[index * 3 + 1].littleEndianArray(of: Float.self),
+                                indices: response.blobs[index * 3 + 2].littleEndianArray(of: UInt32.self),
+                                boundsMin: Vec3(lo[0], lo[1], lo[2]), boundsMax: Vec3(hi[0], hi[1], hi[2]),
+                                exact: true, faceCount: faces, partID: partID)
+            return FixtureAssemblyPart(componentID: component, entityPath: path, solidIndex: solidIndex, mesh: mesh)
+        }
+    }
+
+    public func fixtureSolids(partID: String) throws -> [MeshData] {
+        let response = try call("fixture_solids", ["part_id": partID])
+        let metadata = response.result["solids"] as? [[String: Any]] ?? []
+        guard !metadata.isEmpty, response.blobs.count == 3 * metadata.count else {
+            throw EngineError(type: "Fixture", message: "The fixture does not contain valid closed solids.")
+        }
+        return metadata.enumerated().map { index, item in
+            let lo = item["bounds_min"] as? [Double] ?? [0, 0, 0], hi = item["bounds_max"] as? [Double] ?? [0, 0, 0]
+            return MeshData(vertices: response.blobs[index * 3].littleEndianArray(of: Float.self),
+                            normals: response.blobs[index * 3 + 1].littleEndianArray(of: Float.self),
+                            indices: response.blobs[index * 3 + 2].littleEndianArray(of: UInt32.self),
+                            boundsMin: Vec3(lo[0], lo[1], lo[2]), boundsMax: Vec3(hi[0], hi[1], hi[2]), exact: true,
+                            faceCount: item["face_count"] as? Int ?? 0, partID: partID, warnings: [])
+        }
+    }
+
     /// Imports STEP / IGES / 3DM. Units are converted to mm by the engine.
     public func importPart(_ url: URL, linearDeflection: Double = 0.01) throws -> MeshData {
         let r = try call("import_part", ["path": url.path, "linear_deflection": linearDeflection])
@@ -188,6 +242,35 @@ extension EngineClient {
                             tSlotZ: r.result["tslot_z"] as? [Double] ?? [-53.5, -13.4])
     }
 
+    /// Geometry for a reviewed package, kept at its authored reference pose. Component IDs
+    /// are motion groups; the caller applies MachineDefinition.worldTranslation to each.
+    /// This does not select a machine or send controller commands.
+    public func machineProfileParts(_ manifest: URL, cacheDirectory: URL? = nil) throws -> [MachineModel.Part] {
+        var parameters: [String: Any] = ["manifestPath": manifest.path]
+        if let cacheDirectory { parameters["cache_dir"] = cacheDirectory.path }
+        let r = try call("machine_model", parameters)
+        guard let meta = r.result["parts"] as? [[String: Any]], !meta.isEmpty,
+              r.blobs.count == meta.count * 3, r.blobs.allSatisfy({ $0.count % 4 == 0 }) else {
+            throw MachineDefinitionError("The machine profile returned incomplete model geometry.")
+        }
+        return try meta.enumerated().map { i, m in
+            let v = r.blobs[3 * i].littleEndianArray(of: Float.self)
+            let n = r.blobs[3 * i + 1].littleEndianArray(of: Float.self)
+            let t = r.blobs[3 * i + 2].littleEndianArray(of: UInt32.self)
+            guard let group = m["group"] as? String, !group.isEmpty,
+                  let c = m["color"] as? [Double], c.count == 3, c.allSatisfy({ $0.isFinite && (0...1).contains($0) }),
+                  !v.isEmpty, v.count % 3 == 0, n.count == v.count,
+                  !t.isEmpty, t.count % 3 == 0, t.allSatisfy({ Int($0) < v.count / 3 }),
+                  v.allSatisfy(\.isFinite), n.allSatisfy(\.isFinite) else {
+                throw MachineDefinitionError("The machine profile returned invalid mesh data.")
+            }
+            return MachineModel.Part(group: group, role: m["role"] as? String ?? "",
+                                     color: SIMD3(Float(c[0]), Float(c[1]), Float(c[2])),
+                                     mesh: MeshData(vertices: v, normals: n, indices: t,
+                                                    boundsMin: .zero, boundsMax: .zero, exact: false, faceCount: 0))
+        }
+    }
+
     /// The clamp kit's parts (universal clamp, spacers, acetal brick, eccentric clamps),
     /// each in its kit's local frame (see `UniversalClamp`).
     public func fixtureKit() throws -> [FixturePart] {
@@ -214,13 +297,16 @@ extension EngineClient {
 /// The machine assembly for the viewport. Coordinates are the machine axes (see `Setup`).
 public struct MachineModel: Sendable {
     public struct Part: Sendable {
-        /// "static", "x", "y" or "z": which axis moves it.
+        /// Authored component ID; legacy models use "static", "x", "y" or "z".
         public var group: String
         /// "enclosure", "aluminium", "steel", "motor", …
         public var role: String
         /// Linear RGB.
         public var color: SIMD3<Float>
         public var mesh: MeshData
+        public init(group: String, role: String, color: SIMD3<Float>, mesh: MeshData) {
+            self.group = group; self.role = role; self.color = color; self.mesh = mesh
+        }
     }
     public var parts: [Part]
     /// The collet nut face on the spindle axis, in model coordinates (mm).

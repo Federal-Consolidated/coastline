@@ -26,7 +26,7 @@ extension AppModel {
         if partHeights?.key != key {
             do {
                 let engine = try await liveEngine()
-                let t = setupFor(side: twoSided ? viewSide : 0).partToWork(partMin: part.boundsMin, partMax: part.boundsMax)
+                let t = setupFor(side: twoSided || viewSide >= 2 ? viewSide : 0).partToWork(partMin: part.boundsMin, partMax: part.boundsMax)
                 let h = try await engine.heightField(partID: part.partID, transform: t, origin: hm.origin, cell: hm.cell,
                                                      cols: hm.cols, rows: hm.rows)
                 partHeights = (key, h)

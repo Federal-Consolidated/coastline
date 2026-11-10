@@ -78,8 +78,8 @@ public struct Operation: Identifiable, Equatable, Sendable, Codable {
     }
 
     /// Cutting data with the user's overrides applied.
-    public func cuttingData(tool: Tool, material: Material) -> CuttingData {
-        var data = FeedsEngine.compute(tool: tool, material: material, kind: kind, roughing: roughing ?? .thinned)
+    public func cuttingData(tool: Tool, material: Material, machine: MachineProfile = .standard) -> CuttingData {
+        var data = FeedsEngine.compute(tool: tool, material: material, kind: kind, machine: machine, roughing: roughing ?? .thinned)
         if kind.is3D {
             data.stepover = FeedsEngine.scallopStepover(tool: tool, cusp: scallop)
             data.stepdown = data.stepover
@@ -87,7 +87,7 @@ public struct Operation: Identifiable, Equatable, Sendable, Codable {
             data.notes.append("Stepover \(Length.mm(data.stepover)) mm leaves cusps about \(Int((scallop * 1000).rounded())) µm high.")
         }
         if abs(feedScale - 1) > 1e-6 {
-            let cap = MachineProfile.standard.maxFeedAnyDirection
+            let cap = machine.maxFeedAnyDirection
             data.feed = min((data.feed * feedScale).rounded(), cap)
             data.plungeFeed = min((data.plungeFeed * feedScale).rounded(), cap)
             data.rampFeed = min((data.rampFeed * feedScale).rounded(), cap)
@@ -105,10 +105,10 @@ public struct Operation: Identifiable, Equatable, Sendable, Codable {
 public enum OperationPlanner {
     /// Tools the planner may use: owned, not broken, and with a matching collet.
     /// - includeSuggestions: also the tools Coastline suggests buying (ToolCatalog).
-    public static func usableTools(_ inventory: Inventory, includeSuggestions: Bool = false) -> [Tool] {
+    public static func usableTools(_ inventory: Inventory, includeSuggestions: Bool = false, machine: MachineProfile = .standard) -> [Tool] {
         inventory.tools.filter { t in
             (t.quantity > 0 || (includeSuggestions && t.isSuggestion)) && t.condition != .broken
-                && InventoryChecks.check(t, inventory: inventory).allSatisfy { $0.severity < .error }
+                && InventoryChecks.check(t, machine: machine, inventory: inventory).allSatisfy { $0.severity < .error }
                 && inventory.colletSizes.contains { abs($0 - t.shankDiameter) <= 0.05 }
         }
     }
@@ -123,16 +123,20 @@ public enum OperationPlanner {
     ///   - freeform: the part has surfaces 2.5D operations can't finish (domes, fillets…).
     ///   - minConcaveRadius: the tightest concave curvature on those surfaces, if any.
     public static func propose(inventory: Inventory, holeDiameters: [Double] = [], hasFloors: Bool = false,
-                               freeform: Bool = false, minConcaveRadius: Double? = nil) -> Proposal {
-        let tools = usableTools(inventory)
+                               freeform: Bool = false, minConcaveRadius: Double? = nil, faceDepth: Double = 0.25, machine: MachineProfile = .standard) -> Proposal {
+        let tools = usableTools(inventory, machine: machine)
         let flats = tools.filter { $0.kind == .flatEndMill }.sorted { $0.diameter > $1.diameter }
         var ops: [Operation] = []
         var notes: [String] = []
         guard let rougher = flats.first(where: { $0.diameter <= 6.36 }) ?? flats.first else {
             return Proposal(operations: [], notes: ["No usable flat end mill in your inventory (check quantities and collets)."])
         }
-        ops.append(Operation(kind: .facing, toolID: rougher.id, faceDepth: 0.25))  // one 0.25 mm pass [FS]
-        notes.append("Facing and roughing with the \(rougher.name): the largest end mill you can hold, for speed and rigidity.")
+        if faceDepth > 1e-6 {
+            ops.append(Operation(kind: .facing, toolID: rougher.id, faceDepth: faceDepth))
+        } else {
+            notes.append("Zero face allowance: keep the existing stock face, with no facing operation.")
+        }
+        notes.append("Roughing with the \(rougher.name): the largest end mill you can hold, for speed and rigidity.")
         var rough = Operation(kind: .adaptive, toolID: rougher.id, leaveRadial: 0.2, leaveAxial: 0.1)
         if freeform {
             // Shallow steps leave small terraces on curved surfaces, so the ball finisher

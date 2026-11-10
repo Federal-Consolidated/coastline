@@ -34,7 +34,11 @@ class Toolpath:
         self._add(RAPID, LINE, x, y, z)
 
     def line(self, x, y, z, f, role=CUT):
-        if self.pos is not None and np.allclose(self.pos, (x, y, z), atol=1e-6):
+        q = self.pos
+        # np.allclose(pos, (x, y, z), atol=1e-6) written out: it ran for every point (a third
+        # of the time of a long roughing pass).
+        if q is not None and abs(q[0] - x) <= 1e-6 + 1e-5 * abs(x) and abs(q[1] - y) <= 1e-6 + 1e-5 * abs(y) \
+                and abs(q[2] - z) <= 1e-6 + 1e-5 * abs(z):
             return
         self._add(role, LINE, x, y, z, f=f)
 
@@ -61,15 +65,23 @@ class Toolpath:
                 self.line(x, y, air, link_feed, LINK)
             self.line(x, y, z, plunge_feed, PLUNGE)
 
-    def polyline(self, pts: np.ndarray, z: float, f: float, role=CUT, arc_tol: float | None = 0.005):
-        """Follows XY points at height z, fitting arcs where they match within `arc_tol`."""
+    def polyline(self, pts: np.ndarray, z: float, f: float, role=CUT, arc_tol: float | None = 0.005, fitted=None):
+        """Follows XY points at height z, fitting arcs where they match within `arc_tol`.
+        `fitted`: a dict keeping each fit by a key, for the same points cut at another height."""
         from .arcfit import fit
 
         if arc_tol is None or len(pts) < 4:
             for p in pts:
                 self.line(p[0], p[1], z, f, role)
             return
-        for seg in fit(pts, arc_tol):
+        if fitted is None:
+            segs = fit(pts, arc_tol)
+        else:
+            key, cache = fitted
+            segs = cache.get(key)
+            if segs is None:
+                segs = cache[key] = fit(pts, arc_tol)
+        for seg in segs:
             if seg[0] == "line":
                 self.line(seg[1][0], seg[1][1], z, f, role)
             else:

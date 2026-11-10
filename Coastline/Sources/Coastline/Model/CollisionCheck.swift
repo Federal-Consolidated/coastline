@@ -49,24 +49,47 @@ extension AppModel {
     /// The machine's fixed parts and the table (as modelled, with the table at its setup pose),
     /// built once: it's the largest mesh.
     func machineCollisionTree() async -> TriangleTree? {
-        if let t = machineTree { return t }
-        if let running = machineTreeTask { return await running.value }
         guard let mm = machineModel else { return nil }
-        let parts = mm.parts.filter { $0.group == "static" || $0.group == "x" }
+        let reference = planningMachineReference
+        var offsetByGroup: [String: Vec3] = [:]
+        let parts: [MachineModel.Part]
+        var key = "legacy"
+        if let geometry = planningGeometry {
+            guard let translations = try? geometry.componentTranslations(at: Vec3(machinePosition.x, machinePosition.y, machinePosition.z)),
+                  let table = translations[geometry.tableComponentID] else { return nil }
+            key = "\(reference.reference.id):\(reference.reference.revision):\(table.x),\(table.y),\(table.z)"
+            parts = mm.parts.filter { !geometry.isMoving(componentID: $0.group) || geometry.movesWithTable(componentID: $0.group) }
+            for (id, t) in translations {
+                offsetByGroup[id] = Vec3(t.x - table.x, t.y - table.y, t.z - table.z)
+            }
+        } else { parts = mm.parts.filter { $0.group == "static" || $0.group == "x" } }
+        if machineTreeKey == key {
+            if let tree = machineTree { return tree }
+            if let running = machineTreeTask { return await running.value }
+        }
+        machineTreeTask?.cancel()
+        machineTree = nil
+        machineTreeKey = key
+        let token = UUID()
+        machineTreeTaskID = token
+        let offsets = offsetByGroup
         // One build, shared by everyone who asks while it runs.
         let task = Task.detached(priority: .utility) { () -> TriangleTree? in
             var tris: [SIMD3<Double>] = []
             for p in parts {
+                if Task.isCancelled { return nil }
+                let offset = offsets[p.group] ?? .zero
                 let v = p.mesh.vertices
                 for idx in p.mesh.indices {
                     let i = Int(idx) * 3
-                    tris.append(SIMD3(Double(v[i]), Double(v[i + 1]), Double(v[i + 2])))
+                    tris.append(SIMD3(Double(v[i]) + offset.x, Double(v[i + 1]) + offset.y, Double(v[i + 2]) + offset.z))
                 }
             }
             return TriangleTree(tris)
         }
         machineTreeTask = task
         let tree = await task.value
+        guard machineTreeTaskID == token, planningMachineReference == reference else { return nil }
         machineTree = tree
         machineTreeTask = nil
         return tree
@@ -83,7 +106,10 @@ extension AppModel {
         // The stock as shown (a box; the simulation's cut shape doesn't matter here).
         let o = workOrigin(stockSize: stockSize)
         var all = bodies
-        if showingShoulders {
+        if setup.planFromFixtureLibrary {
+            // Library planning checks fixture occupancy against accumulated remaining stock.
+            // The original blank box would incorrectly reject a locating nest used later.
+        } else if showingShoulders {
             all.append(BedBody(name: "the stock", meshPrefix: "stock", shape: .triangles(setup.stockTriangles(stockSize: stockSize).map { $0 + o })))
         } else {
             all.append(BedBody(name: "the stock", meshPrefix: "stock", shape: .box(SIMD3(o.x - stockSize.x / 2, o.y - stockSize.y / 2, o.z - stockSize.z),
@@ -189,7 +215,7 @@ extension AppModel {
     /// Where The C-clamp model sits for a pad point and a turn about its screw (kit x → up,
     /// y → away from the spindle, z → across; the fixed jaw under the table).
     func cClampTransform(pad c: SIMD3<Double>, angle a: Double) -> simd_double4x4 {
-        let under = prepTable.topX - FlatPrep.tableThickness
+        let under = prepTable.topX - prepTable.thickness
         let turn = simd_double4x4(columns: (SIMD4(1, 0, 0, 0), SIMD4(0, cos(a), sin(a), 0), SIMD4(0, -sin(a), cos(a), 0), SIMD4(0, 0, 0, 1)))
         return simd_double4x4(columns: (SIMD4(1, 0, 0, 0), SIMD4(0, 1, 0, 0), SIMD4(0, 0, 1, 0), SIMD4(under, c.y, c.z, 1)))
             * turn * simd_double4x4(columns: (SIMD4(1, 0, 0, 0), SIMD4(0, 0, -1, 0), SIMD4(0, 1, 0, 0), SIMD4(0, 0, 0, 1)))
@@ -197,7 +223,7 @@ extension AppModel {
 
     /// The C-clamp's world triangles for a pad point and angle.
     func cClampTriangles(pad c: SIMD3<Double>, angle a: Double) -> [SIMD3<Double>] {
-        let under = prepTable.topX - FlatPrep.tableThickness
+        let under = prepTable.topX - prepTable.thickness
         var tris: [SIMD3<Double>] = []
         for (j, t) in kitPartTransforms(kit: "cclamp", transform: cClampTransform(pad: c, angle: a), screwSlide: (c.x - under) - Self.cClampPadAt) {
             let m = kitParts[j].mesh, v = m.vertices

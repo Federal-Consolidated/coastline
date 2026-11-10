@@ -80,7 +80,7 @@ def test_pendant_bottom_fillet_is_an_undercut_and_the_dome_is_convex():
     # be cut from the back (a second setup). Its area is the torus band (~116 mm²).
     assert r["undercut_area"] == pytest.approx(116.1, abs=1)
     assert r["min_concave_radius"] is None, "the dome is convex"
-    assert r["min_corner_radius"] == pytest.approx(1.2, abs=1e-6)  # the bail hole
+    assert r["min_corner_radius"] is None  # the R1.2 bail hole is a full hole, not an inside corner
     assert r["thinnest_wall"] is None
 
 

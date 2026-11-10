@@ -176,7 +176,7 @@ public enum FeedsEngine {
 
         // Surface speed: middle of the material's range; finishing and slotting run slower
         // (the master document uses 6000 instead of 8000 RPM for those in aluminium).
-        var vc = (material.surfaceSpeed.lowerBound + material.surfaceSpeed.upperBound) / 2
+        var vc = material.surfaceSpeed.lowerBound / 2 + material.surfaceSpeed.upperBound / 2
         if hss { vc *= 0.4; notes.append("HSS tool: surface speed reduced to 40%.") }
         switch kind {
         case .contour: vc *= 0.75

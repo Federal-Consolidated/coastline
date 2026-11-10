@@ -1,4 +1,5 @@
 import AppKit
+import CoastlineCore
 import MillCore
 import SwiftUI
 
@@ -13,6 +14,7 @@ struct ControlInspector: View {
     @State private var diagnosticsExpanded = false
 
     private enum PositionFrame: String, CaseIterable { case work = "Work", machine = "Machine" }
+    private var units: DisplayUnits { AppSettings.shared.units }
     private var mill: MillControl { app.mill }
     private var s: MillSnapshot { mill.snapshot }
 
@@ -44,7 +46,7 @@ struct ControlInspector: View {
             HStack {
                 heading("Position")
                 Spacer()
-                Text("mm").foregroundStyle(.secondary)
+                UnitsPicker()
             }
             HStack(spacing: 8) {
                 Picker("Position coordinates", selection: $frame) {
@@ -71,7 +73,7 @@ struct ControlInspector: View {
                             .padding(.horizontal, 8)
                             .background(.quaternary.opacity(0.45), in: .rect(cornerRadius: 5))
                             .textSelection(.enabled)
-                            .accessibilityLabel("\(frame.rawValue) \(axis.rawValue), \(coordinate(axis)) millimeters")
+                            .accessibilityLabel("\(frame.rawValue) \(axis.rawValue), \(coordinate(axis)) \(units.spokenUnit)")
                         if frame == .work {
                             Button("Zero") { mill.zero([axis]) }
                                 .disabled(s.gates.setup != nil)
@@ -106,7 +108,7 @@ struct ControlInspector: View {
     private func coordinate(_ axis: MillCore.Axis) -> String {
         guard s.isOpen else { return "—" }
         let point = frame == .work ? s.workPosition : s.status?.machinePosition
-        return point.map { String(format: "%.3f", $0[axis]) } ?? "—"
+        return point.map { units.format($0[axis]) } ?? "—"
     }
 
     private var jogging: some View {
@@ -167,26 +169,36 @@ struct ControlInspector: View {
                 .pickerStyle(.segmented)
             }
             HStack(spacing: 8) {
-                Text("Step").foregroundStyle(.secondary).frame(width: 38, alignment: .leading)
-                Picker("Jog step in millimeters", selection: $mill.jogStep) {
-                    ForEach(MillSession.jogSteps, id: \.self) { step in
-                        Text(String(format: "%g", step)).tag(step)
+                Text("Step (\(units.symbol))").foregroundStyle(.secondary).font(.caption).frame(width: 48, alignment: .leading)
+                Group {
+                    if units == .metric {
+                        stepPicker.pickerStyle(.segmented)
+                    } else {
+                        stepPicker.pickerStyle(.menu)
                     }
                 }
-                .labelsHidden()
-                .pickerStyle(.segmented)
                 .disabled(mill.jogHold)
             }
             HStack(spacing: 8) {
                 Text("Feed").foregroundStyle(.secondary).frame(width: 38, alignment: .leading)
                 Picker("Jog feed", selection: $mill.jogFeed) {
-                    ForEach(MillSession.jogFeeds, id: \.self) { Text("\(Int($0)) mm/min").tag($0) }
+                    ForEach(MillSession.jogFeeds, id: \.self) { Text("\(units.format($0)) \(units.symbol)/min").tag($0) }
                 }
                 .labelsHidden()
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
         }
+    }
+
+    private var stepPicker: some View {
+        @Bindable var mill = mill
+        return Picker("Jog step in \(units.spokenUnit)", selection: $mill.jogStep) {
+            ForEach(MillSession.jogSteps, id: \.self) { step in
+                Text(units.format(step, maxDecimals: 6)).tag(step)
+            }
+        }
+        .labelsHidden()
     }
 
     private func jogTarget(x: Double = 0, y: Double = 0, z: Double = 0, title: String, visibleTitle: String? = nil) -> some View {
@@ -210,6 +222,7 @@ struct ControlInspector: View {
                     .disabled(!mill.allowJog || s.gates.run != nil)
                     .frame(maxWidth: .infinity)
             }
+            TestProgramsMenu()
         }
     }
 
@@ -292,12 +305,6 @@ struct ControlInspector: View {
                 }
                 Button("Console…", systemImage: "terminal") { mill.showConsole = true }
             }
-            Menu("Test programs…") {
-                ForEach(TestProgram.allCases) { program in
-                    Button(program.title) { mill.programToConfirm = program }
-                }
-            }
-            .disabled(s.gates.run != nil)
             if let firmware = s.firmware { Text(firmware).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
             if let status = s.status {
                 let limits = [status.limitX ? "X" : nil, status.limitY ? "Y" : nil, status.limitZ ? "Z" : nil]
@@ -307,7 +314,7 @@ struct ControlInspector: View {
                 LabeledContent("Probe", value: status.probeTripped ? "Closed" : "Open")
                 LabeledContent("Limit switches", value: limits.isEmpty ? "Open" : limits)
                 if let feed = status.feedRate {
-                    LabeledContent("Reported feed", value: "\(feed) mm/min")
+                    LabeledContent("Reported feed", value: "\(units.format(Double(feed))) \(units.symbol)/min")
                     LabeledContent("Reported spindle", value: "\(status.spindleSpeed ?? 0) RPM")
                 }
             }
@@ -319,7 +326,7 @@ struct ControlInspector: View {
                 DisclosureGroup("Work offsets") {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(s.offsets.filter { $0.name.hasPrefix("G5") }) { offset in
-                            Text(String(format: "%@  %.3f  %.3f  %.3f", offset.name, offset.point.x, offset.point.y, offset.point.z))
+                            Text("\(offset.name)  \(units.format(offset.point.x))  \(units.format(offset.point.y))  \(units.format(offset.point.z)) \(units.symbol)")
                                 .font(.caption.monospaced()).textSelection(.enabled)
                         }
                     }

@@ -264,7 +264,7 @@ public enum SideClamps {
             let spread = max(s.y / 4, 10)
             ys = [centreY - spread, centreY + spread].map { max($0, centreY - s.y / 2 + 12) }
         }
-        if topX - (table.topX - FlatPrep.tableThickness) > FlatPrep.clampOpening {
+        if topX - (table.topX - table.thickness) > FlatPrep.clampOpening {
             issues.append(Issue(.warning, "The riser, bar and table are more than a 3\" C-clamp opens (\(Length.mm(FlatPrep.clampOpening)) mm)."))
         }
         return Placement(brick: brick, clampPoints: ys.map { SIMD3(topX, $0, padZ) },
@@ -355,9 +355,9 @@ extension SideClamps {
         if let b = p.bridge { out.append(Solid(name: "bridge parallel", min: b.min, max: b.max)) }
         out += [
                    Solid(name: "riser", min: p.riserMin, max: p.riserMax),
-                   Solid(name: "table", min: SIMD3(table.topX - FlatPrep.tableThickness, centreY - 180, table.backZ),
-                         max: SIMD3(table.topX, centreY + 180, table.northZ))]
-        let under = table.topX - FlatPrep.tableThickness
+                   Solid(name: "table", min: SIMD3(table.topX - table.thickness, table.minimumY ?? (centreY - 180), table.backZ),
+                         max: SIMD3(table.topX, table.maximumY ?? (centreY + 180), table.northZ))]
+        let under = table.topX - table.thickness
         // The 3" C-clamp (the C-clamp model, scaled; fixture_kit.c_clamp_parts): x from the fixed
         // jaw's face under the table, the screw boss 85–108 mm up, the spine 50–57 mm behind the
         // screw, 16 mm across.
@@ -423,10 +423,10 @@ public enum StockAdvice {
 
     /// Milling the top edge of oversized stock down to `target` height on the side clamps: the
     /// volume removed and roughly how long it takes with adaptive-style side milling.
-    public static func downsize(stock: SIMD3<Double>, target: Double, tool: Tool?, material: Material?) -> (volume: Double, minutes: Double?) {
+    public static func downsize(stock: SIMD3<Double>, target: Double, tool: Tool?, material: Material?, machine: MachineProfile = .standard) -> (volume: Double, minutes: Double?) {
         let volume = max(stock.x - target, 0) * stock.y * stock.z
         guard let tool, let material else { return (volume, nil) }
-        let d = FeedsEngine.compute(tool: tool, material: material, kind: .adaptive)
+        let d = FeedsEngine.compute(tool: tool, material: material, kind: .adaptive, machine: machine)
         let ap = min(2 * tool.diameter, max(tool.fluteLength - 1, 1), stock.z)
         let mrr = d.feed * min(d.stepover, tool.diameter * 0.3) * ap  // mm³/min
         return (volume, mrr > 0 ? volume / mrr * 1.25 : nil)  // + 25 % for links and lifts
@@ -463,19 +463,26 @@ public enum StockOrientation {
 
     /// - Parameters: part: the part's size in the work frame; twoSided: machined from both sides.
     public static func options(stock: StockItem, part: SIMD3<Double>, twoSided: Bool, topAllowance: Double,
-                               softJaw: Bool, toolDiameter: Double) -> [Option] {
+                               softJaw: Bool, toolDiameter: Double, requiresClampFrame: Bool = true,
+                               preferredAxes: [Int]? = nil) -> [Option] {
         let e = [stock.envelope.x, stock.envelope.y, stock.envelope.z]
-        let perms: [[Int]] = [[1, 0, 2], [0, 1, 2], [2, 0, 1], [0, 2, 1], [2, 1, 0], [1, 2, 0]]
+        var perms: [[Int]] = [[1, 0, 2], [0, 1, 2], [2, 0, 1], [0, 2, 1], [2, 1, 0], [1, 2, 0]]
+        // Equal stock dimensions produce equivalent permutations. Keep the current one as
+        // their representative so a square blank does not lose its selected option.
+        if let preferredAxes, let i = perms.firstIndex(of: preferredAxes) {
+            perms.remove(at: i)
+            perms.insert(preferredAxes, at: 0)
+        }
         let jaw = UniversalClamp.onJaw(softJaw: softJaw)
         let bare = UniversalClamp.onJaw(softJaw: false)
         // Room the part needs: a frame (the jaws' strips and a channel one cutter wide) up and
         // down, a tool's width plus a little at the ends, and its depth plus the face-offs.
         let needX = GripZones.neededHeight(partX: part.x)
         let needY = part.y + 2 * (toolDiameter + 1)
-        // Depth: the part plus the least face-off (0.3 mm a side), not where it sits now: a
-        // part almost as thick as the bar still fits (it's moved to fit).
-        let needZ = part.z + (twoSided ? 0.6 : 0.3 + 0.5)
-        _ = topAllowance
+        // Grip needs a frame in XY, not an invented face-off along Z. A blank at finished
+        // thickness is valid; placement, tabs and the generated paths decide what is cut.
+        let needZ = part.z
+        _ = (topAllowance, twoSided)
         // The extrusion: given on the stock, else its longest side.
         let ext = stock.extrusionAxis ?? [0, 1, 2].max { e[$0] < e[$1] }!
         var out: [Option] = []
@@ -483,8 +490,19 @@ public enum StockOrientation {
         for p in perms {
             let raw = SIMD3(e[p[0]], e[p[1]], e[p[2]])
             guard seen.insert([raw.x, raw.y, raw.z]).inserted else { continue }
+            if !requiresClampFrame {
+                // Containment is independent of workholding. A finished stock face needs no
+                // machining allowance; grip and cutter clearance are assessed in Holding.
+                let missing = (0..<3).first { raw[$0] + 1e-6 < part[$0] }
+                let reason = missing.map { "only \(Length.mm(raw[$0])) mm \(["tall", "long", "deep"][$0]): the part needs \(Length.mm(part[$0]))" }
+                let dims = "\(Length.mm(raw.x)) up · \(Length.mm(raw.y)) along · \(Length.mm(raw.z)) deep"
+                out.append(Option(axes: p, raw: raw, workable: reason == nil, reason: reason,
+                                  alongExtrusion: p[1] == ext, removal: max(raw.z - part.z, 0) * raw.x * raw.y,
+                                  summary: "\(dims): \(reason.map { "no, " + $0 } ?? "contains the part")"))
+                continue
+            }
             var reason: String?
-            if raw.z < needZ { reason = "only \(Length.mm(raw.z)) mm deep: the part needs \(Length.mm(needZ))" }
+            if raw.z + 1e-6 < needZ { reason = "only \(Length.mm(raw.z)) mm deep: the part needs \(Length.mm(needZ))" }
             else if raw.y < needY { reason = "only \(Length.mm(raw.y)) mm long: the part needs \(Length.mm(needY))" }
             else if raw.x < needX { reason = "only \(Length.mm(raw.x)) mm tall: the part and the jaws need \(Length.mm(needX))" }
             var prep: Double?
@@ -504,7 +522,7 @@ public enum StockOrientation {
             // Held by shoulders instead: the jaws grip only the two ends, so the part needs just
             // its own height, and its length between the clamps' jaws.
             var viaShoulders = false
-            if reason != nil, raw.z >= needZ, let sh = Shoulders.fit(raw: raw, part: part) {
+            if reason != nil, raw.z + 1e-6 >= needZ, let sh = Shoulders.fit(raw: raw, part: part) {
                 viaShoulders = true
                 reason = nil
                 prep = nil
@@ -556,7 +574,7 @@ public enum Shoulders {
     public static func fit(raw: SIMD3<Double>, part: SIMD3<Double>) -> Setup.Shoulders? {
         let grip = UniversalClamp.onJaw(softJaw: false)
         let h = min((grip.upperBound - 0.5).rounded(.down), raw.x)
-        guard h >= grip.lowerBound, raw.x >= part.x + 1, raw.y - 2 * gripZone - 2 >= part.y else { return nil }
+        guard h >= grip.lowerBound, raw.x + 1e-6 >= part.x, raw.y - 2 * gripZone - 2 >= part.y else { return nil }
         return Setup.Shoulders(height: h, length: length)
     }
 }

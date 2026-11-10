@@ -9,7 +9,7 @@ import Viewport
 /// (they're relative to the stock face) and checks them again against the clamps.
 extension AppModel {
     /// The clamp kit can be edited while stage 4 shows a side in the kit.
-    var kitEditable: Bool { stage == .clampKit && !setup.onBed && viewSide >= 0 && stock != nil && !showingStockOnly }
+    var kitEditable: Bool { stage == .clampKit && setup.usesClampKit && viewSide >= 0 && stock != nil && !showingStockOnly }
 
     /// Whether a picked object belongs to what's on screen now.
     func pickValid(_ b: BedObject) -> Bool {
@@ -53,8 +53,7 @@ extension AppModel {
         clearanceRecheck?.cancel()
         status = "Checking the toolpaths against the clamps…"
         let jobs: [(Int, Tool, [Move])] = programs.enumerated().compactMap { k, p in
-            guard p.side >= 0, p.side < sideResults.count else { return nil }
-            let r = sideResults[p.side]
+            guard let r = sideResults.first(where: { $0.side == p.side }) else { return nil }
             let moves = zip(r.operationProgram, r.paths).filter { $0.0 == p.index }.flatMap { $0.1.moves }
             return (k, p.tool, moves)
         }

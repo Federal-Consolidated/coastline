@@ -18,7 +18,7 @@ extension AppModel {
     /// How much thicker the bar is than the part, when a one-sided job in the clamp kit can cut
     /// the part free on tabs (nil: two-sided, on the bed, or a bar too thick for it).
     var oneSidedThroughExcess: Double? {
-        guard !twoSided, !setup.onBed, let part, let stock else { return nil }
+        guard !twoSided, setup.usesClampKit, let part, let stock else { return nil }
         let (lo, hi) = setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
         let e = setup.stockSize(stock).z - (hi.z - lo.z)
         guard e >= -0.01 && e <= Self.throughMaxExcess + 1e-9 else { return nil }
@@ -229,6 +229,7 @@ extension AppModel {
     /// Generation's last check: a two-sided job held by tabs fails side B's last program when a
     /// tab doesn't hold, or when there are none (the part would fall into the cut).
     func checkTabs() async {
+        guard setup.usesClampKit else { return }
         guard (twoSided && holdWithTabs) || cutsThroughWithTabs, let pi = programs.lastIndex(where: { $0.side == tabSide }) else { return }
         guard !placedTabs.isEmpty else {
             programs[pi].report.issues.append(Issue(.error, "No holding tab could be placed: the last cut would free the part. \(twoSided ? "Use a full web (Setup ▸ Sides) or larger stock." : "Turn Hold with tabs off (Setup ▸ Sides): the part then stays on the back of the bar.")"))

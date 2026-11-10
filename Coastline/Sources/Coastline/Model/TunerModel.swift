@@ -15,7 +15,7 @@ extension AppModel {
         var out: [(op: Operation, tool: Tool, minutes: Double, side: Int)] = []
         for r in sideResults + prepResults {
             for (k, path) in r.paths.enumerated() where k < r.planned.count {
-                out.append((r.planned[k].operation, r.planned[k].tool, TimeEstimate.seconds([path]) / 60, r.side))
+                out.append((r.planned[k].operation, r.planned[k].tool, TimeEstimate.seconds([path], machine: machine) / 60, r.side))
             }
         }
         tunerBaselineCache = out
@@ -34,8 +34,8 @@ extension AppModel {
             t *= ((a.cusp * hid(a)) / (b.cusp * hid(b))).squareRoot()  // stepover ∝ √cusp
         }
         if kind == .adaptive, a.roughingStyle != b.roughingStyle, let m = stock?.material {
-            let da = FeedsEngine.compute(tool: tool, material: m, kind: .adaptive, roughing: a.roughingStyle)
-            let db = FeedsEngine.compute(tool: tool, material: m, kind: .adaptive, roughing: b.roughingStyle)
+            let da = FeedsEngine.compute(tool: tool, material: m, kind: .adaptive, machine: machine, roughing: a.roughingStyle)
+            let db = FeedsEngine.compute(tool: tool, material: m, kind: .adaptive, machine: machine, roughing: b.roughingStyle)
             // Cutting time ∝ 1 / (feed × depth); links and rapids (~25 %) stay the same.
             let ratio = (da.feed * da.stepdown) / max(db.feed * db.stepdown, 1e-9)
             t = t * 0.25 + t * 0.75 * ratio

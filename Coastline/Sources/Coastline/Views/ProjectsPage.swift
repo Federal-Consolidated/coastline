@@ -272,6 +272,12 @@ private struct ProjectRow: View {
 
 private struct JournalRow: View {
     let entry: JournalEntry
+    @Environment(InventoryModel.self) private var inventory
+
+    private var materialName: String {
+        if let material = entry.materialSnapshot, material.id == entry.materialID { return material.name }
+        return inventory.inventory.material(id: entry.materialID)?.name ?? entry.materialID
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -282,7 +288,7 @@ private struct JournalRow: View {
                 Text(entry.partName).font(.headline)
                 if entry.copies > 1 { Text("×\(entry.copies)").foregroundStyle(.secondary) }
             }
-            Text("\(entry.date.formatted(date: .abbreviated, time: .shortened)) · \(MaterialLibrary.material(id: entry.materialID)?.name ?? entry.materialID) · \(AppModel.duration(entry.cuttingMinutes * 60))")
+            Text("\(entry.date.formatted(date: .abbreviated, time: .shortened)) · \(materialName) · \(AppModel.duration(entry.cuttingMinutes * 60))")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -304,14 +310,14 @@ private struct ProjectSummary: Sendable {
         let programs = (p.results?.prepPrograms ?? []) + (p.results?.programs ?? [])
         var tools: [String] = []
         for t in programs.map(\.tool.name) where !tools.contains(t) { tools.append(t) }
-        let material = p.stock.flatMap { MaterialLibrary.material(id: $0.materialID)?.name }
+        let material = p.stock?.material?.name
         return ProjectSummary(
             part: p.partPath.map { URL(fileURLWithPath: $0).lastPathComponent },
             stock: p.stock.map { [material, $0.sizeDescription].compactMap { $0 }.joined(separator: " ") },
-            sides: p.twoSided ? "Two sides (A and B)" + (p.holdWithTabs ? ", held by tabs" : ", full web") : "One side",
+            sides: p.twoSided ? "Two sides (A and B)" + (p.setup.holding == .custom ? "" : p.holdWithTabs ? ", held by tabs" : ", full web") : "One side",
             operations: p.operations.count, programs: programs.count, seconds: programs.reduce(0) { $0 + $1.seconds },
             tools: tools,
-            holding: p.setup.onBed ? "On the bed (C-clamps)" : !(p.results?.prepPrograms.isEmpty ?? true) ? "Squared on the bed first, then the clamp kit" : "Clamp kit")
+            holding: p.setup.holding == .custom ? p.setup.customFixture.name : p.setup.onBed ? "On the bed (C-clamps)" : !(p.results?.prepPrograms.isEmpty ?? true) ? "Squared on the bed first, then the clamp kit" : "Clamp kit")
     }
 }
 

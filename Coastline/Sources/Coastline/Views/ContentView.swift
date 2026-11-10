@@ -6,6 +6,8 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
     // Projects page.)
     case workspace, projects, stock, tools, fixtures, measuring, accessories, shopping, materials, machine, control
     var id: Self { self }
+    /// Retain old saved Materials routes as an alias of the stock library.
+    var sidebarDestination: Self { self == .materials ? .stock : self }
 
     var title: String {
         switch self {
@@ -17,7 +19,7 @@ enum SidebarItem: String, Hashable, CaseIterable, Identifiable {
         case .fixtures: "Fixtures"
         case .measuring: "Measuring Tools"
         case .accessories: "Accessories"
-        case .materials: "Materials"
+        case .materials: "Stock"
         case .machine: "Machine"
         case .control: "Machine Control"
         }
@@ -47,7 +49,7 @@ struct ContentView: View {
     var body: some View {
         @Bindable var app = app
         NavigationSplitView {
-            List(selection: Binding<SidebarItem?>(get: { app.page }, set: { if let p = $0 { app.page = p } })) {
+            List(selection: Binding<SidebarItem?>(get: { app.page.sidebarDestination }, set: { if let p = $0 { app.page = p } })) {
                 Section("Machine") {
                     Label(SidebarItem.control.title, systemImage: SidebarItem.control.symbol)
                         .badge(Text(app.mill.isOpen ? app.mill.stateWord : "Off"))
@@ -66,7 +68,6 @@ struct ContentView: View {
                     row(.accessories, count: inventory.inventory.accessories.count)
                     row(.shopping, count: ToolLife.shoppingList(inventory.inventory, material: MaterialLibrary.material(id: "al-6061") ?? MaterialLibrary.all[0]).count)
                 }
-                Section("Library") { row(.materials, count: MaterialLibrary.all.count) }
             }
             .scrollContentBackground(.hidden)
             .background(Theme.windowBackground.opacity(0.75))
@@ -78,18 +79,17 @@ struct ContentView: View {
                 case .workspace: WorkspaceView()
                 case .projects: ProjectsPage()
                 case .shopping: ShoppingListPage()
-                case .stock: StockPage()
+                case .stock, .materials: StockPage()
                 case .tools: ToolsPage()
                 case .fixtures: FixturesPage()
                 case .measuring: MeasuringPage()
                 case .accessories: AccessoriesPage()
-                case .materials: MaterialsPage()
-                case .machine: MachineView(machine: app.machine)
+                case .machine: MachineProfilesPage()
                 case .control: ControlPage()
                 }
             }
             .toolbar {
-                MillToolbar(app: app)
+                if app.page != .machine { MillToolbar(app: app) }
                 ToolbarItem(placement: .primaryAction) {
                     Button("Inspector", systemImage: "sidebar.right") { app.showInspector.toggle() }
                         .help("Show or hide the inspector (⌥⌘I)")
@@ -100,6 +100,9 @@ struct ContentView: View {
         .sheet(isPresented: Bindable(app.mill).showHomeConfirm) {
             HomeConfirmSheet { app.mill.home() }
                 .environment(app).tint(Theme.accent)
+        }
+        .sheet(isPresented: Bindable(app.mill).showProgramLibrary) {
+            TestProgramLibrarySheet().environment(app).tint(Theme.accent)
         }
         .sheet(item: Bindable(app.mill).programToConfirm) { program in
             RunConfirmSheet(program: program) { app.mill.run(program) }

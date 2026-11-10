@@ -247,7 +247,10 @@ struct ShoppingListPage: View {
                 }
                 ForEach(learned, id: \.key) { k, v in
                     let parts = k.split(separator: "|")
-                    LabeledContent("\(Tool.Kind(rawValue: String(parts.last ?? ""))?.title ?? String(parts.last ?? "")) in \(MaterialLibrary.material(id: String(parts.first ?? ""))?.name ?? String(parts.first ?? ""))",
+                    let materialID = String(parts.first ?? "")
+                    let recorded = model.journal.entries.lazy.compactMap(\.materialSnapshot).first { $0.id == materialID }
+                    let materialName = inventory.inventory.material(id: materialID)?.name ?? recorded?.name ?? materialID
+                    LabeledContent("\(Tool.Kind(rawValue: String(parts.last ?? ""))?.title ?? String(parts.last ?? "")) in \(materialName)",
                                    value: "feeds ×\(String(format: "%.2f", v))")
                 }
             }

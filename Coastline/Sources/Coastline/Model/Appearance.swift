@@ -29,7 +29,7 @@ extension AppModel {
         for m in renderer.scene.meshes {
             let id = m.id
             if id.hasPrefix("machine.") {
-                let role = id.split(separator: ".").dropFirst(2).first.map(String.init) ?? ""
+                let role = machineSceneRoles[id] ?? id.split(separator: ".").dropFirst(2).first.map(String.init) ?? ""
                 m.material = Self.machineSurface(role)
             } else if id.hasPrefix("fixture.") {
                 if id.contains("parallel") {
@@ -82,22 +82,23 @@ extension AppModel {
     /// Stock drawing per `stockDisplay`.
     func applyStockDisplay() {
         let scene = renderer.scene
-        let simulating = scene.mesh("simstock") != nil
+        let simulating = showsMachiningResults && scene.mesh("simstock") != nil
         // Stage 1 is about the part inside the stock: always see-through there.
-        let alpha: Float = showingStockOnly || stockDisplay == .seeThrough || (!realistic && stockDisplay == .realistic) ? 0.22 : 1
+        let alpha: Float = fixturePlacement != nil || showingStockOnly || stockDisplay == .seeThrough || (!realistic && stockDisplay == .realistic) ? 0.22 : 1
         if let m = scene.mesh("stock") {
-            m.isVisible = !simulating && (stockDisplay == .realistic || stockDisplay == .seeThrough)
+            m.isVisible = fixturePlacement != nil || (stage != .partStock && !simulating && (stockDisplay == .realistic || stockDisplay == .seeThrough))
             m.color.w = alpha
+            if fixturePlacement != nil { m.color = SIMD4(0.3, 0.6, 0.95, alpha) }
         }
         for id in ["simstock", "simstock.back", "simstock.walls", "simstock.loose"] {
             guard let m = scene.mesh(id) else { continue }
-            m.isVisible = stockDisplay != .hidden && stockDisplay != .wireframe
+            m.isVisible = showsMachiningResults && stockDisplay != .hidden && stockDisplay != .wireframe
             if id != "simstock.loose" { m.color.w = stockDisplay == .seeThrough ? 0.45 : 1 }
             // X-ray toolpaths show through the stock only, never through clamps or the machine.
             m.xrayThrough = id != "simstock.loose"
         }
         scene.mesh("stock")?.xrayThrough = true
-        scene.lineSet("stock.edges")?.isVisible = stockDisplay != .hidden
+        scene.lineSet("stock.edges")?.isVisible = fixturePlacement != nil || (stage != .partStock && stockDisplay != .hidden)
         scene.lineSet("toolpath")?.xray = realistic ? 0.35 : 0
     }
 }

@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.11.*"
 
 [[package]]
@@ -35,6 +35,7 @@ dependencies = [
     { name = "numpy" },
     { name = "opencamlib" },
     { name = "pyclipper" },
+    { name = "quiddity" },
     { name = "rhino3dm" },
     { name = "trimesh" },
 ]
@@ -51,6 +52,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "opencamlib", specifier = ">=2023.1" },
     { name = "pyclipper", specifier = ">=1.3" },
+    { name = "quiddity", specifier = "==0.4.9" },
     { name = "rhino3dm", specifier = ">=8.0" },
     { name = "trimesh", specifier = ">=4.0" },
 ]
@@ -336,6 +338,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/66/c0/0c8b6ad9f17a802ee498c46e004a0eb49bc148f2fd230864601a86dcf6db/python-dateutil-2.9.0.post0.tar.gz", hash = "sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3", size = 342432, upload-time = "2024-03-01T18:36:20.211Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ec/57/56b9bcc3c9c6a792fcbaf139543cee77261f3651ca9da0c93f5c1221264b/python_dateutil-2.9.0.post0-py2.py3-none-any.whl", hash = "sha256:a8b2bc7bffae282281c8140a97d3aa9c14da0b136dfe83f850eea9a5f7470427", size = 229892, upload-time = "2024-03-01T18:36:18.57Z" },
+]
+
+[[package]]
+name = "quiddity"
+version = "0.4.9"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/b8/840225d7fa75979b9dd981dd0b997ec4a0b1aa4b8bf129cf16b7db95c21b/quiddity-0.4.9.tar.gz", hash = "sha256:d10730f923060aa9b24ee58ff7081129c5170928ed1b8091c0c6959b075a2dbb", size = 1492885, upload-time = "2026-11-07T08:30:35.713Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/ba/061c35cd3199497342c9a6a2ccb0dd8f139b3a880f91385ece90ff4a8d42/quiddity-0.4.9-cp311-abi3-macosx_10_12_x86_64.whl", hash = "sha256:d0dfacdf6990c08a089d17571e57ca9bba4e8cea6328ae3556bfe534762f12ab", size = 7840395, upload-time = "2026-11-07T08:30:25.799Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/5b/c6c267c5b2a72dbe0784966eaf4521f28c5bfbdff59c7708e35ac5e8ab65/quiddity-0.4.9-cp311-abi3-macosx_11_0_arm64.whl", hash = "sha256:aa2057c85abe9612e40766e0413c380916724722cb95d0f813bfd74300da7be9", size = 7268947, upload-time = "2026-11-07T08:30:27.694Z" },
+    { url = "https://files.pythonhosted.org/packages/02/27/1df20072f9431ce869682f4d53daf953411d81f04f4212e7d7c922a331c2/quiddity-0.4.9-cp311-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:0d52ae9a368a623eb819c6d95c418faee03ecb11c93a9bb8d269d86f6e84fdc9", size = 7493404, upload-time = "2026-11-07T08:30:29.545Z" },
+    { url = "https://files.pythonhosted.org/packages/17/c1/9cb254334e9af3f09f09746e6690bb719c07dff7f0e9d3c1c086e4c08df5/quiddity-0.4.9-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:c11355af1ae1de7fe6372aeafed461f815840451478fe33dd54ffb0688fe1cb7", size = 8177128, upload-time = "2026-11-07T08:30:31.365Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/d2/6707df0d0ba76a136ada2e4359e5da3b39e360fa7dd0eec3a48221dcc9f8/quiddity-0.4.9-cp311-abi3-win_amd64.whl", hash = "sha256:ae38439a54ba097b578b6f08583273f16e06f3da564baed190a368c9d9df3ff1", size = 8300909, upload-time = "2026-11-07T08:30:33.393Z" },
 ]
 
 [[package]]

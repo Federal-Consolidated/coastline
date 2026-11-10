@@ -1,0 +1,610 @@
+{
+  "schemaVersion": 1,
+  "id": "desktop-cnc",
+  "revision": 2,
+  "name": "Desktop CNC",
+  "manufacturer": "Federal Consolidated",
+  "units": "mm",
+  "process": "milling",
+  "controller": "grbl",
+  "verification": "digital",
+  "postProcessorID": "coastline.grbl.desktop.v1",
+  "profile": {
+    "name": "Desktop CNC",
+    "travel": {
+      "x": 86.5,
+      "y": 241.5,
+      "z": 78.5
+    },
+    "machineEnvelope": {
+      "x": [
+        -86.0,
+        -0.5
+      ],
+      "y": [
+        -241.5,
+        -0.5
+      ],
+      "z": [
+        -78.5,
+        -0.5
+      ]
+    },
+    "homePosition": {
+      "x": -86,
+      "y": -0.5,
+      "z": -0.5
+    },
+    "maxRate": {
+      "x": 2540,
+      "y": 3100,
+      "z": 3100
+    },
+    "acceleration": {
+      "x": 500,
+      "y": 500,
+      "z": 500
+    },
+    "junctionDeviation": 0.02,
+    "arcTolerance": 0.002,
+    "spindleRPM": [
+      1500,
+      8000
+    ],
+    "spindleRampIntermediateRPM": 5000,
+    "estimatedSpindlePower": 150,
+    "colletName": "ER-11",
+    "maxShankDiameter": 8,
+    "maxToolLength": 75,
+    "colletSeatDepth": 22.9,
+    "toolChangeMoves": [
+      "$H",
+      "G53 G0 Z-1",
+      "G53 G0 Y-58",
+      "G53 G0 X-1",
+      "G53 G0 Z-60"
+    ],
+    "maxLineLength": 79,
+    "plannerBlocks": 16,
+    "powerOnDistanceModeIsIncremental": true,
+    "edgeFinderTipDiameter": 5.08,
+    "probeFeed": 20,
+    "probeSpindleRPM": 1500,
+    "tSlotCount": 2,
+    "tSlotNut": "Fixture-selected T-nuts: 12 × 3 mm cavity, 6.13 mm opening",
+    "physicalEnvelope": {
+      "x": 89,
+      "y": 242,
+      "z": 79
+    }
+  },
+  "assets": [
+    {
+      "path": "machine.step",
+      "role": "geometry",
+      "sha256": "7035295044ea6c8e84ef12289cb68a4bb3dab5bb70ad5d86477fa82e9f720cc3"
+    },
+    {
+      "path": "source.mch",
+      "role": "fusionDefinition",
+      "sha256": "c7492a394592ee32571aaf2453c39533dd2cb4ecf5c71f4b1db4391a9cb7fc52"
+    },
+    {
+      "path": "source-README.md",
+      "role": "reference",
+      "sha256": "7ee11e8a3e8020a3a4fecce8b8441d5c818237a1cb3a34e6856a35d80698a6c8"
+    },
+    {
+      "path": "geometry-index.json",
+      "role": "reference",
+      "sha256": "e7e03295b3231dd30ba0b577468644094b0feabede6953d2034f8bac95ea28f0"
+    },
+    {
+      "path": "fusion-audit.json",
+      "role": "reference",
+      "sha256": "11314429b3f36c49e26c277f79fee13659563956c33a870e395396026d9ddeec"
+    },
+    {
+      "path": "geometry-validation.json",
+      "role": "reference",
+      "sha256": "ca3290f5ab3c9ac0cc2366a76695e9c2397706a27216bf186b80531c625986c5"
+    },
+    {
+      "path": "geometry-resolution.md",
+      "role": "reference",
+      "sha256": "e0bd71e28cac98e8f836d9c58d84e8c14333ac21a9b063549bc14b6485afd484"
+    },
+    {
+      "path": "controller-evidence.md",
+      "role": "reference",
+      "sha256": "d856d6d885d9e7bcd1788189507f806d2a2f8ed4bc41009eea535f3d5fc43ea4"
+    },
+    {
+      "path": "README.md",
+      "role": "reference",
+      "sha256": "48b474215bca6adaadc0108ce1e1790e67eae5c016fb4f0a0c343c83a289fc11"
+    }
+  ],
+  "components": [
+    {
+      "id": "base",
+      "role": "static",
+      "modelEntities": [
+        "0/0"
+      ]
+    },
+    {
+      "id": "x",
+      "role": "linearAxis",
+      "modelEntities": [],
+      "axis": {
+        "coordinate": "x",
+        "direction": {
+          "x": -1,
+          "y": 0,
+          "z": 0
+        },
+        "modelMinimum": -86.5,
+        "modelMaximum": 0,
+        "modelHome": -86,
+        "controllerScale": 1,
+        "controllerOffset": 0
+      }
+    },
+    {
+      "id": "table",
+      "role": "table",
+      "modelEntities": [
+        "0/3"
+      ],
+      "parentID": "x"
+    },
+    {
+      "id": "y",
+      "role": "linearAxis",
+      "modelEntities": [
+        "0/1"
+      ],
+      "axis": {
+        "coordinate": "y",
+        "direction": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "modelMinimum": -172.5,
+        "modelMaximum": 69,
+        "modelHome": 68.5,
+        "controllerScale": 1,
+        "controllerOffset": 69
+      }
+    },
+    {
+      "id": "z",
+      "role": "linearAxis",
+      "modelEntities": [
+        "0/2"
+      ],
+      "parentID": "y",
+      "axis": {
+        "coordinate": "z",
+        "direction": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "modelMinimum": 1.4,
+        "modelMaximum": 79.9,
+        "modelHome": 79.4,
+        "controllerScale": 1,
+        "controllerOffset": 79.9
+      }
+    },
+    {
+      "id": "head",
+      "role": "head",
+      "modelEntities": [
+        "0/2/0"
+      ],
+      "parentID": "z"
+    },
+    {
+      "id": "cover",
+      "role": "static",
+      "modelEntities": [
+        "0/4"
+      ],
+      "isEnclosure": true
+    }
+  ],
+  "frames": [
+    {
+      "id": "table",
+      "componentID": "table",
+      "origin": {
+        "x": 15.865,
+        "y": -343.0,
+        "z": 79.04
+      },
+      "xDirection": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "zDirection": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      }
+    },
+    {
+      "id": "tool",
+      "componentID": "head",
+      "origin": {
+        "x": 105.43,
+        "y": -176.8,
+        "z": 112.26
+      },
+      "xDirection": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      },
+      "zDirection": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      }
+    },
+    {
+      "id": "table-surface",
+      "componentID": "table",
+      "origin": {
+        "x": 15.865,
+        "y": -343,
+        "z": 79.04
+      },
+      "xDirection": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      "zDirection": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "id": "view",
+      "componentID": "base",
+      "origin": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "xDirection": {
+        "x": 0,
+        "y": 1,
+        "z": 0
+      },
+      "zDirection": {
+        "x": 1,
+        "y": 0,
+        "z": 0
+      }
+    }
+  ],
+  "referenceStock": {
+    "id": "orientation-block",
+    "name": "Orientation check block",
+    "frameID": "table-surface",
+    "minimum": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "size": {
+      "x": 203.2,
+      "y": 37,
+      "z": 50.8
+    }
+  },
+  "mountingInterfaces": [
+    {
+      "id": "table-slots",
+      "frameID": "table",
+      "kind": "tSlots",
+      "slots": [
+        {
+          "id": "slot-1",
+          "origin": {
+            "x": 0,
+            "y": -46.42,
+            "z": -0.281
+          },
+          "direction": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          "length": 305,
+          "openingWidth": 6.13,
+          "cavityWidth": 12,
+          "cavityDepth": 3,
+          "lipThickness": 2
+        },
+        {
+          "id": "slot-2",
+          "origin": {
+            "x": 0,
+            "y": -46.42,
+            "z": 39.724
+          },
+          "direction": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          "length": 305,
+          "openingWidth": 6.13,
+          "cavityWidth": 12,
+          "cavityDepth": 3,
+          "lipThickness": 2
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "fusion-definition",
+      "title": "Supplied Desktop CNC Machine.mch",
+      "path": "source.mch"
+    },
+    {
+      "id": "shared-readme",
+      "title": "Original machine export notes, 2026-11-06",
+      "path": "source-README.md"
+    },
+    {
+      "id": "step-audit",
+      "title": "Complete STEP occurrence and dimensional audit",
+      "path": "geometry-index.json"
+    },
+    {
+      "id": "fusion-audit",
+      "title": "Read-only Fusion model inspection, 2026-11-06",
+      "path": "fusion-audit.json"
+    },
+    {
+      "id": "geometry-tests",
+      "title": "Exact CAD seating, mounting and selected contact checks",
+      "path": "geometry-validation.json"
+    },
+    {
+      "id": "geometry-resolution",
+      "title": "Seating and mounting engineering decisions",
+      "path": "geometry-resolution.md"
+    },
+    {
+      "id": "controller-review",
+      "title": "Manufacturer controller and tooling evidence; native adapter contract",
+      "path": "controller-evidence.md"
+    },
+    {
+      "id": "package-policy",
+      "title": "Digital capability and commissioning scope",
+      "path": "README.md"
+    }
+  ],
+  "evidence": [
+    {
+      "topic": "kinematics",
+      "status": "source",
+      "sourceIDs": [
+        "fusion-definition",
+        "geometry-tests"
+      ],
+      "detail": "X table moves in world −X; Y carriage carries Z head. Component inheritance and mapped home positions are checked. Selected Z and upper-Y CAD contacts corroborate the authored bounds; this is not an exhaustive travel/collision check."
+    },
+    {
+      "topic": "controllerMapping",
+      "status": "inferred",
+      "sourceIDs": [
+        "shared-readme",
+        "fusion-definition"
+      ],
+      "detail": "q=(MPosX,MPosY+69,MPosZ+79.9) matches the supplied controller and CAD home anchors. Its algebra is validated digitally; physical switch trip, pull-off and datum offsets remain to be measured."
+    },
+    {
+      "topic": "modelGeometry",
+      "status": "measured",
+      "sourceIDs": [
+        "step-audit",
+        "geometry-tests"
+      ],
+      "detail": "CAD only: OpenCascade converts source centimetres to millimetres. All 52 exported solids agree with the inspected Fusion body bounds to within 0.000003 mm."
+    },
+    {
+      "topic": "geometryCoverage",
+      "status": "verified",
+      "sourceIDs": [
+        "step-audit",
+        "fusion-audit"
+      ],
+      "detail": "The complete read-only export restores all nine Cover bodies. All 52 authored bodies are mapped, including the enclosure and chip guards. The simplified source still omits some hardware; full machining collision clearance is not certified."
+    },
+    {
+      "topic": "stockPlacement",
+      "status": "verified",
+      "sourceIDs": [
+        "geometry-tests",
+        "geometry-resolution"
+      ],
+      "detail": "The physical seating frame is separate from machining axes. Local X follows the slots, local Z points away from the table. A 203.2 × 37 × 50.8 mm reference block sits on the measured CAD support plane with 0.000137 mm maximum error and fits its footprint. The historical Fusion setup issue is not claimed to have been reproduced."
+    },
+    {
+      "topic": "mountingInterfaces",
+      "status": "measured",
+      "sourceIDs": [
+        "geometry-tests",
+        "geometry-resolution"
+      ],
+      "detail": "The table defines slot geometry, while each fixture defines its fasteners. The Bookend's custom M5 nut and key have zero CAD overlap in both slots. This is seated geometric fit, not thread strength, insertion-path or installed-hardware validation."
+    },
+    {
+      "topic": "usableSpindle",
+      "status": "source",
+      "sourceIDs": [
+        "controller-review",
+        "fusion-definition"
+      ],
+      "detail": "Manufacturer manual usable range 1500–8000 RPM is applied to generated programs. Firmware parameters 1360–8500 RPM describe a different limit and remain in the original source."
+    },
+    {
+      "topic": "controllerDefaults",
+      "status": "source",
+      "sourceIDs": [
+        "controller-review",
+        "shared-readme"
+      ],
+      "detail": "Pinned manufacturer firmware corroborates supplied travel, rates and reported spindle parameters. Installed controller settings have not been read."
+    },
+    {
+      "topic": "spindlePower",
+      "status": "inferred",
+      "sourceIDs": [
+        "package-policy"
+      ],
+      "detail": "150 W remains the existing Coastline planning estimate, not a manufacturer rating or measured cutting power."
+    },
+    {
+      "topic": "toolLimits",
+      "status": "source",
+      "sourceIDs": [
+        "controller-review",
+        "fusion-definition"
+      ],
+      "detail": "ER11 8 mm shank acceptance and nominal 22.9 mm seating depth have distinct manufacturer references. The supplied 75 mm overall-length cap replaces the unsubstantiated legacy 76.2 mm cap. The imported 7 mm tool-diameter limit is preserved as source metadata; actual tool stickout remains a per-setup measurement."
+    },
+    {
+      "topic": "nativePost",
+      "status": "verified",
+      "sourceIDs": [
+        "controller-review"
+      ],
+      "detail": "Coastline explicitly selects coastline.grbl.desktop.v1. Generated text and local preflight regressions cover feed/arc modes, usable RPM, bounded comments and manual tooling. system://grbl.cps is preserved as Fusion provenance, not executed. No machine command was sent."
+    }
+  ],
+  "checks": [
+    {
+      "id": "complete-geometry",
+      "title": "Complete machine model",
+      "scope": "geometry",
+      "status": "passed",
+      "detail": "All 52 authored solids are mapped, including nine recovered enclosure and chip-guard bodies. Exported body bounds match the saved Fusion model within 0.000003 mm. Intentional simplifications remain documented.",
+      "sourceIDs": [
+        "step-audit",
+        "fusion-audit",
+        "geometry-tests"
+      ]
+    },
+    {
+      "id": "digital-motion",
+      "title": "Axis motion and home pose",
+      "scope": "kinematics",
+      "status": "passed",
+      "detail": "X moves the table; Y carries Z and the spindle. Controller-to-model home conversion and nested motion are checked. Selected Z stop and upper-Y clearance tests corroborate the CAD ranges; physical calibration is a separate commissioning step.",
+      "sourceIDs": [
+        "fusion-definition",
+        "geometry-tests"
+      ]
+    },
+    {
+      "id": "stock-seating",
+      "title": "Stock sits on the X table",
+      "scope": "setupPlacement",
+      "status": "passed",
+      "detail": "A dedicated seating frame removes the machining-axis/seating-axis ambiguity. The asymmetric 203.2 × 37 × 50.8 mm block lies on the measured table plane and inside its support footprint; its dimensions remain in their intended directions.",
+      "sourceIDs": [
+        "geometry-tests",
+        "geometry-resolution"
+      ]
+    },
+    {
+      "id": "slot-mounting",
+      "title": "Bookend mounting fits both T-slots",
+      "scope": "setupPlacement",
+      "status": "passed",
+      "detail": "The machine interface is the 6.13 mm opening above a 12 × 3 mm cavity. The Bookend's custom M5 nut and 6 × 1.8 mm key fit the actual CAD slots. Fastener selection belongs to the fixture, so the table is not restricted to a generic M4 label.",
+      "sourceIDs": [
+        "geometry-tests",
+        "geometry-resolution"
+      ]
+    },
+    {
+      "id": "tool-dimensions",
+      "title": "Tool dimensions have distinct meanings",
+      "scope": "tooling",
+      "status": "passed",
+      "detail": "Use an 8 mm maximum shank and the supplied conservative 75 mm overall-length planning cap. Nominal collet seating is 22.9 mm. Cutting diameter and measured exposed stickout are separate tool-assembly inputs; the source's 7 mm diameter value is retained without calling it a proved hardware limit.",
+      "sourceIDs": [
+        "controller-review",
+        "fusion-definition"
+      ]
+    },
+    {
+      "id": "usable-spindle",
+      "title": "Usable spindle speed applied",
+      "scope": "tooling",
+      "status": "passed",
+      "detail": "Generated programs use the manufacturer-supported 1500–8000 RPM range. Firmware report limits of 1360–8500 RPM are retained as controller metadata, without treating them as usable cutting speeds.",
+      "sourceIDs": [
+        "controller-review",
+        "fusion-definition"
+      ]
+    },
+    {
+      "id": "native-post",
+      "title": "Coastline GRBL adapter checked",
+      "scope": "controller",
+      "status": "passed",
+      "detail": "The profile names its actual native post adapter. Feed and arc-centre modes, bounded ASCII comments, RPM limits and generated-job preflight pass regression tests. Existing tool-length compensation is preserved consistently with touch-off. No Fusion CPS or physical controller is claimed tested.",
+      "sourceIDs": [
+        "controller-review"
+      ]
+    },
+    {
+      "id": "manual-tooling",
+      "title": "Manual tool changes selected",
+      "scope": "controller",
+      "status": "passed",
+      "detail": "One installed tool per program, with guided changes between programs. No M6 or tool preload is emitted. The imported preload flag and 15-second estimate are not automatic-tool-changer capabilities.",
+      "sourceIDs": [
+        "controller-review",
+        "fusion-definition"
+      ]
+    },
+    {
+      "id": "physical-calibration",
+      "title": "Calibrate the installed machine",
+      "scope": "hardware",
+      "status": "pending",
+      "detail": "The digital model is usable now. The actual controller settings and the relationship between homed table/spindle datums and CAD have not been measured on this machine.",
+      "sourceIDs": [
+        "fusion-definition",
+        "geometry-tests",
+        "controller-review"
+      ],
+      "action": "Read the installed controller settings, then record the table and spindle reference measurements after homing, including switch pull-off. Compare signs, offsets and usable travel with this profile before activating it for physical control."
+    }
+  ],
+  "findings": [
+    {
+      "id": "physical-calibration",
+      "severity": "blocking",
+      "summary": "Calibrate the installed machine before physical control",
+      "detail": "Digital geometry, placement and native post checks are available now. Read actual controller settings and measure homed table/spindle datums and pull-off to validate the controller-to-model offsets before enabling this profile on hardware."
+    }
+  ]
+}

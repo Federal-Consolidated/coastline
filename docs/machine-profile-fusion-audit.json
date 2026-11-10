@@ -1,0 +1,1048 @@
+{
+  "auditDate": "2026-11-06",
+  "method": "Read-only Fusion API; no motion simulation or hardware validation",
+  "document": "CNC simplified v31",
+  "isModified": false,
+  "top": [
+    "01 Fixed Frame and Drives:1",
+    "02 Y Carriage and Z Guides:1",
+    "03 Spindle Head:1",
+    "04 X Table:1",
+    "Cover:1"
+  ],
+  "occurrences": 87,
+  "bodies": [
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+Y Drive:1+Base Plate:1+Top Plate:1",
+      "bodies": [
+        {
+          "name": "Top Plate",
+          "bounds_mm": [
+            [
+              195.935136,
+              -434.422758,
+              197.563594
+            ],
+            [
+              205.460136,
+              -39.422758,
+              349.963594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+Y Drive:1+Y Motor End and Belt Drive:1+Alumerang - NEMA:1",
+      "bodies": [
+        {
+          "name": "Alumerang - NEMA",
+          "bounds_mm": [
+            [
+              139.110136,
+              -52.122758,
+              88.693594
+            ],
+            [
+              199.110136,
+              -29.122758,
+              374.343594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+Y Drive:1+Y Motor End and Belt Drive:1+NEMA 17 Motor:1",
+      "bodies": [
+        {
+          "name": "NEMA 17 Stepper Motor - Source Model",
+          "bounds_mm": [
+            [
+              156.459397,
+              -92.122758,
+              274.952855
+            ],
+            [
+              209.055136,
+              -27.622758,
+              317.253594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+Y Drive:1+Y Idler End Support:1+Alumerang - Standard:1",
+      "bodies": [
+        {
+          "name": "Alumerang - Standard",
+          "bounds_mm": [
+            [
+              139.110136,
+              -444.222758,
+              88.693594
+            ],
+            [
+              199.110136,
+              -421.722758,
+              374.343594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+Y Drive:1+Y Ballscrew Support:1+Ballscrew Shaft Mount:1",
+      "bodies": [
+        {
+          "name": "Ballscrew Shaft Mount",
+          "bounds_mm": [
+            [
+              156.254173,
+              -68.471158,
+              227.247631
+            ],
+            [
+              199.9661,
+              -31.152758,
+              264.643594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+Y Drive:1+Y Ballscrew Support:1+Ballscrew Subassembly - Y:1+Ballscrew - Y:1",
+      "bodies": [
+        {
+          "name": "Ballscrew - Y",
+          "bounds_mm": [
+            [
+              172.110136,
+              -359.422758,
+              243.103594
+            ],
+            [
+              184.110136,
+              -25.422758,
+              255.103594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+Y Drive:1+Y Guide Shafts:1+Shaft Y:1",
+      "bodies": [
+        {
+          "name": "Shaft Y",
+          "bounds_mm": [
+            [
+              168.610136,
+              -434.422758,
+              177.103594
+            ],
+            [
+              184.610136,
+              -39.422758,
+              193.103594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+Y Drive:1+Y Guide Shafts:1+Shaft Y:2",
+      "bodies": [
+        {
+          "name": "Shaft Y",
+          "bounds_mm": [
+            [
+              168.610136,
+              -434.422758,
+              349.343594
+            ],
+            [
+              184.610136,
+              -39.422758,
+              365.343594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Left:1+Shaft X:1",
+      "bodies": [
+        {
+          "name": "Shaft X",
+          "bounds_mm": [
+            [
+              -48.389864,
+              -419.422758,
+              107.843594
+            ],
+            [
+              141.610136,
+              -407.422758,
+              119.843594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Left:1+Ballscrew - X:1",
+      "bodies": [
+        {
+          "name": "Ballscrew - X",
+          "bounds_mm": [
+            [
+              -13.889864,
+              -419.422758,
+              68.843594
+            ],
+            [
+              144.110136,
+              -407.422758,
+              80.843594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Left:1+X Shaft Support:1",
+      "bodies": [
+        {
+          "name": "X Shaft Support",
+          "bounds_mm": [
+            [
+              -46.899864,
+              -434.422758,
+              98.078594
+            ],
+            [
+              -36.739864,
+              -404.422758,
+              122.843594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Left:1+X Motor Mount and Coupler - Left:1+Stepper Mount - X Left:1",
+      "bodies": [
+        {
+          "name": "Stepper Mount - X Left",
+          "bounds_mm": [
+            [
+              114.260136,
+              -434.422758,
+              55.843594
+            ],
+            [
+              141.610136,
+              -394.422758,
+              128.843594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Left:1+X Motor Mount and Coupler - Left:1+NEMA 17 Motor:2",
+      "bodies": [
+        {
+          "name": "NEMA 17 Stepper Motor - Source Model",
+          "bounds_mm": [
+            [
+              152.110136,
+              -444.867758,
+              53.693595
+            ],
+            [
+              216.610136,
+              -392.272021,
+              95.994332
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Left:1+X Arm - Left with side tapped holes:1",
+      "bodies": [
+        {
+          "name": "X Arm - Left with side tapped holes",
+          "bounds_mm": [
+            [
+              -46.910516,
+              -444.312232,
+              93.743907
+            ],
+            [
+              175.845484,
+              -434.512232,
+              130.573907
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Right:1+X Motor Mount and Coupler - Right:1+Stepper Mount - X Right:1",
+      "bodies": [
+        {
+          "name": "Stepper Mount - X Right",
+          "bounds_mm": [
+            [
+              114.260136,
+              -79.422758,
+              55.843594
+            ],
+            [
+              141.610136,
+              -39.422758,
+              128.843594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Right:1+X Motor Mount and Coupler - Right:1+NEMA 17 Motor:3",
+      "bodies": [
+        {
+          "name": "NEMA 17 Stepper Motor - Source Model",
+          "bounds_mm": [
+            [
+              152.110136,
+              -81.573499,
+              53.692856
+            ],
+            [
+              216.610136,
+              -28.97776,
+              95.993595
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Right:1+X Arm - Right with side tapped holes:1",
+      "bodies": [
+        {
+          "name": "X Arm - Right with side tapped holes",
+          "bounds_mm": [
+            [
+              -47.010268,
+              -39.348367,
+              93.753047
+            ],
+            [
+              175.745732,
+              -25.548367,
+              130.583047
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Right:1+Shaft X:2",
+      "bodies": [
+        {
+          "name": "Shaft X",
+          "bounds_mm": [
+            [
+              -48.389864,
+              -66.422758,
+              107.843594
+            ],
+            [
+              141.610136,
+              -54.422758,
+              119.843594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Right:1+Ballscrew - X:2",
+      "bodies": [
+        {
+          "name": "Ballscrew - X",
+          "bounds_mm": [
+            [
+              -13.889864,
+              -66.422758,
+              68.843594
+            ],
+            [
+              144.110136,
+              -54.422758,
+              80.843594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+X Drive and Frame - Right:1+X Shaft Support:2",
+      "bodies": [
+        {
+          "name": "X Shaft Support",
+          "bounds_mm": [
+            [
+              -46.899864,
+              -69.422758,
+              98.078594
+            ],
+            [
+              -36.739864,
+              -39.422758,
+              122.843594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Internal Frame:1+-34 X Linkage - Machined:1",
+      "bodies": [
+        {
+          "name": "-34 X Linkage - Machined",
+          "bounds_mm": [
+            [
+              -46.899863,
+              -444.222768,
+              130.583594
+            ],
+            [
+              54.700137,
+              -25.622768,
+              140.108594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Electronics:1+Emergency-Stop Actuator:1",
+      "bodies": [
+        {
+          "name": "EStop",
+          "bounds_mm": [
+            [
+              178.741216,
+              -465.941678,
+              16.017633
+            ],
+            [
+              202.341216,
+              -417.941678,
+              39.617633
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "01 Fixed Frame and Drives:1+Electronics:1+IEC AC Power Inlet:1+IEC C14 Inlet - Draft Leads:1",
+      "bodies": [
+        {
+          "name": "IEC C14 Inlet - Unrouted Leads",
+          "bounds_mm": [
+            [
+              92.526107,
+              -52.657801,
+              354.927714
+            ],
+            [
+              128.340107,
+              -28.273801,
+              382.867714
+            ]
+          ]
+        },
+        {
+          "name": "IEC inlet - draft display with short lead starts",
+          "bounds_mm": [
+            [
+              92.526107,
+              -52.657801,
+              354.927714
+            ],
+            [
+              128.340107,
+              -28.273801,
+              382.867714
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "02 Y Carriage and Z Guides:1+Z Drive Motor and Belt:1+NEMA 17 Motor:4",
+      "bodies": [
+        {
+          "name": "NEMA 17 Stepper Motor - Source Model",
+          "bounds_mm": [
+            [
+              156.387373,
+              -226.246617,
+              278.883594
+            ],
+            [
+              209.460775,
+              -168.138487,
+              343.383594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "02 Y Carriage and Z Guides:1+Z Ballscrew Support:1+Ballscrew Subassembly - Z:1+Ballscrew - Z:1",
+      "bodies": [
+        {
+          "name": "Ballscrew - Z",
+          "bounds_mm": [
+            [
+              137.560136,
+              -183.121707,
+              194.953594
+            ],
+            [
+              149.560136,
+              -171.121707,
+              365.953594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "02 Y Carriage and Z Guides:1+Z Ballscrew Support:1+Ballscrew Shaft Mount:2",
+      "bodies": [
+        {
+          "name": "Ballscrew Shaft Mount",
+          "bounds_mm": [
+            [
+              125.810136,
+              -194.871707,
+              322.905194
+            ],
+            [
+              161.310136,
+              -159.371707,
+              360.223594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "02 Y Carriage and Z Guides:1+Carriage and Z Guides:1+YZ Translator Unibody:1",
+      "bodies": [
+        {
+          "name": "YZ Translator Unibody",
+          "bounds_mm": [
+            [
+              132.190136,
+              -240.992707,
+              168.563594
+            ],
+            [
+              193.150136,
+              -127.992707,
+              373.883594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "02 Y Carriage and Z Guides:1+Carriage and Z Guides:1+Shaft Z:1",
+      "bodies": [
+        {
+          "name": "Shaft Z",
+          "bounds_mm": [
+            [
+              135.655136,
+              -143.121707,
+              168.563594
+            ],
+            [
+              147.655136,
+              -131.121707,
+              374.563594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "02 Y Carriage and Z Guides:1+Carriage and Z Guides:1+Shaft Z:2",
+      "bodies": [
+        {
+          "name": "Shaft Z",
+          "bounds_mm": [
+            [
+              135.655136,
+              -237.863707,
+              168.563594
+            ],
+            [
+              147.655136,
+              -225.863707,
+              374.563594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "02 Y Carriage and Z Guides:1+Chip Guards - Y Carriage:1+Chip Guard - YZ:1",
+      "bodies": [
+        {
+          "name": "Chip Guard - YZ",
+          "bounds_mm": [
+            [
+              64.675136,
+              -262.552707,
+              168.053054
+            ],
+            [
+              152.290136,
+              -127.992707,
+              168.563594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "03 Spindle Head:1+Spindle Cartridge:1+Spindle Shaft:1",
+      "bodies": [
+        {
+          "name": "Spindle Shaft",
+          "bounds_mm": [
+            [
+              92.730136,
+              -189.495207,
+              118.263594
+            ],
+            [
+              118.130136,
+              -164.095207,
+              295.963594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "03 Spindle Head:1+Spindle Cartridge:1+Spindle ER11A Nut:1",
+      "bodies": [
+        {
+          "name": "Spindle ER11A Nut",
+          "bounds_mm": [
+            [
+              95.430136,
+              -186.795207,
+              112.263594
+            ],
+            [
+              115.430136,
+              -166.795207,
+              127.263594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "03 Spindle Head:1+Spindle Cartridge:1+ER 11 Collet 250 thou:1",
+      "bodies": [
+        {
+          "name": "ER 11 Collet 250 thou",
+          "bounds_mm": [
+            [
+              99.717325,
+              -182.508019,
+              111.967146
+            ],
+            [
+              111.142948,
+              -171.082396,
+              129.967146
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "03 Spindle Head:1+Spindle Cartridge:1+Spindle Outer Tube:1",
+      "bodies": [
+        {
+          "name": "Spindle Outer Tube",
+          "bounds_mm": [
+            [
+              87.967636,
+              -194.257707,
+              153.763594
+            ],
+            [
+              122.892636,
+              -159.332707,
+              282.263594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "03 Spindle Head:1+Z Head Body:1+Z Unibody:1",
+      "bodies": [
+        {
+          "name": "Z Unibody",
+          "bounds_mm": [
+            [
+              124.675136,
+              -246.405207,
+              178.723594
+            ],
+            [
+              155.155136,
+              -122.580207,
+              283.723594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "03 Spindle Head:1+Upper Spindle Clamp:1+Spindle - Upper Mount:1",
+      "bodies": [
+        {
+          "name": "Spindle - Upper Mount",
+          "bounds_mm": [
+            [
+              65.675136,
+              -262.552707,
+              271.023594
+            ],
+            [
+              126.892636,
+              -142.795207,
+              283.723594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "03 Spindle Head:1+Lower Spindle Clamp:1+Spindle Mount - Lower:1",
+      "bodies": [
+        {
+          "name": "Spindle Mount - Lower",
+          "bounds_mm": [
+            [
+              83.967636,
+              -201.510207,
+              150.723594
+            ],
+            [
+              126.580136,
+              -152.080207,
+              208.223594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "03 Spindle Head:1+Spindle Motor and Belt Drive:1+Spindle Motor - NEMA 23:1",
+      "bodies": [
+        {
+          "name": "Spindle Motor - NEMA 23",
+          "bounds_mm": [
+            [
+              66.975136,
+              -259.152707,
+              169.023594
+            ],
+            [
+              123.375136,
+              -202.752707,
+              294.023594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "04 X Table:1+X Unibody:1",
+      "bodies": [
+        {
+          "name": "X Unibody",
+          "bounds_mm": [
+            [
+              1.260136,
+              -429.422758,
+              54.913594
+            ],
+            [
+              15.865136,
+              -44.422758,
+              129.843594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "04 X Table:1+Chip Guards - X Table:1+Table Chip Guard - Right:1+Chip Guard - X Right - RevC:1",
+      "bodies": [
+        {
+          "name": "Chip Guard - X Right - RevC",
+          "bounds_mm": [
+            [
+              9.260575,
+              -83.877952,
+              40.961399
+            ],
+            [
+              121.020575,
+              -33.077952,
+              144.961399
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "04 X Table:1+Chip Guards - X Table:1+Table Chip Guard - Left:1+Chip Guard - X Left - RevC:1",
+      "bodies": [
+        {
+          "name": "Chip Guard - X Left - RevC - Body 1",
+          "bounds_mm": [
+            [
+              10.332737,
+              -440.784448,
+              40.86058
+            ],
+            [
+              121.071657,
+              -389.984448,
+              144.86058
+            ]
+          ]
+        },
+        {
+          "name": "Chip Guard - X Left - RevC - Body 2",
+          "bounds_mm": [
+            [
+              9.311657,
+              -398.984448,
+              53.03558
+            ],
+            [
+              10.332737,
+              -389.984448,
+              143.8395
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "Cover:1+Back Plate:1+Rear Cover:1",
+      "bodies": [
+        {
+          "name": "Rear Cover",
+          "bounds_mm": [
+            [
+              -47.248024,
+              -445.914758,
+              365.057714
+            ],
+            [
+              217.206136,
+              -23.422758,
+              379.057714
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "Cover:1+Enclosure:1+Outer Enclosure:1",
+      "bodies": [
+        {
+          "name": "Outer Enclosure",
+          "bounds_mm": [
+            [
+              -50.539864,
+              -447.941678,
+              -0.175326
+            ],
+            [
+              218.979056,
+              -21.903838,
+              379.343594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "Cover:1+Enclosure:1+Handle:1",
+      "bodies": [
+        {
+          "name": "Handle",
+          "bounds_mm": [
+            [
+              148.401216,
+              -449.211678,
+              165.738594
+            ],
+            [
+              160.466216,
+              -445.084178,
+              248.288594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "Cover:1+Enclosure:1+Handle:2",
+      "bodies": [
+        {
+          "name": "Handle",
+          "bounds_mm": [
+            [
+              148.401216,
+              -24.761338,
+              165.738594
+            ],
+            [
+              160.466216,
+              -20.633838,
+              248.288594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "Cover:1+Chip Guards:1+Chip Guard - X Top:1",
+      "bodies": [
+        {
+          "name": "Chip Guard - X Top",
+          "bounds_mm": [
+            [
+              109.510136,
+              -419.942758,
+              5.788594
+            ],
+            [
+              217.460136,
+              -386.922758,
+              159.293594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "Cover:1+Chip Guards:1+Chip Guard - Y Sides - RevA:1",
+      "bodies": [
+        {
+          "name": "Chip Guard - Y Sides - RevA",
+          "bounds_mm": [
+            [
+              205.379624,
+              -267.437482,
+              265.139332
+            ],
+            [
+              216.879624,
+              -104.117482,
+              277.839332
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "Cover:1+Chip Guards:1+Chip Guard - X Top:2",
+      "bodies": [
+        {
+          "name": "Chip Guard - X Top",
+          "bounds_mm": [
+            [
+              109.510136,
+              -86.922758,
+              5.788594
+            ],
+            [
+              217.460136,
+              -53.902758,
+              159.293594
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "Cover:1+Chip Guards:1+Y Upper Chip Guard:1+Chip Guard - Y Top:1",
+      "bodies": [
+        {
+          "name": "Chip Guard - Y Top",
+          "bounds_mm": [
+            [
+              192.110136,
+              -421.722758,
+              150.603594
+            ],
+            [
+              216.960136,
+              -52.122758,
+              205.053054
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "path": "Cover:1+Front Cover:1+Chip Guard - Front Cover - RevC .500 longer all sides:1",
+      "bodies": [
+        {
+          "name": "Chip Guard - Front Cover - RevC .500 longer all sides",
+          "bounds_mm": [
+            [
+              -7.293529,
+              -415.536652,
+              -4.337173
+            ],
+            [
+              223.106471,
+              -59.707452,
+              185.743827
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "camSetups": 0,
+  "documentMachines": 0
+}

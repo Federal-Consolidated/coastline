@@ -95,7 +95,7 @@ extension AppModel {
             proxy.transform = simd_float4x4(translation: centre) * simd_float4x4(rot) * simd_float4x4(diagonal: SIMD4(size.x, size.y, size.z, 1))
         }
         // Into the clamp kit: from the side (see `transition`); onto the bed: from above.
-        let intoKit = viewSide >= 0 && !setup.onBed
+        let intoKit = viewSide >= 0 && setup.usesClampKit
         let lift = SIMD3<Float>(45, 0, 0)  // X is up
         let slide = SIMD3<Float>(0, 55, 0)  // the kit along the T-slots, clear of the spindle
         let sideIn = SIMD3<Float>(0, b.size.y + 20, 0)  // the stock's start, wholly beside the clamps
@@ -164,6 +164,9 @@ extension AppModel {
             return (SIMD3<Float>(SIMD3(bottom + s.x / 2, prepCentreY(stage), p.stockFaceZ - s.z / 2)), SIMD3<Float>(s))
         }
         let s = setup.stockSize(stock)
+        if setup.holding == .custom {
+            return (SIMD3<Float>(customWorkOrigin(stockSize: s) - SIMD3(0, 0, s.z / 2)), SIMD3<Float>(s))
+        }
         if setup.onBed, let p = bedJobPlacement {
             return (SIMD3<Float>(SIMD3(p.stockBottomX + s.x / 2, bedJobCentreY, p.stockFaceZ - s.z / 2)), SIMD3<Float>(s))
         }

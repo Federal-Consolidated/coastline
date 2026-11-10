@@ -8,7 +8,10 @@ extension AppModel {
     /// (origin at the stock face's centre), for the fixture clearance check.
     /// Cached per placement: building it transforms every kit triangle (a few seconds).
     func clampKitField(stockSize s: SIMD3<Double>) -> FixtureField? {
-        let key = "\(s)|\(setup.onBed)|\(String(describing: bedJobPlacement?.clampPoints))|\(String(describing: bedJobPlacement?.clampAngles))|"
+        if setup.planFromFixtureLibrary {
+            return currentLibraryStep.flatMap { libraryFixtureFields[fixtureStateKey($0.fixture)] }
+        }
+        let key = "\(s)|\(setup.holding?.rawValue ?? "auto")|\(setup.customFixture)|\(setup.onBed)|\(String(describing: bedJobPlacement?.clampPoints))|\(String(describing: bedJobPlacement?.clampAngles))|"
             + "\(String(describing: clampPlacement(stockSize: s).map { ($0.clamps, $0.stockFaceZ, $0.stockBottomX, $0.parallels) }))|\(setup.clampSoftJaw)|\(setup.shoulders.map { "\($0)" } ?? "")"
         if let c = clampFieldCache, c.key == key { return c.field }
         let field = buildClampKitField(stockSize: s)
@@ -17,6 +20,16 @@ extension AppModel {
     }
 
     private func buildClampKitField(stockSize s: SIMD3<Double>) -> FixtureField? {
+        if setup.holding == .custom {
+            let origin = customWorkOrigin(stockSize: s)
+            let table = prepTable
+            let tris = FixtureField.boxTriangles(
+                min: SIMD3(table.topX - table.thickness, table.minimumY ?? (travelCentreY - 200), table.backZ) - origin,
+                max: SIMD3(table.topX, table.maximumY ?? (travelCentreY + 200), table.northZ) - origin)
+            let pad = FixtureClearance.nutRadius + 15
+            return FixtureField(triangles: tris, regionMin: SIMD2(-s.x / 2 - pad, -s.y / 2 - pad),
+                                regionMax: SIMD2(s.x / 2 + pad, s.y / 2 + pad))
+        }
         if setup.onBed {
             // Path B: the stop, riser, C-clamps and table.
             guard let st = bedJobStage, let p = bedJobPlacement else { return nil }
@@ -43,8 +56,8 @@ extension AppModel {
         }
         for b in k.boxes { tris += FixtureField.boxTriangles(min: b.lo - origin, max: b.hi - origin) }
         let table = prepTable
-        tris += FixtureField.boxTriangles(min: SIMD3(mm.tableTopX - FlatPrep.tableThickness, travelCentreY - 200, table.backZ) - origin,
-                                          max: SIMD3(mm.tableTopX, travelCentreY + 200, table.northZ) - origin)
+        tris += FixtureField.boxTriangles(min: SIMD3(mm.tableTopX - table.thickness, table.minimumY ?? (travelCentreY - 200), table.backZ) - origin,
+                                          max: SIMD3(mm.tableTopX, table.maximumY ?? (travelCentreY + 200), table.northZ) - origin)
         let pad = FixtureClearance.nutRadius + 15
         return FixtureField(triangles: tris, regionMin: SIMD2(-s.x / 2 - pad, -s.y / 2 - pad), regionMax: SIMD2(s.x / 2 + pad, s.y / 2 + pad))
     }
@@ -73,6 +86,8 @@ extension AppModel {
     /// strips assume a clamp's middle 12 mm in from each end; this follows the kit as placed
     /// (moved clamps, soft jaws, a bar hanging lower than the jaws).
     func fixtureKeepOut(stockSize s: SIMD3<Double>, margin: Double = 0.6) -> [(min: SIMD2<Double>, max: SIMD2<Double>)] {
+        // Library assignments are evaluated on complete, untrimmed CAM paths.
+        if setup.planFromFixtureLibrary { return [] }
         guard let f = clampKitField(stockSize: s) else { return [] }
         let floor = Float(-s.z + 0.05)  // anything rising above the stock's back
         // The footprint on the field's own grid, as row spans merged downward into rectangles:

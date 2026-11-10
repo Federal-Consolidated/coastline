@@ -224,6 +224,11 @@ extension AppModel {
         renderer.scene.lineSet("toolpath")?.show(upTo: done ? Int.max : (i > 0 ? entrySegmentEnd[i - 1] : 0) + partialSegments(i))
         _ = stock
         let entry = timeline.entries[i]
+        if setup.planFromFixtureLibrary, let step = programs.first(where: { $0.index == entry.program })?.workholdingStep,
+           renderedLibraryStep != step.id {
+            renderedLibraryStep = step.id
+            selectedLibraryStep = step.id
+        }
         if plannedTools.indices.contains(entry.operation) {
             let tool = plannedTools[entry.operation]
             if currentTool?.id != tool.id { currentTool = tool; toolChanged() }
@@ -293,7 +298,7 @@ extension AppModel {
 
     /// Simulates side A to the end in the background (side B starts from it).
     func computeSideAFinal() {
-        guard twoSided, let stock, let r = sideResults.first else { return }
+        guard twoSided, let stock, let r = sideResults.first(where: { $0.side == 0 }) else { return }
         // Already made (or being made) for this side A: keep it.
         let key = r.paths.reduce(0) { $0 + $1.moves.count }
         if key == sideAFinalKey && (sideAFinal != nil || !(sideAFinalTask?.isCancelled ?? true)) { return }
@@ -303,9 +308,10 @@ extension AppModel {
         let size = setup.stockSize(stock)
         let tools = r.planned.map(\.tool)
         let paths = r.paths, programs = r.operationProgram, lines = r.operationLines
+        let machine = self.machine, machineReference = planningMachineReference
         sideAFinalTask = Task { [weak self] in
             let hm = await Task.detached(priority: .utility) { () -> Heightmap in
-                let tl = ToolpathTimeline(paths: paths, programOf: programs, lines: lines)
+                let tl = ToolpathTimeline(paths: paths, programOf: programs, lines: lines, machine: machine)
                 var hm = Heightmap(stockMin: SIMD3(-size.x / 2, -size.y / 2, -size.z), stockMax: SIMD3(size.x / 2, size.y / 2, 0),
                                    maxCells: 250_000)
                 for e in tl.entries where tools.indices.contains(e.operation) {
@@ -313,7 +319,7 @@ extension AppModel {
                 }
                 return hm
             }.value
-            guard let self, !Task.isCancelled else { return }
+            guard let self, !Task.isCancelled, self.planningMachineReference == machineReference else { return }
             self.sideAFinal = hm
             if self.viewSide == 1 {
                 let t = self.playhead
@@ -402,6 +408,7 @@ extension AppModel {
         let states = min(150, max(150_000_000 / max(start.heights.count * 4, 1), 20))
         let every = max(entries.count / states, 100)
         let tick = timeline.duration  // which timeline these are for
+        let machineReference = planningMachineReference
         simPrecompute = Task { [weak self] in
             var hm = start
             var k = 0
@@ -427,7 +434,8 @@ extension AppModel {
                     if Task.isCancelled { return (hm, k, [], lastOp) }
                     return (hm, k, found, lastOp)
                 }.value
-                guard let self, !Task.isCancelled, self.timeline.duration == tick else { return }
+                guard let self, !Task.isCancelled, self.timeline.duration == tick,
+                      self.planningMachineReference == machineReference else { return }
                 (hm, k) = (slice.0, slice.1)
                 lastOp = slice.3
                 for cp in slice.2 where !self.simCheckpoints.contains(where: { $0.index == cp.index }) {

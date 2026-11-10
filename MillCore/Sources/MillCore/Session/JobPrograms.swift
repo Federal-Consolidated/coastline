@@ -13,7 +13,7 @@ public enum JobProgramCheck {
     }
 
     static let codes: Set<String> = ["G0", "G1", "G2", "G3", "G4", "G10", "G17", "G21", "G40", "G38.2", "G38.3", "G53",
-                                     "G54", "G55", "G56", "G57", "G58", "G59", "G90", "G91", "G92.1", "G94",
+                                     "G54", "G55", "G56", "G57", "G58", "G59", "G90", "G91", "G91.1", "G92.1", "G94",
                                      "M3", "M4", "M5", "M9"]
 
     public static func clean(_ lines: [String], settings: MillSettings, envelope: MillEnvelope) -> Result<Program, MillRefusal> {
@@ -51,11 +51,11 @@ public enum JobProgramCheck {
                 guard codes.contains(code) else { return .failure(.blocked("Line \(n): \(code) is not allowed in a job program.")) }
             }
             if let s = words.first(where: { $0.0 == "S" })?.1, s > maxRPM {
-                return .failure(.blocked("Line \(n): S\(Int(s)) is above the spindle's \(Int(maxRPM)) RPM."))
+                return .failure(.blocked(String(format: "Line %d: S%.0f is above the spindle's %.0f RPM.", n, s, maxRPM)))
             }
             if words.contains(where: { $0 == ("G", 10) }) {
                 let l = words.first { $0.0 == "L" }?.1, p = words.first { $0.0 == "P" }?.1
-                guard l == 2 || l == 20, let p, (1...6).contains(Int(p)) else {
+                guard l == 2 || l == 20, let p, (1.0...6.0).contains(p), p.rounded() == p else {
                     return .failure(.blocked("Line \(n): only G10 L2/L20 P1–P6 (work offsets) are allowed."))
                 }
             }

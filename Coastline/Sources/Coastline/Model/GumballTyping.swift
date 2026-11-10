@@ -23,6 +23,14 @@ extension AppModel {
         defer { gumballPrompt = nil; layoutGumball() }
         guard v.isFinite, abs(v) > 1e-9 else { return }
         switch prompt.target {
+        case .libraryFixture(let id):
+            guard abs(v) < 100_000 else { return }
+            if let axis = Self.ringIDs.firstIndex(of: prompt.axis) {
+                rotatePlacement(axis: axis, turns: Int((v / 90).rounded()), componentID: id, useSelection: false)
+            } else {
+                let delta = SIMD3(prompt.axis == "gumball.x" ? v : 0, prompt.axis == "gumball.y" ? v : 0, prompt.axis == "gumball.z" ? v : 0)
+                movePlacement(delta, componentID: id, useSelection: false)
+            }
         case .part:
             if let k = Self.ringIDs.firstIndex(of: prompt.axis) {
                 let q = Int((v / 90).rounded())

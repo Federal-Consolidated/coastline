@@ -96,7 +96,7 @@ let inventoryTests: [TestCase] = [
         try expect(InventoryChecks.check(noCollet, inventory: inv).contains { $0.severity == .warning && $0.message.contains("collet") })
         var tooLong = ok
         tooLong.overallLength = 80
-        try expect(InventoryChecks.check(tooLong, inventory: inv).contains { $0.severity == .error && $0.message.contains("homing") })
+        try expect(InventoryChecks.check(tooLong, inventory: inv).contains { $0.severity == .error && $0.message.contains("tool-length limit") })
         var bigShank = ok
         bigShank.shankDiameter = 10
         try expect(InventoryChecks.check(bigShank, inventory: inv).contains { $0.severity == .error })

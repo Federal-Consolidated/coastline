@@ -9,7 +9,11 @@ extension AppModel {
         let holes = features?.holes ?? []
         let spec = holes.lazy.compactMap { ThreadSpec.likely(forHole: $0.diameter) }.first ?? ThreadSpec.named("M3")!
         op.thread = ThreadMilling(spec: spec.name)
-        let mills = inventory.tools.filter { $0.kind == .threadMill && $0.condition != .broken && ($0.quantity > 0 || $0.isSuggestion) && spec.canBeCut(by: $0) }
+        let mills = inventory.tools.filter {
+            $0.kind == .threadMill && $0.condition != .broken && ($0.quantity > 0 || $0.isSuggestion)
+                && spec.canBeCut(by: $0)
+                && InventoryChecks.check($0, machine: machine, inventory: inventory).allSatisfy { $0.severity < .error }
+        }
         op.toolID = mills.min { ($0.quantity > 0 ? 0 : 1, -$0.fluteLength) < ($1.quantity > 0 ? 0 : 1, -$1.fluteLength) }?.id
     }
 

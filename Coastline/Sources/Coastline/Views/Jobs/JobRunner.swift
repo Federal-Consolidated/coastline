@@ -136,6 +136,7 @@ private struct RunStepCard: View {
     let number: Int
     let of: Int
     @State private var clear = false
+    @State private var confirmed = false
 
     var body: some View {
         let step = item.step, job = entry.job
@@ -150,7 +151,7 @@ private struct RunStepCard: View {
                 Label(caution, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Theme.warning).fixedSize(horizontal: false, vertical: true)
             }
-            if let text = step.text { Text(text).fixedSize(horizontal: false, vertical: true) }
+            if let text = step.text { Text(.init(text)).fixedSize(horizontal: false, vertical: true) }
             if !step.items.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(step.items.enumerated()), id: \.offset) { k, line in
@@ -168,19 +169,29 @@ private struct RunStepCard: View {
             if step.kind == .run, let program = job.program(step.program) {
                 ProgramRunPanel(entry: entry, item: item, program: program, clear: $clear)
             } else {
+                if let confirmation = step.caution {
+                    Toggle(confirmation, isOn: $confirmed)
+                        .toggleStyle(.checkbox)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if step.title.hasPrefix("Measure") {
+                        Text("If the measurement is out of tolerance, keep the stock clamped, correct the problem and measure again before continuing.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 HStack {
                     Button("Back") { app.jobs.back() }.plainGlassButton()
                     Spacer()
                     Button("Done", systemImage: "checkmark") { app.jobs.next() }
                         .buttonStyle(.glassProminent)
                         .keyboardShortcut(.defaultAction)
+                        .disabled(step.caution != nil && !confirmed)
                 }
                 .controlSize(.large)
             }
         }
         .padding(16)
         .glassEffect(.regular, in: .rect(cornerRadius: 18))
-        .onChange(of: item.id) { _, _ in clear = false }
+        .onChange(of: item.id) { _, _ in clear = false; confirmed = false }
     }
 
     private var symbol: String {
@@ -295,6 +306,12 @@ private struct ProgramRunPanel: View {
                     Button("Back") { app.jobs.back() }.plainGlassButton()
                     Spacer()
                     if done {
+                        Button("Run Again") {
+                            clear = false
+                            jobs.retryCurrent()
+                        }
+                        .plainGlassButton()
+                        .disabled(mill.snapshot.program?.outcome == .running)
                         Button("Next", systemImage: "arrow.right") { app.jobs.next() }
                             .buttonStyle(.glassProminent)
                             .keyboardShortcut(.defaultAction)

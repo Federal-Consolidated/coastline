@@ -15,57 +15,34 @@ final class InventoryModel {
 
     let fileURL: URL
     @ObservationIgnored private var saveTask: Task<Void, Never>?
+    private var loadFailed = false
 
     init(fileURL: URL = InventoryModel.resolvedURL) {
         self.fileURL = fileURL
         do {
             if var loaded = try InventoryStore.load(from: fileURL) {
-                // Once: the flat clamping kit (squaring stops, riser, C-clamps) joins inventories
-                // made before it was listed.
-                // Once: the tools Coastline may suggest buying (quantity 0, marked).
-                if loaded.toolSuggestionsAdded != true || (loaded.toolSuggestionsVersion ?? 1) < ToolCatalog.version {
-                    loaded.toolSuggestionsVersion = ToolCatalog.version
-                    let have = Set(loaded.tools.map(\.id))
-                    loaded.tools += ToolCatalog.suggestions.filter { !have.contains($0.id) }
-                    // Suggestions Coastline no longer makes go, unless you bought them.
-                    loaded.tools.removeAll { ToolCatalog.retired.contains($0.id) && $0.isSuggestion }
-                    loaded.toolSuggestionsAdded = true
-                    try? InventoryStore.save(loaded, to: fileURL)
-                }
-                // Suggestions not bought yet follow the catalog (its specs get better).
-                var refreshed = false
-                for i in loaded.tools.indices where loaded.tools[i].isSuggestion {
-                    if let c = ToolCatalog.suggestions.first(where: { $0.id == loaded.tools[i].id }), c != loaded.tools[i] {
-                        loaded.tools[i] = c
-                        refreshed = true
-                    }
-                }
-                // Standard stock sizes to buy (quantity 0, marked), once per catalog version.
-                if (loaded.stockSuggestionsVersion ?? 0) < StockCatalog.version {
-                    loaded.stockSuggestionsVersion = StockCatalog.version
-                    let have = Set(loaded.stock.map(\.id))
-                    loaded.stock += StockCatalog.suggestions.filter { !have.contains($0.id) }
-                    refreshed = true
-                }
-                if refreshed { try? InventoryStore.save(loaded, to: fileURL) }
+                // Install new definitions without replacing the user's measurements,
+                // notes or quantities, including tools still marked as not owned.
+                if loaded.installCatalogUpdates() { try? InventoryStore.save(loaded, to: fileURL) }
                 if loaded.flatKitAdded != true {
                     let have = Set(loaded.fixtures.map(\.kind))
                     loaded.fixtures += Inventory.flatClampingKit.filter { !have.contains($0.kind) }
                     loaded.flatKitAdded = true
                     try? InventoryStore.save(loaded, to: fileURL)
                 }
+                loaded.stock = loaded.stock.map { loaded.resolvedStock($0) }
                 inventory = loaded
             } else {
                 inventory = Inventory.starter(toolLibraries: Self.bundledToolLibraries)
-                inventory.tools += ToolCatalog.suggestions
-                inventory.toolSuggestionsAdded = true
-                inventory.toolSuggestionsVersion = ToolCatalog.version
-                inventory.stock += StockCatalog.suggestions
-                inventory.stockSuggestionsVersion = StockCatalog.version
+                inventory.installCatalogUpdates()
                 showStarterBanner = true
                 try InventoryStore.save(inventory, to: fileURL)
             }
+            if VettedFixtureLibrary.migrate(&inventory, resources: AppModel.repoRoot.appendingPathComponent("resources")) {
+                try InventoryStore.save(inventory, to: fileURL)
+            }
         } catch {
+            loadFailed = true
             lastError = "\(error)"
         }
     }
@@ -89,8 +66,58 @@ final class InventoryModel {
     // MARK: Editing
 
     func update(_ change: (inout Inventory) -> Void) {
+        guard !loadFailed else { return }
         change(&inventory)
+        inventory.stock = inventory.stock.map { inventory.resolvedStock($0) }
         scheduleSave()
+    }
+
+    func saveMaterial(_ material: Material) throws {
+        guard MaterialLibrary.material(id: material.id) == nil else {
+            throw ResourceLibraryImport.ImportError.invalid(["Make a copy to edit a built-in material."])
+        }
+        guard material.validationIssues.isEmpty else {
+            throw ResourceLibraryImport.ImportError.invalid(material.validationIssues)
+        }
+        var next = inventory
+        var materials = next.customMaterials ?? []
+        materials.removeAll { $0.id == material.id }
+        materials.append(material)
+        next.customMaterials = materials
+        next.stock = next.stock.map { next.resolvedStock($0) }
+        try commitLibrary(next)
+    }
+
+    /// Customize one block without changing a shared material or a saved job's data.
+    func customizeStockMaterial(_ material: Material, stockID: UUID, expectedMaterialID: String) throws {
+        let next = try inventory.customizingStockMaterial(material, stockID: stockID,
+                                                          expectedMaterialID: expectedMaterialID)
+        try commitLibrary(next)
+    }
+
+    func removeMaterial(id: String) throws {
+        guard MaterialLibrary.material(id: id) == nil else {
+            throw ResourceLibraryImport.ImportError.invalid(["Built-in materials cannot be deleted."])
+        }
+        guard !inventory.stock.contains(where: { $0.materialID == id }) else {
+            throw ResourceLibraryImport.ImportError.invalid(["This material is used by stock in your library. Change that stock's material before deleting it."])
+        }
+        var next = inventory
+        next.customMaterials?.removeAll { $0.id == id }
+        try commitLibrary(next)
+    }
+
+    /// Save before publishing the replacement so a failed import leaves memory and disk intact.
+    func commitLibrary(_ candidate: Inventory) throws {
+        guard !loadFailed else {
+            throw ResourceLibraryImport.ImportError.invalid(["The existing inventory could not be loaded. Restore it before importing or replacing library entries."])
+        }
+        var next = candidate
+        next.stock = next.stock.map { next.resolvedStock($0) }
+        try InventoryStore.save(next, to: fileURL)
+        saveTask?.cancel()
+        inventory = next
+        lastError = nil
     }
 
     /// A binding to one item of a list in the inventory, by id. Returns nil if it was deleted.
@@ -139,7 +166,10 @@ final class InventoryModel {
     }
 
     func resetToStarter() {
+        loadFailed = false
         inventory = Inventory.starter(toolLibraries: Self.bundledToolLibraries)
+        inventory.installCatalogUpdates()
+        _ = VettedFixtureLibrary.migrate(&inventory, resources: AppModel.repoRoot.appendingPathComponent("resources"))
         saveNow()  // immediately, so Inventory.json.bak holds the replaced inventory
         showStarterBanner = true
     }
@@ -156,6 +186,7 @@ final class InventoryModel {
     }
 
     func saveNow() {
+        guard !loadFailed else { return }
         do {
             try InventoryStore.save(inventory, to: fileURL)
             lastError = nil
@@ -166,19 +197,22 @@ final class InventoryModel {
 
     // MARK: Checks
 
-    func issues(for tool: Tool) -> [Issue] { InventoryChecks.check(tool, inventory: inventory) }
-    func issues(for stock: StockItem) -> [Issue] { InventoryChecks.check(stock) }
+    func issues(for tool: Tool, machine: MachineProfile) -> [Issue] { InventoryChecks.check(tool, machine: machine, inventory: inventory) }
+    func issues(for stock: StockItem, machine: MachineProfile) -> [Issue] { InventoryChecks.check(stock, machine: machine) }
 
-    func worstIssue(for tool: Tool) -> Issue.Severity? { issues(for: tool).map(\.severity).max() }
-    func worstIssue(for stock: StockItem) -> Issue.Severity? { issues(for: stock).map(\.severity).max() }
+    func worstIssue(for tool: Tool, machine: MachineProfile) -> Issue.Severity? { issues(for: tool, machine: machine).map(\.severity).max() }
+    func worstIssue(for stock: StockItem, machine: MachineProfile) -> Issue.Severity? { issues(for: stock, machine: machine).map(\.severity).max() }
 
     /// Suggested stock was bought: it joins the inventory as owned.
     func markStockOwned(_ ids: Set<StockItem.ID>) {
         update { inv in
-            for k in inv.stock.indices where ids.contains(inv.stock[k].id) && inv.stock[k].isSuggestion {
+            for k in inv.stock.indices where ids.contains(inv.stock[k].id) && inv.stock[k].quantity == 0 {
+                let suggested = inv.stock[k].isSuggestion
                 inv.stock[k].quantity = 1
-                inv.stock[k].supplier = ""
-                inv.stock[k].notes = inv.stock[k].notes.replacingOccurrences(of: "Not in your inventory: a standard size. ", with: "")
+                if suggested {
+                    inv.stock[k].supplier = ""
+                    inv.stock[k].notes = inv.stock[k].notes.replacingOccurrences(of: "Not in your inventory: a standard size. ", with: "")
+                }
             }
         }
     }
@@ -186,9 +220,10 @@ final class InventoryModel {
     /// A suggested tool was bought: it joins the inventory as owned.
     func markOwned(_ id: Tool.ID) {
         update { inv in
-            for k in inv.tools.indices where inv.tools[k].id == id && inv.tools[k].isSuggestion {
+            for k in inv.tools.indices where inv.tools[k].id == id && inv.tools[k].quantity <= 0 {
+                let suggested = inv.tools[k].isSuggestion
                 inv.tools[k].quantity = 1
-                inv.tools[k].source = "Bought on Coastline's suggestion"
+                if suggested { inv.tools[k].source = "Bought on Coastline's suggestion" }
             }
         }
     }

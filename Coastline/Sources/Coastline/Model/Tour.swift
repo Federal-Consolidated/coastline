@@ -104,7 +104,7 @@ extension AppModel {
                        : "Two C-clamps over the table's back edge, pads about \(Length.mm(behind.rounded())) mm back from the face, frames touching the bed's edge.")
             out.append("**Edge finding is by hand** here: jog the spinning edge finder to each edge in Machine Control until it kicks, and store it. The animation only shows the order.")
             return out
-        case .program where (step.program ?? 0) >= 2000 && step.side >= 0 && !setup.onBed && AppSettings.shared.clampKitProbing == .electrical:
+        case .program where (step.program ?? 0) >= 2000 && step.side >= 0 && setup.usesClampKit && AppSettings.shared.clampKitProbing == .electrical:
             return [
                 "**Automatic:** the clamp kit is insulated, so the cutter itself finds the edges: it turns slowly backwards and creeps in until it touches (G38.2), then backs off.",
                 "Plug the probe wire into the LED board and fix it to the clamp first.",
@@ -126,6 +126,14 @@ extension AppModel {
             if let material { out.append(material.lubricant) }
             return out
         case .setup:
+            if step.id.hasPrefix("library."), let holding = libraryWorkholdingPlan?.steps.first(where: { "library.\($0.id)" == step.id }) {
+                return [holding.instructions]
+            }
+            if setup.holding == .custom {
+                return ["Hold the stock in **\(setup.customFixture.name)**, secured independently of material removed by the toolpaths.",
+                        setup.customFixture.notes,
+                        "Custom fixture geometry is not included in collision checks. Check the jaws and fasteners, then edge-find and touch off the stock in Machine Control."].filter { !$0.isEmpty }
+            }
             if setup.onBed, let st = bedJobStage, let p = bedJobPlacement {
                 let turned = p.clampAngles.contains { abs($0) > 0.05 }
                 return [
@@ -143,6 +151,10 @@ extension AppModel {
                 "The jaws hold the top and bottom edges: the \(Length.mm(GripZones.grip)) mm strips there are never cut, so the frame stays gripped to the end.",
             ].filter { !$0.isEmpty }
         case .flip:
+            if setup.holding == .custom {
+                return ["Turn the stock front-to-back about the vertical axis and secure it in your custom fixture.",
+                        "Check clearance again, then edge-find and touch off for side B."]
+            }
             return [
                 "Vacuum the chips. Loosen the clamp screws and lift the stock out; leave the clamps bolted.",
                 "Turn it front-to-back about the vertical axis: the back now faces the spindle, left becomes right.",
@@ -158,7 +170,9 @@ extension AppModel {
             ]
         case .finish:
             var out: [String] = []
-            if ((twoSided && holdWithTabs) || cutsThroughWithTabs) && !placedTabs.isEmpty {
+            if setup.planFromFixtureLibrary {
+                out.append("Stop the spindle, move the tool clear, release the final fixture and deburr the part.")
+            } else if ((twoSided && holdWithTabs) || cutsThroughWithTabs) && !placedTabs.isEmpty {
                 out.append("Unclamp. The part hangs in the frame on \(placedTabs.count) tabs: cut each close to the part with a jeweller's saw.")
             } else if twoSided {
                 out.append("Unclamp and saw through the thin web to free the part.")

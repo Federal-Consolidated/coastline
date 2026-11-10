@@ -1,9 +1,7 @@
 import Foundation
 
-/// A material Coastline knows how to cut. Values are **starting points for a carbide tool on the
-/// machine**, a light machine with a spindle limited to 8000 RPM. The feeds engine scales
-/// them by tool diameter, flutes and engagement, and the job journal tunes them from
-/// real results.
+/// Starting cutting data for a material. The feeds engine applies tool geometry and the
+/// selected machine's limits; the job journal tunes the starting values from real results.
 public struct Material: Identifiable, Hashable, Sendable, Codable {
     public enum Family: String, CaseIterable, Sendable, Codable {
         case aluminium, copperAlloy, steel, stainless, titanium, plastic, printedResin, wax
@@ -94,6 +92,9 @@ public struct Material: Identifiable, Hashable, Sendable, Codable {
     public var chips: String
     public var tooling: String
     public var notes: String
+    /// Where a custom definition's cutting data came from: a supplier, document or test cut.
+    /// Missing in older definitions and in the built-in catalog.
+    public var source: String? = nil
     /// Is this material allowed in a first-time job without a confirmation?
     public var needsConfirmation: Bool { difficulty >= .careful }
 
@@ -101,7 +102,7 @@ public struct Material: Identifiable, Hashable, Sendable, Codable {
                 hardness: String, surfaceSpeed: ClosedRange<Double>, chipLoadFactor: Double,
                 adaptiveStepoverMax: Double, adaptiveDepthMax: Double, slotDepthMax: Double,
                 specificCuttingForce: Double, toolWearFactor: Double,
-                lubricant: String, chips: String, tooling: String, notes: String = "") {
+                lubricant: String, chips: String, tooling: String, notes: String = "", source: String? = nil) {
         self.id = id
         self.name = name
         self.family = family
@@ -120,12 +121,38 @@ public struct Material: Identifiable, Hashable, Sendable, Codable {
         self.chips = chips
         self.tooling = tooling
         self.notes = notes
+        self.source = source
+    }
+
+    /// Structural checks shared by library installation and the material editor. These do
+    /// not certify a cutting recipe; they keep invalid numbers out of feeds calculations.
+    public var validationIssues: [String] {
+        var issues: [String] = []
+        if id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { issues.append("Enter a material ID.") }
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { issues.append("Enter a material name.") }
+        // These broad format limits keep arithmetic defined even for hand-authored imports.
+        // They are not recommended cutting values or a statement of machine capability.
+        func positive(_ value: Double, _ title: String, maximum: Double) {
+            if !value.isFinite || value <= 0 || value > maximum {
+                issues.append("\(title) must be greater than zero and no more than \(maximum.formatted(.number.grouping(.never))).")
+            }
+        }
+        positive(density, "Density (g/cm³)", maximum: 100)
+        positive(surfaceSpeed.lowerBound, "Minimum surface speed (m/min)", maximum: 1_000_000)
+        positive(surfaceSpeed.upperBound, "Maximum surface speed (m/min)", maximum: 1_000_000)
+        positive(chipLoadFactor, "Chip load factor", maximum: 1_000)
+        positive(adaptiveStepoverMax, "Adaptive stepover (fraction of tool diameter)", maximum: 1)
+        positive(adaptiveDepthMax, "Adaptive depth (multiple of tool diameter)", maximum: 1_000)
+        positive(slotDepthMax, "Slot depth (multiple of tool diameter)", maximum: 1_000)
+        positive(specificCuttingForce, "Specific cutting force (N/mm²)", maximum: 1_000_000_000)
+        positive(toolWearFactor, "Tool wear factor", maximum: 1_000)
+        return issues
     }
 
     /// RPM for a tool diameter (mm) at the middle of the surface-speed range, before the
     /// machine's spindle limits are applied.
     public func idealRPM(toolDiameter: Double) -> Double {
-        let vc = (surfaceSpeed.lowerBound + surfaceSpeed.upperBound) / 2
+        let vc = surfaceSpeed.lowerBound / 2 + surfaceSpeed.upperBound / 2
         return vc * 1000 / (Double.pi * toolDiameter)
     }
 }

@@ -33,12 +33,15 @@ public struct AxisBox: Equatable, Sendable, Codable {
 /// - [DIM] the machine dimensions model (a measured envelope model)
 public struct MachineProfile: Equatable, Sendable, Codable {
     public var name: String
+    /// Controller position after homing. Older serialized profiles omit this field.
+    /// New portable definitions require it; an envelope corner is not generally home.
+    public var homePosition: Vec3? = nil
 
     // MARK: Motion
 
     /// Travel per axis, mm ($130–$132). [FW]
     public var travel: Vec3
-    /// Reachable machine coordinates. Home is the 0 corner; everything is negative. The sender's
+    /// Reachable machine coordinates for this profile. The built-in desktop sender's
     /// soft-limit window: X −(travel−0.5)…−0.5, Y and Z −travel…−0.5. [CRC]
     public var machineEnvelope: AxisBox
     /// Max feed per axis, mm/min ($110–$112). [FW]
@@ -99,6 +102,7 @@ public struct MachineProfile: Equatable, Sendable, Codable {
 
     public static let standard = MachineProfile(
         name: "Desktop Mill",
+        homePosition: Vec3(-86, -0.5, -0.5),
         travel: Vec3(86.5, 241.5, 78.5),
         machineEnvelope: AxisBox(x: -86.0 ... -0.5, y: -241.5 ... -0.5, z: -78.5 ... -0.5),
         maxRate: Vec3(2540, 3100, 3100),
@@ -136,7 +140,8 @@ extension MachineProfile {
     /// changes one or more axes of the last position, starting from home): the spindle back,
     /// over, the table down, the spindle out. [UC]
     public var toolChangeWaypoints: [SIMD3<Double>] {
-        let home = SIMD3(machineEnvelope.x.upperBound, machineEnvelope.y.upperBound, machineEnvelope.z.upperBound)
+        let position = homePosition ?? Vec3(machineEnvelope.x.upperBound, machineEnvelope.y.upperBound, machineEnvelope.z.upperBound)
+        let home = SIMD3(position.x, position.y, position.z)
         var p = home, out: [SIMD3<Double>] = []
         for line in toolChangeMoves where line.uppercased().contains("G53") {
             for (k, axis) in ["X", "Y", "Z"].enumerated() {

@@ -11,8 +11,8 @@ struct JobStep: Identifiable {
             switch self {
             case .stock: "Your stock"
             case .prep: "Flat on the bed"
-            case .sideA: "Clamp kit · side A"
-            case .sideB: "Clamp kit · side B"
+            case .sideA: "Machining · side A"
+            case .sideB: "Machining · side B"
             case .finish: "Finish"
             }
         }
@@ -69,6 +69,9 @@ extension AppModel {
     /// each tool program (a tool change and touch-off before each), turning the stock over, side
     /// B, then freeing the part. The same order as the guided .crproj.
     var jobSteps: [JobStep] {
+        if setup.planFromFixtureLibrary, libraryWorkholdingPlan?.complete == true, !programs.isEmpty {
+            return libraryJobSteps
+        }
         // The finished programs, or while generating the planned ones (the same grouping and
         // numbering): every chapter and step is known before its toolpaths are.
         struct Prog { var index: Int; var side: Int; var tool: Tool; var operations: [Operation]; var seconds: Double? }
@@ -83,7 +86,7 @@ extension AppModel {
                                side: side, stage: stage, program: program, minutes: minutes))
         }
         // After every clamping: the edge finder finds X/Y, then each tool is touched off on the face.
-        let electrical = !setup.onBed && AppSettings.shared.clampKitProbing == .electrical
+        let electrical = setup.usesClampKit && AppSettings.shared.clampKitProbing == .electrical
         let reach = stock.map { probing(stockSize: setup.stockSize($0)) }
         func edgeFind(side: Int, stage: Int) {
             let probe = electrical && side >= 0
@@ -121,8 +124,36 @@ extension AppModel {
                 }
             }
         }
+        // The setups from the other sides come first, on the whole block.
+        let turnedChecks = checkpoints()
+        var turned: [Int] = []
+        for p in progs where p.side >= 2 && !turned.contains(p.side) { turned.append(p.side) }
+        for side in turned {
+            let words = SetupSide.words(side)
+            add(.setup, "turn\(side)", "Turn: \(words) to the spindle",
+                "Turn the stock so its \(words) faces the spindle · secure it in the fixture shown · find the X/Y centre · touch off",
+                "rotate.3d", side: side)
+            edgeFind(side: side, stage: 0)
+            for p in progs where p.side == side {
+                add(.program, "p\(p.index)", p.tool.name.components(separatedBy: " · ").first ?? p.tool.name,
+                    "Change tool, touch off · " + p.operations.map(\.title).joined(separator: ", "),
+                    "wrench.and.screwdriver", side: side, program: p.index, minutes: p.seconds.map { $0 / 60 })
+                for (n, c) in turnedChecks.enumerated() where c.afterProgram == p.index {
+                    out.append(JobStep(id: "c\(p.index).\(n)", kind: .measure, number: out.count + 1, title: "Measure",
+                                       detail: "\(c.what): \(Length.mm(c.expected)) ± \(Length.mm(c.tolerance)) mm", symbol: "ruler",
+                                       side: p.side, stage: 0, program: p.index, checkpoint: c))
+                }
+            }
+        }
         let clamps = stock.flatMap { clampPlacement(stockSize: setup.stockSize($0))?.clamps.count } ?? 1
-        if setup.onBed {
+        if !turned.isEmpty {
+            add(.setup, "setup", "Turn: front to the spindle", "Turn the stock back so its front faces the spindle · secure it in the fixture shown · find the X/Y centre · touch off",
+                "rotate.3d", side: 0)
+        } else if setup.holding == .custom {
+            add(.setup, "setup", "Secure in your fixture & edge-find",
+                "\(setup.customFixture.name) · check fixture clearance · find the X/Y centre · touch off",
+                "square.and.arrow.down.on.square", side: 0)
+        } else if setup.onBed {
             add(.setup, "setup", "Clamp on the bed & edge-find",
                 "Flat on the riser against the stop, two C-clamps · find the X/Y centre · touch off", "square.and.arrow.down.on.square", side: 0)
         } else {
@@ -147,7 +178,9 @@ extension AppModel {
         }
         if twoSided {
             add(.flip, "flip", "Turn over & re-clamp",
-                "Front-to-back about the vertical axis · same bottom edge and parallels · edge-find and touch off again",
+                setup.holding == .custom
+                    ? "Front-to-back about the vertical axis · secure in your fixture · edge-find and touch off again"
+                    : "Front-to-back about the vertical axis · same bottom edge and parallels · edge-find and touch off again",
                 "arrow.triangle.2.circlepath", side: 1)
             edgeFind(side: 1, stage: 0)
             for p in progs where p.side == 1 {
@@ -179,7 +212,7 @@ extension AppModel {
             default: return (3, "Finishing")
             }
         }
-        let sideName: (Int) -> String = { side in self.twoSided ? (side == 0 ? "A · " : "B · ") : "" }
+        let sideName: (Int) -> String = { side in side >= 2 ? SetupSide.words(side).capitalized + " · " : self.twoSided || !turned.isEmpty ? (side == 0 ? "A · " : "B · ") : "" }
         var last: (key: String, chapter: JobChapter)?
         var runs = 0
         for k in out.indices {
@@ -189,7 +222,7 @@ extension AppModel {
             case .finish: (key, title) = ("finish", st.title)
             case .measure: (key, title) = last.map { ($0.key, $0.chapter.title) } ?? ("measure", "Measure")
             case .prepSetup where st.stage < 0: (key, title) = ("bed0", "Bed 1 · " + (flatPrepPlan?.stages.first?.title ?? "Prep"))
-            case .setup, .flip: (key, title) = ("s\(st.side).setup", sideName(st.side) + (st.kind == .flip || st.side == 1 ? "Turn over & edge-find" : "Clamp & edge-find"))
+            case .setup, .flip: (key, title) = ("s\(st.side).setup", sideName(st.side) + (st.kind == .flip || st.side == 1 ? "Turn over & edge-find" : st.side >= 2 || (st.side == 0 && !turned.isEmpty) ? "Turn & edge-find" : "Clamp & edge-find"))
             default:
                 if st.side == -1 {
                     let n = max(st.stage, 0)
@@ -299,7 +332,11 @@ extension AppModel {
         switch step.kind {
         case .program: return step.program == currentProgram && (step.side != -1 || prepStage == step.stage)
         case .prepSetup: return viewSide == -1 && prepStage == step.stage && atStart
-        case .setup: return viewSide == 0 && atStart
+        case .setup:
+            if setup.planFromFixtureLibrary {
+                return step.id == "library.\(currentLibraryStep?.id.uuidString ?? "")" && atStart
+            }
+            return viewSide == 0 && atStart
         case .flip: return viewSide == 1 && atStart
         case .measure:
             return selectedStep?.id == step.id && abs(playhead - (selectedStep?.time ?? -1)) < 1e-6
@@ -311,6 +348,11 @@ extension AppModel {
     /// machine) and jumps to its program.
     func go(to step: JobStep) {
         pause()
+        if step.id.hasPrefix("library."), let holding = libraryWorkholdingPlan?.steps.first(where: { "library.\($0.id)" == step.id }) {
+            inspectLibraryStep(holding)
+            selectedStep = (step.id, playhead)
+            return
+        }
         let seekTo: () -> Void = { [weak self] in
             guard let self else { return }
             switch step.kind {
@@ -518,7 +560,7 @@ struct JobStrip: View {
             if !compact {
             VStack(alignment: .leading, spacing: 0) {
                 Text(step.title).font(.caption.weight(.semibold)).lineLimit(1)
-                Text(step.minutes.map { "\(step.side == -1 ? "Prep · " : model.twoSided ? (step.side == 0 ? "A · " : "B · ") : "")≈ \(AppModel.duration($0 * 60))" }
+                Text(step.minutes.map { "\(step.side == -1 ? "Prep · " : step.side >= 2 ? SetupSide.words(step.side).capitalized + " · " : model.twoSided ? (step.side == 0 ? "A · " : "B · ") : "")≈ \(AppModel.duration($0 * 60))" }
                      ?? (step.kind == .program ? "being generated…" : step.kind == .flip ? "Side B" : step.kind == .prepSetup ? "Prep" : step.kind == .setup ? (model.twoSided ? "Side A" : "Setup") : "By hand"))
                     .font(.caption).foregroundStyle(active ? Color.white : .secondary).lineLimit(1)
             }

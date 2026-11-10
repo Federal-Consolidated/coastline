@@ -8,6 +8,109 @@ private let eighth = Tool(name: "1/8 flat", kind: .flatEndMill, diameter: 3.175,
                           fluteLength: 9.525, stickout: 28.575, overallLength: 50.8)
 
 let camTests: [TestCase] = [
+    TestCase(name: "selectedMachineControlsCuttingDataAndToolEligibility") {
+        let material = MaterialLibrary.material(id: "al-6061")!
+        var restricted = MachineProfile.standard
+        restricted.spindleRPM = 1000...2000
+        restricted.maxRate = Vec3(50, 50, 50)
+        restricted.maxShankDiameter = 4
+        restricted.maxToolLength = 50
+        var op = Operation(kind: .adaptive)
+        op.feedScale = 20
+        let data = op.cuttingData(tool: eighth, material: material, machine: restricted)
+        try expectEqual(data.rpm, 2000)
+        try expect(data.feed <= 50 && data.plungeFeed <= 50 && data.rampFeed <= 50)
+        try expect(op.cuttingData(tool: eighth, material: material).feed > data.feed)
+        var short = eighth
+        short.id = UUID(); short.overallLength = 45
+        var inventory = Inventory()
+        inventory.tools = [quarter, eighth, short]
+        inventory.accessories = [Accessory(name: "1/4", kind: .collet, size: 6.35),
+                                 Accessory(name: "1/8", kind: .collet, size: 3.175)]
+        try expectEqual(OperationPlanner.usableTools(inventory, machine: restricted).map(\.id), [short.id])
+        let proposal = OperationPlanner.propose(inventory: inventory, machine: restricted)
+        try expect(!proposal.operations.isEmpty && proposal.operations.allSatisfy { $0.toolID == short.id })
+        let facts = StrategyEngine.Facts(analysis: PartAnalysis(depth: 5, volume: 3000),
+                                         part: SIMD3(20, 30, 5), stock: SIMD3(25, 35, 8), material: material)
+        let plans = StrategyEngine.candidates(facts: facts, inventory: inventory, machine: restricted)
+        try expect(!plans.isEmpty && plans.allSatisfy { $0.operations.allSatisfy { $0.toolID == short.id } })
+        var fast = restricted
+        fast.maxRate = MachineProfile.standard.maxRate; fast.spindleRPM = MachineProfile.standard.spindleRPM
+        let fasterPlans = StrategyEngine.candidates(facts: facts, inventory: inventory, machine: fast)
+        try expect(plans.map(\.minutes).min()! > fasterPlans.map(\.minutes).min()!)
+        // A long-reach purchase remedy must fit the same machine as the proposed plan.
+        var deep = facts
+        deep.cutDepth = 18
+        var shortToolInventory = inventory
+        short.overallLength = 33
+        shortToolInventory.tools = [short]
+        var shortToolMachine = restricted
+        shortToolMachine.maxToolLength = 35
+        func replacements(_ candidates: [StrategyEngine.Candidate]) -> [UUID] {
+            candidates.flatMap(\.remedies).compactMap { remedy in
+                if case .swap(_, let to) = remedy.change { return to }
+                return nil
+            }
+        }
+        let legacyRemedies = replacements(StrategyEngine.candidates(facts: deep, inventory: shortToolInventory))
+        try expect(!legacyRemedies.isEmpty, "The deeper cut should offer a long-reach tool on the larger machine.")
+        let shortToolPlans = StrategyEngine.candidates(facts: deep, inventory: shortToolInventory, machine: shortToolMachine)
+        try expect(!shortToolPlans.isEmpty)
+        let restrictedRemedies = replacements(shortToolPlans)
+        try expect(restrictedRemedies.isEmpty, "Do not offer a long-reach purchase beyond the selected machine's tool-length limit.")
+    },
+    TestCase(name: "selectedMachineTravelReachesAdaptiveEngineRequest") {
+        let python = repoRoot.appendingPathComponent("engine/.venv/bin/python")
+        guard FileManager.default.fileExists(atPath: python.path) else { throw Skip(reason: "engine venv missing") }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("coastline-machine-wire-\(UUID())")
+        let module = root.appendingPathComponent("coastline_engine")
+        try FileManager.default.createDirectory(at: module, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data().write(to: module.appendingPathComponent("__init__.py"))
+        // Validate the actual RPC boundary, including the overload forwarding machine limits.
+        let server = """
+        import json, struct, sys
+        for expected in ([18.5, 38.5], [10.5, 58.5]):
+            length = struct.unpack('>I', sys.stdin.buffer.read(4))[0]
+            request = json.loads(sys.stdin.buffer.read(length))
+            assert request['method'] == 'generate'
+            assert request['params']['ops'][0]['max_span'] == expected, request
+            response = json.dumps({'id': request['id'], 'result': {'ops': [{'warnings': []}]}, 'blobs': [0]}).encode()
+            sys.stdout.buffer.write(struct.pack('>I', len(response)) + response)
+            sys.stdout.buffer.flush()
+        """
+        try server.write(to: module.appendingPathComponent("server.py"), atomically: true, encoding: .utf8)
+        let engine = try EngineClient(python: python, engineDir: root)
+        defer { engine.terminate() }
+        let operation = Operation(kind: .adaptive)
+        let planned = EngineClient.PlannedOperation(operation: operation, tool: eighth,
+            data: operation.cuttingData(tool: eighth, material: MaterialLibrary.material(id: "al-6061")!))
+        var first = MachineProfile.standard; first.travel = Vec3(20, 40, 10)
+        var second = first; second.travel = Vec3(12, 60, 10)
+        let machines = (first, second)
+        let count = try camBlocking {
+            let a = try await engine.generate(partID: "test", transform: matrix_identity_double4x4,
+                stockMin: SIMD3(-5, -5, -2), stockMax: SIMD3(5, 5, 0), operations: [planned], machine: machines.0)
+            let b = try await engine.generate(partID: "test", transform: matrix_identity_double4x4,
+                stockMin: SIMD3(-5, -5, -2), stockMax: SIMD3(5, 5, 0), operations: [planned],
+                tabs: nil, tabBottom: 0, machine: machines.1)
+            return a.count + b.paths.count
+        }
+        try expectEqual(count, 2)
+    },
+    TestCase(name: "automaticPlansKeepAnExistingFaceAtZeroAllowance") {
+        var inv = Inventory()
+        inv.tools = [quarter, eighth]
+        inv.accessories = [Accessory(name: "1/4", kind: .collet, size: 6.35), Accessory(name: "1/8", kind: .collet, size: 3.175)]
+        let quick = OperationPlanner.propose(inventory: inv, faceDepth: 0)
+        try expect(!quick.operations.isEmpty && !quick.operations.contains { $0.kind == .facing })
+        let facts = StrategyEngine.Facts(analysis: PartAnalysis(depth: 5, volume: 3000),
+                                         part: SIMD3(20, 30, 5), stock: SIMD3(20, 30, 5), faceDepth: 0,
+                                         material: MaterialLibrary.material(id: "al-6061")!)
+        let plans = StrategyEngine.candidates(facts: facts, inventory: inv)
+        try expect(!plans.isEmpty && plans.allSatisfy { !$0.operations.contains { $0.kind == .facing } })
+        try expect(OperationPlanner.propose(inventory: inv, faceDepth: 0.1).operations.contains { $0.kind == .facing && $0.faceDepth == 0.1 })
+    },
     TestCase(name: "roughingStylesKeepTheChipAndGoDeeper") {
         let al = MaterialLibrary.material(id: "al-6061")!
         let quarter = Tool(name: "1/4\" flat", kind: .flatEndMill, diameter: 6.35, shankDiameter: 6.35, flutes: 3,
@@ -153,6 +256,7 @@ let camTests: [TestCase] = [
         try expect(g.contains("G3 X5 Y6.215"), g)
     },
     TestCase(name: "postFollowsTheMakersConventions") {
+        try expectEqual(GRBLPost.adapterID, "coastline.grbl.desktop.v1")
         let moves = [Move(.rapid, x: 0, y: 0, z: 3), Move(.rapid, x: 0, y: 0, z: 1),
                      Move(.plunge, x: 0, y: 0, z: -1, feed: 300), Move(.cut, x: 10, y: 0, z: -1, feed: 800),
                      Move(.cut, .arcCCW, x: 10, y: 10, z: -1, i: 0, j: 5, feed: 800), Move(.rapid, x: 10, y: 10, z: 3)]
@@ -161,6 +265,8 @@ let camTests: [TestCase] = [
                                 rpm: 8000, paths: [OperationToolpath(operationID: UUID(), moves: moves)])
         let lines = g.split(separator: "\n").map(String.init)
         try expect(lines.contains("G90 G17 G21"))
+        try expect(lines.contains("G94 G40 G91.1"), "reset inherited feed mode before motion")
+        try expect(!lines.contains { $0.split(separator: " ").contains("G49") }, "preserve the tool offset used during touch-off")
         try expectEqual(lines.filter { $0 == "G53 G0 G90 Z-1." }.count, 2)
         try expect(lines.contains("S5000") && lines.contains("S8000 M3"), "spindle ramp")
         try expect(!g.contains("M6") && !g.contains("M30"))
@@ -169,6 +275,21 @@ let camTests: [TestCase] = [
         let ctx = GCodeValidator.Context(stockMin: SIMD3(-40, -75, -20), stockMax: SIMD3(40, 75, 0), tool: quarter)
         let report = GCodeValidator().validate(g, context: ctx)
         try expect(report.passed, "\(report.issues)")
+    },
+    TestCase(name: "postBoundsCommentsAndClampsToUsableSpindleRange") {
+        let label = "Fixture (left)\nS9000 M3\r!?~|" + String(repeating: "é", count: 100)
+        let header = GRBLPost.Header(programName: label, setupName: label, tool: quarter,
+                                     operationNames: [label], stockDescription: label)
+        for (requested, expected) in [(1360.0, 1500), (8500.0, 8000)] {
+            let code = GRBLPost.program(header: header, rpm: requested, paths: [])
+            let lines = code.split(separator: "\n").map(String.init)
+            try expect(lines.allSatisfy { $0.utf8.count <= MachineProfile.standard.maxLineLength })
+            try expect(lines.filter { $0.hasPrefix("(") }.allSatisfy { $0.hasSuffix(")") && $0.filter { $0 == "(" }.count == 1 })
+            try expect(!code.contains("!") && !code.contains("?") && !code.contains("~") && !code.contains("|"))
+            try expect(!lines.contains("S9000 M3"), "a label cannot add a command")
+            try expect(lines.contains("S\(expected) M3"), "usable RPM clamp")
+            try expectEqual(lines.last, "M5")
+        }
     },
     TestCase(name: "validatorRejectsDangerousPrograms") {
         let ctx = GCodeValidator.Context(stockMin: SIMD3(-40, -75, -20), stockMax: SIMD3(40, 75, 0), tool: quarter)
@@ -179,6 +300,7 @@ let camTests: [TestCase] = [
         try expect(errors("G21\nG0 X0 Y0 Z3\n").contains { $0.contains("G90") }, "missing G90")
         try expect(errors(header + "S9000 M3\n").contains { $0.contains("9000") }, "rpm")
         try expect(errors(header + "M6 T1\n").contains { $0.contains("M6") })
+        try expect(errors(header + "G93\nG1 Z-1 F100\n").contains { $0.contains("G94") }, "inverse-time feed is not a Coastline program")
         try expect(errors(header + "G0 X0 Y0 Z3\nG1 Z-25 F100\n").contains { $0.contains("fixture") }, "below stock")
         try expect(errors(header + "G0 X0 Y0 Z3\nG1 Z-1 F5000\n").contains { $0.contains("faster") }, "feed cap")
         try expect(errors("G90 G21\nM5\nG0 X0 Y0 Z3\nG1 Z-1 F100\n").contains { $0.contains("spindle stopped") })

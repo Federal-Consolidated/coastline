@@ -12,6 +12,7 @@ struct ItemViewer3D: View {
     /// Changes when the item changes, to rebuild.
     let key: String
     var name: String = "Item"
+    var preserveCameraOnChange = false
     @State private var renderer: ViewportRenderer?
     @State private var unavailable = false
 
@@ -49,11 +50,11 @@ struct ItemViewer3D: View {
                 .help("Change the preview orientation, zoom, or reset the view")
             }
         }
-        .onAppear { setUp() }
-        .onChange(of: key) { _, _ in setUp() }
+        .onAppear { setUp(resetCamera: true) }
+        .onChange(of: key) { _, _ in setUp(resetCamera: !preserveCameraOnChange) }
     }
 
-    private func setUp() {
+    private func setUp(resetCamera: Bool) {
         unavailable = false
         guard let device = MTLCreateSystemDefaultDevice() else { unavailable = true; return }
         let r = renderer ?? (try? ViewportRenderer(device: device))
@@ -65,7 +66,7 @@ struct ItemViewer3D: View {
         for m in meshes { r.scene.setMesh(m) }
         r.realistic = true
         r.animationsEnabled = false
-        frameItem(r)
+        if resetCamera || renderer == nil { frameItem(r) }
         renderer = r
     }
 

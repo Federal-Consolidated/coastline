@@ -4,7 +4,7 @@ import Foundation
 /// Stored as one human-readable JSON file so it's easy to back up, diff and fix by hand.
 public struct Inventory: Equatable, Sendable, Codable {
     /// Bump when the format changes, and migrate in `InventoryStore.load`.
-    public static let currentSchema = 1
+    public static let currentSchema = 2
 
     public var schema = Inventory.currentSchema
     public var stock: [StockItem] = []
@@ -20,11 +20,38 @@ public struct Inventory: Equatable, Sendable, Codable {
     public var stockSuggestionsVersion: Int?
     public var measuring: [MeasuringTool] = []
     public var accessories: [Accessory] = []
+    /// Optional so inventories written before editable material libraries still decode.
+    /// Built-in IDs are reserved; edit a built-in by making a custom copy.
+    public var customMaterials: [Material]? = nil
 
     public init() {}
 
     public var isEmpty: Bool {
         stock.isEmpty && tools.isEmpty && fixtures.isEmpty && measuring.isEmpty && accessories.isEmpty
+            && (customMaterials?.isEmpty ?? true)
+    }
+
+    /// Built-ins and installed definitions, with one entry per ID. A custom entry can never
+    /// shadow a built-in, including when reading a manually edited inventory file.
+    public var materials: [Material] {
+        var seen = Set(MaterialLibrary.all.map(\.id))
+        return MaterialLibrary.all + (customMaterials ?? []).filter { seen.insert($0.id).inserted }
+    }
+
+    public func material(id: String) -> Material? {
+        MaterialLibrary.material(id: id) ?? customMaterials?.first { $0.id == id }
+    }
+
+    /// Capture the installed definition when stock is explicitly selected or edited.
+    /// Saved jobs use their existing snapshot directly, rather than calling this again.
+    public func resolvedStock(_ stock: StockItem) -> StockItem {
+        var copy = stock
+        if let material = material(id: stock.materialID) {
+            copy.materialSnapshot = material
+        } else if copy.materialSnapshot?.id != stock.materialID {
+            copy.materialSnapshot = nil
+        }
+        return copy
     }
 
     /// Collet bores you own, in mm.
@@ -54,8 +81,9 @@ public enum InventoryStore {
     public static func load(from url: URL = defaultURL) throws -> Inventory? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         let data = try Data(contentsOf: url)
-        let inventory = try JSONDecoder().decode(Inventory.self, from: data)
+        var inventory = try JSONDecoder().decode(Inventory.self, from: data)
         if inventory.schema > Inventory.currentSchema { throw StoreError.newerSchema(inventory.schema) }
+        inventory.schema = Inventory.currentSchema
         return inventory
     }
 

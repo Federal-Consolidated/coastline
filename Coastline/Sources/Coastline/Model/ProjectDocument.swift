@@ -21,6 +21,10 @@ struct ProjectFile: Codable, Equatable {
     var webThickness: Double
     var operations: [Operation]
     var tuning: Tuning
+    /// Missing in old projects means the explicit legacy desktop assignment.
+    /// New saves include the full definition and its geometry fingerprints.
+    var machine: PlanningMachineReference? = nil
+    var resources: JobResourceSnapshot? = nil
     /// Only in saved files (snapshots for undo leave it out).
     var results: SavedResults? = nil
 }
@@ -34,20 +38,33 @@ extension AppModel {
     /// Everything that makes the job, as it is now.
     var projectSnapshot: ProjectFile {
         ProjectFile(partPath: part?.url.path, setup: setup, stockID: stockID, stock: stock, twoSided: twoSided, twoSidedChosen: twoSidedChosen,
-                    holdWithTabs: holdWithTabs, tabs: tabs, webThickness: webThickness, operations: operations, tuning: tuning)
+                    holdWithTabs: holdWithTabs, tabs: tabs, webThickness: webThickness, operations: operations, tuning: tuning,
+                    machine: planningMachineReference, resources: savedResourceSnapshot)
     }
 
     /// Puts a snapshot back (undo, redo, opening a file). The part is imported again only when
     /// it's a different file.
-    func apply(_ p: ProjectFile) async {
+    @discardableResult
+    func apply(_ p: ProjectFile) async -> Bool {
         restoringProject = true
         defer { restoringProject = false; lastSnapshot = projectSnapshot }
+        do {
+            try await restorePlanningMachine(p.machine ?? .legacy)
+        } catch {
+            errorMessage = "Couldn't restore this job's machine: \(error.localizedDescription)"
+            return false
+        }
+        // Even identical setup fields can belong to a different saved job. Its cached
+        // results are restored explicitly below, after their machine assignment matches.
+        clearToolpathResults()
         if let path = p.partPath, path != part?.url.path, FileManager.default.fileExists(atPath: path) {
             await importPart(URL(fileURLWithPath: path))
         }
-        if let s = p.stock { stockSnapshot = s }
+        jobResources = p.resources ?? JobResourceSnapshot(stock: p.stock,
+            tools: (p.results?.programs ?? []).map(\.tool) + (p.results?.prepPrograms ?? []).map(\.tool))
+        if let s = p.resources?.stock ?? p.stock { stockSnapshot = s }
         // Older files have no copy: take it from the inventory while it's still there.
-        if p.stock == nil, let id = p.stockID, let s = stockLookup(id) { stockSnapshot = s }
+        if p.resources?.stock == nil && p.stock == nil, let id = p.stockID, let s = stockLookup(id) { stockSnapshot = s }
         stockID = p.stockID
         setup = p.setup
         twoSided = p.twoSided
@@ -57,6 +74,8 @@ extension AppModel {
         webThickness = p.webThickness
         operations = p.operations
         tuning = p.tuning
+        if p.results == nil { await reloadSavedLibraryGeometry() }
+        return true
     }
 
     // MARK: Undo
@@ -86,6 +105,8 @@ extension AppModel {
     static func describeChange(from a: ProjectFile, to b: ProjectFile) -> String {
         var names: [String] = []
         func add(_ n: String) { if !names.contains(n) { names.append(n) } }
+        if (a.machine ?? .legacy) != (b.machine ?? .legacy) { add("the machine") }
+        if a.resources != b.resources { add("job resources") }
         if a.partPath != b.partPath { add("the part") }
         if a.stockID != b.stockID || a.stock != b.stock { add("the stock") }
         if a.twoSided != b.twoSided || a.twoSidedChosen != b.twoSidedChosen { add("one or two sides") }
@@ -124,7 +145,7 @@ extension AppModel {
         "partScale": "the part's scale", "prepOverrides": "a clamping on the bed", "prepFaceEnd": "the stock prep",
         "prepRounds": "the stock prep", "onBed": "the holding", "bedJobOverride": "a clamping on the bed",
         "shoulders": "the shoulders", "kitClampShift": "a kit clamp", "kitClampCount": "the clamp count", "copies": "the copies",
-        "clampSoftJaw": "the soft jaws", "flipped": "the flip",
+        "clampSoftJaw": "the soft jaws", "flipped": "the flip", "holding": "the holding", "customFixture": "the custom fixture",
     ]
 
     /// ⌘Z: typing in a text field is undone there first (the field's own undo), otherwise the
@@ -146,15 +167,17 @@ extension AppModel {
 
     func undo() async {
         guard let previous = undoHistory.popLast() else { return }
-        redoHistory.append(projectSnapshot)
-        await apply(previous)
+        let current = projectSnapshot
+        guard await apply(previous) else { undoHistory.append(previous); return }
+        redoHistory.append(current)
         status = "Undone"
     }
 
     func redo() async {
         guard let next = redoHistory.popLast() else { return }
-        undoHistory.append(projectSnapshot)
-        await apply(next)
+        let current = projectSnapshot
+        guard await apply(next) else { redoHistory.append(next); return }
+        undoHistory.append(current)
         status = "Redone"
     }
 
@@ -187,19 +210,19 @@ extension AppModel {
                     errorMessage = "The part file isn't there any more: \(path)"
                 }
             }
+            guard await apply(p) else { return }
             undoHistory = []
             redoHistory = []
-            await apply(p)
             projectURL = url
             projectDirty = false
             Self.addRecent(url)
             adoptMissingItems(p)
-            if let r = p.results, part != nil {
+            if let r = p.results, part != nil, (r.machine ?? .legacy) == planningMachineReference {
                 enter(.machining)
                 restore(r)
             } else {
                 enter(hasPrep ? .prep : .partStock)
-                status = "Opened \(url.lastPathComponent)"
+                status = p.results == nil ? "Opened \(url.lastPathComponent)" : "Opened \(url.lastPathComponent) · Regenerate toolpaths for this machine"
             }
         } catch {
             errorMessage = "Couldn't open \(url.lastPathComponent): \(error.localizedDescription)"
@@ -211,7 +234,7 @@ extension AppModel {
     /// operations have their tools and the stock picker shows the bar.
     func adoptMissingItems(_ p: ProjectFile) {
         var tools: [Tool] = []
-        for t in (p.results?.programs ?? []).map(\.tool) + (p.results?.prepPrograms ?? []).map(\.tool)
+        for t in (p.resources?.tools ?? []) + (p.results?.programs ?? []).map(\.tool) + (p.results?.prepPrograms ?? []).map(\.tool)
             where toolLookup(t.id) == nil && !tools.contains(where: { $0.id == t.id }) {
             var copy = t
             copy.quantity = 0

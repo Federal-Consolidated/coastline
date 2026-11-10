@@ -1,12 +1,11 @@
 import Foundation
 
-/// Tools Coastline can recommend that aren't in the inventory (yet): common small carbide end
-/// mills for jewellery work. They sit in the inventory with quantity 0, marked as suggestions;
-/// plans that need one say so, and "I have it" turns it into an owned tool.
+/// Tools Coastline can recommend that aren't in the inventory yet. They have quantity 0;
+/// catalog entries with incomplete specifications need review before planning, even when owned.
 public enum ToolCatalog {
     public static let source = "Coastline suggestion"
     /// Bumped when tools are added: inventories that saw an older catalog get the new ones.
-    public static let version = 5
+    public static let version = 6
 
     private static func id(_ n: Int) -> UUID { UUID(uuidString: String(format: "C0A57100-0000-4000-8000-%012d", n))! }
 
@@ -90,6 +89,22 @@ public enum ToolCatalog {
         threadMill(30, .init(name: "M3", major: 3, pitch: 0.5), d: 2.3, flutes: 4, reach: 9.5, part: "737624", cost: 141),
         threadMill(31, .init(name: "M4", major: 4, pitch: 0.7), d: 3.0, flutes: 4, reach: 5.5, part: "890326", cost: 141),
         threadMill(32, .init(name: "M5", major: 5, pitch: 0.8), d: 4.0, flutes: 4, reach: 7.0, shank: 4, length: 50, part: "890328", cost: 143),
+
+        // Published product dimensions, checked 2026-11-06. Missing geometry stays unknown:
+        // packaging dimensions are not cutter dimensions, and stick-out must be measured
+        // after mounting. Supplier links preserve provenance without branding display names.
+        reviewedCatalogTool(33, "1/4\" 3-flute bull nose roughing mill", .bullNoseEndMill,
+            diameterInch: 0.25, flutes: 3, locInch: 0.75, lengthInch: 2.5, cornerInch: 0.01,
+            material: .unspecified, part: "GGACC-HELICAL-1/4EM",
+            link: "https://ghostgunner.net/product/1-4-helical-end-mill/", publishedCoating: "ZPLUS"),
+        reviewedCatalogTool(34, "1/8\" 4-flute flat end mill", .flatEndMill,
+            diameterInch: 0.125, flutes: 4, locInch: 0.25, lengthInch: 2,
+            material: .unspecified, part: "GGACC-AK-DRILL",
+            link: "https://ghostgunner.net/product/1-8-end-mill/", publishedCoating: "APLUS"),
+        reviewedCatalogTool(35, "#34 carbide drill", .drill,
+            diameterInch: 0.110, flutes: 0, locInch: 1.125, lengthInch: 2.25,
+            material: .carbide, part: "GGACC-M1911-DRILL-34",
+            link: "https://ghostgunner.net/product/34-drill-bit/"),
     ]
 
     /// The IDs Coastline once suggested and no longer does (inventories drop them while unowned).
@@ -117,6 +132,30 @@ public enum ToolCatalog {
     private static func drill(_ n: Int, _ d: Double, cost: Double, why: String) -> Tool {
         tool(n, "\(d.formatted(.number.precision(.fractionLength(1)))) mm micro drill", .drill, d: d, flutes: 2, loc: 5, stickout: 12, angle: 118, cost: cost,
              vendor: "Kyocera SGS (105 series)", why: why + " Peck in steps of a quarter diameter; it breaks if the chips pack.")
+    }
+
+    /// Import only published specifications. Zero marks unknown required dimensions and is
+    /// permitted only while the explicit review list keeps this tool out of machining plans.
+    private static func reviewedCatalogTool(_ n: Int, _ name: String, _ kind: Tool.Kind,
+                                            diameterInch: Double, flutes: Int, locInch: Double,
+                                            lengthInch: Double, cornerInch: Double = 0,
+                                            material: Tool.ToolMaterial, part: String, link: String,
+                                            publishedCoating: String? = nil) -> Tool {
+        var notes = "Confirm unpublished specifications and measure stick-out after mounting."
+        if let publishedCoating {
+            notes += " Published coating: \(publishedCoating); coating classification needs confirmation."
+        }
+        var value = Tool(id: id(n), name: name, kind: kind, partNumber: part, productLink: link,
+                         diameter: diameterInch * 25.4, shankDiameter: 0, flutes: flutes,
+                         fluteLength: locInch * 25.4, stickout: 0, overallLength: lengthInch * 25.4,
+                         cornerRadius: cornerInch * 25.4, toolMaterial: material, coating: .unspecified,
+                         quantity: 0, notes: notes, source: source)
+        var pending = ["Shank diameter", "Stick-out", "Coating"]
+        if material == .unspecified { pending.append("Tool material") }
+        if flutes == 0 { pending.append("Flute count") }
+        if kind == .drill { pending.append("Point angle") }
+        value.unconfirmedSpecifications = pending
+        return value
     }
 }
 

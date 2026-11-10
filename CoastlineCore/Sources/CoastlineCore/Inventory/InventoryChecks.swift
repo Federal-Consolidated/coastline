@@ -22,6 +22,12 @@ public enum InventoryChecks {
     static let colletTolerance = 0.05
 
     public static func check(_ tool: Tool, machine: MachineProfile = .standard, inventory: Inventory) -> [Issue] {
+        let invalid = ResourceLibraryValidation.issues(for: tool)
+        guard invalid.isEmpty else { return invalid.map { Issue(.error, $0) } }
+        guard !tool.requiresSpecificationReview else {
+            return [Issue(.error, "Complete and confirm the tool specifications before planning: "
+                + (tool.unconfirmedSpecifications ?? []).joined(separator: ", ") + ".")]
+        }
         var issues: [Issue] = []
         if tool.shankDiameter > machine.maxShankDiameter + 1e-6 {
             issues.append(Issue(.error, "The \(Length.describe(tool.shankDiameter)) shank is too big for the \(machine.colletName) collet (max \(Length.mm(machine.maxShankDiameter)) mm)."))
@@ -29,7 +35,7 @@ public enum InventoryChecks {
             issues.append(Issue(.warning, "You have no \(machine.colletName) collet for a \(Length.describe(tool.shankDiameter)) shank. Add one under Accessories, or buy one."))
         }
         if tool.overallLength > machine.maxToolLength + 1e-6 {
-            issues.append(Issue(.error, "\(Length.mm(tool.overallLength)) mm long: tools over \(Length.mm(machine.maxToolLength)) mm (3\") can crash during homing. [MAN §4.2]"))
+            issues.append(Issue(.error, "\(Length.mm(tool.overallLength)) mm long: tools over \(Length.mm(machine.maxToolLength)) mm exceed this machine profile’s tool-length limit."))
         }
         if tool.kind.cutsSideways && tool.stickout + 1e-6 < tool.fluteLength {
             issues.append(Issue(.warning, "Stick-out (\(Length.mm(tool.stickout)) mm) is shorter than the flutes (\(Length.mm(tool.fluteLength)) mm). The flutes would sit inside the collet."))
@@ -58,6 +64,8 @@ public enum InventoryChecks {
     }
 
     public static func check(_ stock: StockItem, machine: MachineProfile = .standard) -> [Issue] {
+        let invalid = ResourceLibraryValidation.issues(for: stock)
+        guard invalid.isEmpty else { return invalid.map { Issue(.error, $0) } }
         var issues: [Issue] = []
         guard stock.sizeX > 0, stock.sizeY > 0, stock.shape == .roundBar || stock.sizeZ > 0 else {
             return [Issue(.error, "Enter all the dimensions.")]

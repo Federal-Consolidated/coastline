@@ -1,0 +1,114 @@
+[
+ {
+  "path": "0/0",
+  "name": "C-Clamps_1/C-Clamp 3in - McMaster 5027A13_1/Body1:1 / C-Clamps_1/C-Clamp 3in - McMaster 5027A13_1/Body1 / solid0",
+  "min": [
+   66.665,
+   -334.112,
+   93.331
+  ],
+  "max": [
+   80.889,
+   -311.887,
+   115.556
+  ]
+ },
+ {
+  "path": "1/0",
+  "name": "C-Clamps_1/C-Clamp 3in - McMaster 5027A13_1/Body2:1 / C-Clamps_1/C-Clamp 3in - McMaster 5027A13_1/Body2 / solid0",
+  "min": [
+   -42.555,
+   -338.113,
+   10.743
+  ],
+  "max": [
+   119.497,
+   -307.886,
+   119.557
+  ]
+ },
+ {
+  "path": "2/0",
+  "name": "C-Clamps_1/C-Clamp 3in - McMaster 5027A13_1/Body3:1 / C-Clamps_1/C-Clamp 3in - McMaster 5027A13_1/Body3 / solid0",
+  "min": [
+   70.363,
+   -329.349,
+   98.093
+  ],
+  "max": [
+   203.317,
+   -316.649,
+   110.794
+  ]
+ },
+ {
+  "path": "3/0",
+  "name": "C-Clamps_1/C-Clamp 3in - McMaster 5027A13_1/Body4:1 / C-Clamps_1/C-Clamp 3in - McMaster 5027A13_1/Body4 / solid0",
+  "min": [
+   193.443,
+   -375.45,
+   99.363
+  ],
+  "max": [
+   203.603,
+   -270.548,
+   109.524
+  ]
+ },
+ {
+  "path": "4/0",
+  "name": "C-Clamps_1/C-Clamp 3in - McMaster 5027A13_2/Body1:1 / C-Clamps_1/C-Clamp 3in - McMaster 5027A13_2/Body1 / solid0",
+  "min": [
+   66.665,
+   -170.912,
+   93.331
+  ],
+  "max": [
+   80.889,
+   -148.687,
+   115.556
+  ]
+ },
+ {
+  "path": "5/0",
+  "name": "C-Clamps_1/C-Clamp 3in - McMaster 5027A13_2/Body2:1 / C-Clamps_1/C-Clamp 3in - McMaster 5027A13_2/Body2 / solid0",
+  "min": [
+   -42.555,
+   -174.912,
+   10.743
+  ],
+  "max": [
+   119.497,
+   -144.686,
+   119.557
+  ]
+ },
+ {
+  "path": "6/0",
+  "name": "C-Clamps_1/C-Clamp 3in - McMaster 5027A13_2/Body3:1 / C-Clamps_1/C-Clamp 3in - McMaster 5027A13_2/Body3 / solid0",
+  "min": [
+   70.363,
+   -166.149,
+   98.093
+  ],
+  "max": [
+   203.317,
+   -153.449,
+   110.794
+  ]
+ },
+ {
+  "path": "7/0",
+  "name": "C-Clamps_1/C-Clamp 3in - McMaster 5027A13_2/Body4:1 / C-Clamps_1/C-Clamp 3in - McMaster 5027A13_2/Body4 / solid0",
+  "min": [
+   193.443,
+   -212.25,
+   99.363
+  ],
+  "max": [
+   203.603,
+   -107.348,
+   109.524
+  ]
+ }
+]

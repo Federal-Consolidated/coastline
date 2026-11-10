@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "id": "bookends",
+  "revision": 2,
+  "modelSHA256": "cc141eb5ee58f00fb420ab2272d84bb448de1758a691a8f1dcd6947a87dca9e3",
+  "components": [
+    {
+      "id": "fixed-end",
+      "name": "Fixed bookend",
+      "role": "physical",
+      "modelEntities": [
+        "0/0",
+        "2/0",
+        "3/0",
+        "4/0",
+        "5/0",
+        "11/0",
+        "12/0"
+      ],
+      "joint": {
+        "id": "fixed-slide",
+        "kind": "prismatic",
+        "axis": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "origin": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "minimum": -1000,
+        "maximum": 1000,
+        "referenceValue": 0
+      }
+    },
+    {
+      "id": "clamp-end",
+      "name": "Clamping bookend",
+      "role": "physical",
+      "modelEntities": [
+        "1/0",
+        "6/0",
+        "7/0",
+        "8/0",
+        "9/0",
+        "13/0",
+        "14/0"
+      ],
+      "joint": {
+        "id": "clamp-slide",
+        "kind": "prismatic",
+        "axis": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "origin": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "minimum": -1000,
+        "maximum": 1000,
+        "referenceValue": 0
+      }
+    },
+    {
+      "id": "pressure-screw",
+      "name": "Pressure screw",
+      "parentID": "clamp-end",
+      "role": "physical",
+      "modelEntities": [
+        "10/0"
+      ],
+      "joint": {
+        "id": "pressure-extension",
+        "kind": "screw",
+        "axis": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "origin": {
+          "x": 25.3651363565511,
+          "y": -139.8,
+          "z": 104.443594125127
+        },
+        "minimum": 0,
+        "maximum": 15,
+        "referenceValue": 4,
+        "pitch": 0.7
+      }
+    }
+  ],
+  "bookends": {
+    "seatX": 15.8651364,
+    "slotZ": [
+      78.7585941251038,
+      118.763594125104
+    ],
+    "fixedContactY": -343,
+    "clampContactY": -135.8,
+    "screwAxisX": 25.3651363565511,
+    "screwAxisZ": 104.443594125127,
+    "fixedNutY": [
+      -352.5,
+      -336.63
+    ],
+    "clampNutY": [
+      -142.17,
+      -126.3
+    ],
+    "stockBackZ": 79.0435941251268,
+    "pressureTipRadius": 1.5
+  },
+  "isAssembled": true
+}

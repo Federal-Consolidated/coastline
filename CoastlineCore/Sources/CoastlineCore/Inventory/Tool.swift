@@ -34,14 +34,15 @@ public struct Tool: Identifiable, Hashable, Sendable, Codable {
     }
 
     public enum ToolMaterial: String, CaseIterable, Sendable, Codable {
-        case carbide, hss, cobalt
-        public var title: String { self == .hss ? "HSS" : rawValue.capitalized }
+        case unspecified, carbide, hss, cobalt
+        public var title: String { self == .unspecified ? "Not specified" : self == .hss ? "HSS" : rawValue.capitalized }
     }
 
     public enum Coating: String, CaseIterable, Sendable, Codable {
-        case none, tiN, tiAlN, alTiN, alCrN, zrN, dlc, diamond
+        case unspecified, none, tiN, tiAlN, alTiN, alCrN, zrN, dlc, diamond, other
         public var title: String {
             switch self {
+            case .unspecified: "Not specified"
             case .none: "Uncoated"
             case .tiN: "TiN"
             case .tiAlN: "TiAlN"
@@ -50,6 +51,7 @@ public struct Tool: Identifiable, Hashable, Sendable, Codable {
             case .zrN: "ZrN"
             case .dlc: "DLC"
             case .diamond: "Diamond"
+            case .other: "Other / proprietary"
             }
         }
     }
@@ -122,6 +124,10 @@ public struct Tool: Identifiable, Hashable, Sendable, Codable {
     public var presets: [Preset]
     /// Where it came from, e.g. "Fusion library tools-aluminium.tools, T2".
     public var source: String
+    /// An installed catalog definition can preserve incomplete published specifications.
+    /// It is not a machining tool until these are measured and explicitly confirmed.
+    public var unconfirmedSpecifications: [String]? = nil
+    public var requiresSpecificationReview: Bool { !(unconfirmedSpecifications ?? []).isEmpty }
 
     // MARK: Usage (filled from the job journal)
 

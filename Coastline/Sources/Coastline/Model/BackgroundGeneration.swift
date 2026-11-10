@@ -26,6 +26,9 @@ final class GenerationRun {
         /// The part's outline box in this side's work frame (X, Y), for the reach check.
         var partX: ClosedRange<Double> = 0...0
         var partY: ClosedRange<Double> = 0...0
+        /// This setup's stock box when it isn't side A's (a turned setup).
+        var boxMin: SIMD3<Double>? = nil
+        var boxMax: SIMD3<Double>? = nil
     }
 
     var sides: [SidePlan] = []
@@ -50,9 +53,13 @@ final class GenerationRun {
     var frameTask: Task<TabFrame, Never>?
     var frameReady = false
     /// What the job looked like when it started: a change on the way stops it.
-    var signature: String
+    let signature: String
+    let machine: MachineProfile
 
-    init(signature: String) { self.signature = signature }
+    init(signature: String, machine: MachineProfile) {
+        self.signature = signature
+        self.machine = machine
+    }
 
     var finished: Int { done.reduce(0) { $0 + $1.filter { $0 != nil }.count } }
     var total: Int { jobs.count }
@@ -79,7 +86,10 @@ extension AppModel {
         let enc = JSONEncoder()
         enc.outputFormatting = .sortedKeys  // dictionaries encode in a stable order
         let ops = (try? enc.encode(operations)).map { $0.hashValue } ?? 0
-        return "\(ops)|\(stockID?.uuidString ?? "")|\(twoSided)|\(s.partOffsetX)|\(s.partOffsetY)|\(s.facing)|\(s.spin)|\(s.stockAxes)|\(s.partScale)|\(s.copies)|\(s.topAllowance)"
+        let fixture = (try? enc.encode(s)).map { $0.hashValue } ?? 0
+        let profile = (try? planningMachineReference.fingerprint()) ?? String(describing: machine)
+        let resources = (try? enc.encode(savedResourceSnapshot)).map { $0.hashValue } ?? 0
+        return "\(profile)|\(ops)|\(resources)|\(stockID?.uuidString ?? "")|\(twoSided)|\(fixture)|\(AppSettings.shared.clampKitProbing.rawValue)"
     }
 
     func genState(for opID: UUID) -> GenState? {
@@ -103,7 +113,7 @@ extension AppModel {
         // Workers only when there's real work: cached operations come back instantly.
         let uncached = run.jobs.filter { j in
             let sp = run.sides[j.side]
-            return opCache[Self.generationKey(partID: mainPartID, sp.planned[j.k], sp.transform, run.boxMin, run.boxMax, sp.tabSpec, sp.tabBottom)] == nil
+            return opCache[Self.generationKey(partID: mainPartID, sp.planned[j.k], sp.transform, run.boxMin, run.boxMax, sp.tabSpec, sp.tabBottom, machine: run.machine)] == nil
         }.count
         let extra = max(min(Self.generationWorkers - 1, uncached - 1), 0)
         // Plain tasks on the main actor (each waits on its own engine process, so they run in
@@ -118,7 +128,7 @@ extension AppModel {
             })
         }
         for t in tasks { await t.value }
-        if cancelGeneration { throw CancellationError() }
+        guard generationSignature == run.signature, !cancelGeneration else { throw CancellationError() }
     }
 
     /// A worker engine with the part loaded (kept between generations, restarted if it died
@@ -171,7 +181,7 @@ extension AppModel {
                     (one, placed) = try await generateJob(run, si, k, engine: engine, partID: partID)
                     storeInCache(key, (one, placed))
                 }
-                if cancelGeneration { return }
+                if cancelGeneration || generationSignature != run.signature { return }
                 run.done[si][k] = finishJob(one, k: k, si: si, run: run)
                 if !placed.isEmpty {
                     placedTabs = placed
@@ -189,7 +199,7 @@ extension AppModel {
                 updateGenerationStatus(run)
                 publishPartial(run)
             } catch {
-                if cancelGeneration { return }
+                if cancelGeneration || generationSignature != run.signature { return }
                 let message = (error as? EngineClient.EngineError).map { $0.type == "EngineExited" ? "The geometry engine crashed on this operation (a native library failed on this geometry)." : $0.message } ?? "\(error)"
                 run.failed.append((si, k, message))
                 setGenState(opID, side: side, .failed(message))
@@ -287,15 +297,15 @@ extension AppModel {
 
     private func jobKey(_ run: GenerationRun, _ si: Int, _ k: Int, mainPartID: String) -> String {
         let sp = run.sides[si]
-        return Self.generationKey(partID: mainPartID, sp.planned[k], sp.transform, run.boxMin, run.boxMax, sp.tabSpec, sp.tabBottom)
+        return Self.generationKey(partID: mainPartID, sp.planned[k], sp.transform, sp.boxMin ?? run.boxMin, sp.boxMax ?? run.boxMax, sp.tabSpec, sp.tabBottom, machine: run.machine)
     }
 
     /// The engine call, with everything read from the run inside (no SIMD values in the async
     /// frame of the caller).
     private func generateJob(_ run: GenerationRun, _ si: Int, _ k: Int, engine: EngineClient, partID: String) async throws -> ([OperationToolpath], [PlacedTab]) {
         let sp = run.sides[si]
-        let r = try await engine.generate(partID: partID, transform: sp.transform, stockMin: run.boxMin, stockMax: run.boxMax,
-                                          operations: [sp.planned[k]], tabs: sp.tabSpec, tabBottom: sp.tabBottom)
+        let r = try await engine.generate(partID: partID, transform: sp.transform, stockMin: sp.boxMin ?? run.boxMin, stockMax: sp.boxMax ?? run.boxMax,
+                                          operations: [sp.planned[k]], tabs: sp.tabSpec, tabBottom: sp.tabBottom, machine: run.machine)
         return (r.paths, r.tabs)
     }
 
@@ -314,6 +324,7 @@ extension AppModel {
     /// the timeline and simulation work on them while the rest generates. At most every 2.5 s
     /// (a side that completes shows at once); the playhead stays where you left it.
     func publishPartial(_ run: GenerationRun, force: Bool = false) {
+        guard generationSignature == run.signature, !cancelGeneration else { return }
         let grew = run.sides.indices.contains { run.prefix($0) > run.published[$0] }
         guard grew else { return }
         let sideDone = run.sides.indices.contains { run.prefix($0) == run.sides[$0].planned.count && run.published[$0] < run.prefix($0) }
@@ -354,8 +365,8 @@ extension AppModel {
         let keep = playhead
         let atEnd = timeline.entries.isEmpty || playhead >= timeline.duration - 1e-6
         sideResults = results
-        toolpaths = Dictionary((results.first?.paths ?? []).map { ($0.operationID, $0) }, uniquingKeysWith: { a, _ in a })
-        if viewSide >= results.count { viewSide = 0 }
+        toolpaths = Dictionary(((results.first { $0.side == 0 } ?? results.first)?.paths ?? []).map { ($0.operationID, $0) }, uniquingKeysWith: { a, _ in a })
+        if viewSide >= 0, !results.contains(where: { $0.side == viewSide }) { viewSide = results.first?.side ?? 0 }
         // In Machining the stock prep's view has nothing yet (its programs come at the end):
         // the first toolpaths show on side A.
         // The prep's programs were made first: the job starts there (chapter 1). Without a prep,

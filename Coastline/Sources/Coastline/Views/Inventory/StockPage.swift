@@ -6,13 +6,14 @@ struct StockPage: View {
     @Environment(AppModel.self) private var app
     @State private var selection: Set<StockItem.ID> = []
     @State private var search = ""
-    @State private var family: Material.Family? = nil
-    @State private var ownership = Ownership.owned
+    @State private var family: Material.Family?
+    @State private var ownership = Ownership.both
     @State private var pendingDelete: Set<StockItem.ID>?
+    @State private var materialEdit: StockMaterialEdit?
 
     private var rows: [StockItem] {
         model.inventory.stock
-            .filter { ownership.admits(suggestion: $0.isSuggestion) }
+            .filter { ownership.admits(quantity: $0.quantity) }
             .filter { family == nil || $0.material?.family == family }
             .filter { search.isEmpty || "\($0.material?.name ?? "") \($0.location) \($0.notes) \($0.supplier)".localizedCaseInsensitiveContains(search) }
     }
@@ -23,7 +24,7 @@ struct StockPage: View {
 
     var body: some View {
         Table(rows, selection: $selection) {
-            TableColumn("") { IssueDot(severity: model.worstIssue(for: $0)) }.width(22)
+            TableColumn("") { IssueDot(severity: model.worstIssue(for: $0, machine: app.machine)) }.width(22)
             TableColumn("Material") { item in
                 HStack(spacing: 8) {
                     RoundedRectangle(cornerRadius: 4).fill(item.material?.swatch ?? .gray).frame(width: 14, height: 14)
@@ -31,7 +32,7 @@ struct StockPage: View {
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 6) {
                             Text(item.material?.name ?? "Unknown material")
-                            if item.isSuggestion {
+                            if item.quantity <= 0 {
                                 Text("Not owned").font(.caption.weight(.semibold)).padding(.horizontal, 5).padding(.vertical, 1)
                                     .background(Capsule().fill(Theme.warning.opacity(0.25)))
                             }
@@ -56,8 +57,8 @@ struct StockPage: View {
             TableColumn("Qty") { Text("\($0.quantity)").monospacedDigit() }.width(40)
         }
         .contextMenu(forSelectionType: StockItem.ID.self) { ids in
-            if ids.contains(where: { id in model.inventory.stock.first { $0.id == id }?.isSuggestion == true }) {
-                Button("I Have It Now") { model.markStockOwned(ids) }
+            if ids.contains(where: { id in model.inventory.stock.first { $0.id == id }.map { $0.quantity <= 0 } == true }) {
+                Button("Mark as Owned") { model.markStockOwned(ids) }
                 Divider()
             }
             Button("Duplicate") { ids.forEach { id in model.duplicate(id, in: \.stock) { $0.id = UUID() } } }
@@ -72,26 +73,34 @@ struct StockPage: View {
             selection.subtract(ids)
         }
         .overlay {
-            if ownership == .owned, !model.inventory.stock.contains(where: { !$0.isSuggestion }) {
+            if model.inventory.stock.isEmpty || (ownership == .owned && !model.inventory.stock.contains(where: { $0.quantity > 0 })) {
                 ContentUnavailableView("No Stock", systemImage: "shippingbox",
                                        description: Text("Add the blocks, bars and printed blanks you have."))
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            HStack {
+            HStack(spacing: 16) {
                 if !familiesInUse.isEmpty {
-                    FilterChips(options: [(Material.Family?.none, "All")] + familiesInUse.map { (Optional($0), $0.title) },
-                                selection: $family)
+                    Picker("Material family", selection: $family) {
+                        Text("All Families").tag(Material.Family?.none)
+                        ForEach(familiesInUse, id: \.self) { Text($0.title).tag(Optional($0)) }
+                    }.labelsHidden().pickerStyle(.menu).fixedSize()
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 OwnershipPicker(selection: $ownership)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            }.padding(.horizontal, 16).padding(.vertical, 10)
         }
         .searchable(text: $search, prompt: "Search stock")
         .navigationTitle("Stock")
         .toolbar {
+            ToolbarItemGroup {
+                ResourceLibraryActions(scope: .stock, selectedStockIDs: selection) {
+                    ownership = .both
+                    family = nil
+                    search = ""
+                }
+            }
+            ToolbarSpacer(.fixed)
             ToolbarItemGroup {
                 Menu("Add Stock", systemImage: "plus") {
                     ForEach(StockItem.Shape.allCases, id: \.self) { shape in
@@ -106,14 +115,32 @@ struct StockPage: View {
         .inspector(isPresented: Bindable(app).showInspector) {
             Group {
                 if selection.count == 1, let id = selection.first, let binding = model.binding(\.stock, id: id) {
-                    StockInspector(stock: binding)
+                    StockInspector(stock: binding, customizeMaterial: customizeMaterial)
                 } else {
                     NothingSelected(what: "Stock")
                 }
             }
             .panelEdge(.leading).inspectorColumnWidth(min: 300, ideal: 340, max: 460)
         }
+        .sheet(item: $materialEdit) { edit in
+            MaterialEditor(material: edit.material, title: edit.title) { material in
+                try model.customizeStockMaterial(material, stockID: edit.stockID, expectedMaterialID: edit.originalMaterialID)
+                family = nil; search = ""; selection = [edit.stockID]
+                app.showInspector = true
+            }
+        }
         .onAppear { if selection.isEmpty, let first = rows.first { selection = [first.id] } }
+    }
+
+    private func customizeMaterial(_ item: StockItem) {
+        guard var material = item.material else { return }
+        let builtIn = MaterialLibrary.material(id: material.id) != nil
+        let originalID = material.id
+        material.id = "custom-\(UUID().uuidString.lowercased())"
+        material.source = material.source ?? "Based on \(material.name)"
+        if builtIn { material.name += " (custom)" }
+        materialEdit = StockMaterialEdit(stockID: item.id, originalMaterialID: originalID, material: material,
+                                         title: builtIn ? "Customize Material" : "Edit Material Properties")
     }
 
     private func add(_ shape: StockItem.Shape) {
@@ -128,11 +155,23 @@ struct StockPage: View {
         family = nil
         ownership = .owned
         selection = [item.id]
+        search = ""
+        app.showInspector = true
     }
 }
 
+private struct StockMaterialEdit: Identifiable {
+    let id = UUID()
+    let stockID: StockItem.ID
+    let originalMaterialID: Material.ID
+    let material: Material
+    let title: String
+}
+
 struct StockInspector: View {
+    @Environment(AppModel.self) private var app
     @Binding var stock: StockItem
+    var customizeMaterial: ((StockItem) -> Void)? = nil
     @Environment(InventoryModel.self) private var model
 
     var body: some View {
@@ -157,7 +196,13 @@ struct StockInspector: View {
                 Text("Drag to orbit · Pinch to zoom · Double-click to fit")
             }
             Section("Material & shape") {
-                MaterialPicker(materialID: $stock.materialID)
+                MaterialPicker(materialID: Binding(get: { stock.materialID }, set: { id in
+                    guard id != stock.materialID else { return }
+                    var updated = stock
+                    updated.materialID = id
+                    updated.materialSnapshot = model.inventory.material(id: id)
+                    stock = updated
+                }), currentMaterial: stock.material)
                 Picker("Shape", selection: $stock.shape) {
                     ForEach(StockItem.Shape.allCases, id: \.self) { Label($0.title, systemImage: $0.symbol).tag($0) }
                 }
@@ -172,6 +217,17 @@ struct StockInspector: View {
                         if stock.shape != .roundBar { Text("Z · \(Length.mm(stock.sizeZ)) mm").tag(Int?.some(2)) }
                     }
                     .help("Extruded and drawn bar is straight and square along its length; only the sawn ends across it need facing. Coastline squares those ends first and registers them against the squaring stop.")
+                }
+            }
+            if let material = stock.material {
+                Section {
+                    DisclosureGroup("Material properties") {
+                        StockMaterialProperties(material: material)
+                        if let customizeMaterial {
+                            Button(MaterialLibrary.material(id: material.id) != nil ? "Customize Material…" : "Edit Properties…",
+                                   systemImage: "slider.horizontal.3") { customizeMaterial(stock) }
+                        }
+                    }
                 }
             }
             Section("Size") {
@@ -195,7 +251,7 @@ struct StockInspector: View {
                 Toggle("Offcut from an earlier job", isOn: $stock.isRemnant)
                 TextField("Notes", text: $stock.notes, axis: .vertical).lineLimit(2 ... 5)
             }
-            IssuesSection(issues: model.issues(for: stock))
+            IssuesSection(issues: model.issues(for: stock, machine: app.machine))
         }
         .formStyle(.grouped)
         .darkPanel()

@@ -3,12 +3,15 @@ import simd
 
 /// G-code for the machine, following the maker's own Fusion post
 /// (the maker's post-processor (.cps)) [CPS] and the controller's rules [MAN]:
-/// - absolute mm (G90 G17 G21) set explicitly, because grbl powers up in G91;
+/// - explicit absolute mm, XY arcs and feed-per-minute;
 /// - every program starts and ends with `G53 G0 G90 Z-1.` (full retract in machine Z);
 /// - spindle start ramp S0 → 5000 → target with dwells; no M6 (tool changes are guided steps);
 /// - no canned cycles (grbl has none): drilling is already expanded into moves;
 /// - lines ≤ 79 characters, 3 decimals, F only when it changes; no M30 at the end.
 public enum GRBLPost {
+    /// Profile packages identify this concrete adapter, independently of their source CAM post.
+    public static let adapterID = "coastline.grbl.desktop.v1"
+
     public struct Header: Sendable {
         public var programName: String
         public var setupName: String
@@ -36,9 +39,16 @@ public enum GRBLPost {
         var lineMap: [[Int?]] = []
         var lines: [String] = []
         func comment(_ s: String) {
-            // Parentheses inside comments end them early; grbl drops long lines.
-            let clean = s.replacingOccurrences(of: "(", with: "[").replacingOccurrences(of: ")", with: "]")
-            lines.append(String("(\(clean))".prefix(machine.maxLineLength)))
+            // Keep labels inside one closed, byte-bounded ASCII comment. GRBL handles realtime
+            // characters before parsing comments, so labels must not contain those either.
+            let clean = s.unicodeScalars.map { scalar -> String in
+                if scalar.value == 40 { return "[" }
+                if scalar.value == 41 { return "]" }
+                guard (32...126).contains(scalar.value), ![33, 63, 124, 126].contains(scalar.value) else { return " " }
+                return String(scalar)
+            }.joined()
+            guard machine.maxLineLength >= 2 else { return }
+            lines.append("(\(clean.prefix(machine.maxLineLength - 2)))")
         }
         comment("Coastline: \(h.programName)")
         comment("Setup: \(h.setupName)")
@@ -48,6 +58,9 @@ public enum GRBLPost {
         for name in h.operationNames { comment("Op: \(name)") }
         comment("WCS G54: X/Y centre of the stock face, Z0 on the face")
         lines.append("G90 G17 G21")
+        // Do not inherit G93 inverse-time feeds from an earlier program. Tool-length offsets
+        // remain as established during touch-off: cancelling them here could shift an existing G54.
+        lines.append("G94 G40 G91.1")
         lines.append("G54")
         lines.append("G53 G0 G90 Z-1.")
         // Spindle ramp-up. [CPS]

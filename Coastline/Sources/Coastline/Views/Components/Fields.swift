@@ -11,13 +11,15 @@ struct NumberField: View {
     var tip: String?
 
     var body: some View {
+        let units = AppSettings.shared.units
         LabeledContent {
             HStack(spacing: 4) {
-                TextField(title, value: $value, format: .number.precision(.fractionLength(0 ... 4)))
+                TextField(title, value: $value.displayed(in: units, metricUnit: unit), format: .number.precision(.fractionLength(0 ... (units == .imperial && unit == "mm" ? 6 : 4))))
                     .labelsHidden()
+                    .accessibilityLabel(unit == "mm" ? "\(title), \(units.spokenUnit)" : title)
                     .multilineTextAlignment(.trailing)
                     .frame(minWidth: 60, maxWidth: 90)
-                Text(unit).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+                Text(units.symbol(for: unit)).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
             }
         } label: {
             HStack(spacing: 4) {
@@ -59,13 +61,15 @@ struct OptionalNumberField: View {
     var unit = ""
 
     var body: some View {
+        let units = AppSettings.shared.units
         LabeledContent(title) {
             HStack(spacing: 4) {
-                TextField(title, value: $value, format: .number.precision(.fractionLength(0 ... 4)), prompt: Text("—"))
+                TextField(title, value: $value.displayed(in: units, metricUnit: unit), format: .number.precision(.fractionLength(0 ... (units == .imperial && unit == "mm" ? 6 : 4))), prompt: Text("—"))
                     .labelsHidden()
+                    .accessibilityLabel(unit == "mm" ? "\(title), \(units.spokenUnit)" : title)
                     .multilineTextAlignment(.trailing)
                     .frame(minWidth: 60, maxWidth: 90)
-                Text(unit).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+                Text(units.symbol(for: unit)).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
             }
         }
     }
@@ -78,14 +82,17 @@ struct RangeField: View {
     var unit = "mm"
 
     var body: some View {
+        let units = AppSettings.shared.units
         let lower = Binding<Double?>(get: { range?.lowerBound }, set: { set(lower: $0, upper: range?.upperBound) })
         let upper = Binding<Double?>(get: { range?.upperBound }, set: { set(lower: range?.lowerBound, upper: $0) })
         LabeledContent(title) {
             HStack(spacing: 4) {
-                TextField("from", value: lower, format: .number, prompt: Text("—")).frame(width: 52)
+                TextField("from", value: lower.displayed(in: units, metricUnit: unit), format: .number.precision(.fractionLength(0 ... 6)), prompt: Text("—")).frame(width: 64)
+                    .accessibilityLabel("\(title), from, \(units.symbol(for: unit))")
                 Text("–").foregroundStyle(.secondary)
-                TextField("to", value: upper, format: .number, prompt: Text("—")).frame(width: 52)
-                Text(unit).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
+                TextField("to", value: upper.displayed(in: units, metricUnit: unit), format: .number.precision(.fractionLength(0 ... 6)), prompt: Text("—")).frame(width: 64)
+                    .accessibilityLabel("\(title), to, \(units.symbol(for: unit))")
+                Text(units.symbol(for: unit)).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
             }
             .labelsHidden()
             .multilineTextAlignment(.trailing)
@@ -148,13 +155,24 @@ struct IssueDot: View {
 
 /// Material picker grouped by family.
 struct MaterialPicker: View {
+    @Environment(InventoryModel.self) private var model
     @Binding var materialID: String
+    var currentMaterial: Material? = nil
+
+    private var materials: [Material] {
+        var choices = model.inventory.materials
+        if let currentMaterial, currentMaterial.id == materialID {
+            if let index = choices.firstIndex(where: { $0.id == currentMaterial.id }) { choices[index] = currentMaterial }
+            else { choices.append(currentMaterial) }
+        }
+        return choices
+    }
 
     var body: some View {
         Picker("Material", selection: $materialID) {
             ForEach(Material.Family.allCases, id: \.self) { family in
                 Section(family.title) {
-                    ForEach(MaterialLibrary.all.filter { $0.family == family }) { m in
+                    ForEach(materials.filter { $0.family == family }) { m in
                         Text(m.name).tag(m.id)
                     }
                 }

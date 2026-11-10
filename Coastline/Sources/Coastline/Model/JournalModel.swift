@@ -95,6 +95,7 @@ extension AppModel {
         let checks = checkpoints().map { JournalEntry.Measurement(what: $0.what, expected: $0.expected, tolerance: $0.tolerance) }
         var e = JournalEntry(partName: part.fileName, materialID: stock.materialID, stockDescription: stock.sizeDescription,
                              programs: runs, measurements: checks)
+        e.materialSnapshot = stock.material
         e.projectPath = projectURL?.path
         e.stockID = stock.id
         e.copies = max(setup.copies, 1)

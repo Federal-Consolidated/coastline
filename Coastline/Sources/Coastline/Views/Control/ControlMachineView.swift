@@ -152,13 +152,7 @@ private final class ControlMachineScene {
         problem = nil
         defer { loading = false }
         do {
-            let assembly: MachineModel
-            if let cached = app.machineModel {
-                assembly = cached
-            } else {
-                let engine = try await app.liveEngine()
-                assembly = try await engine.machineModel(AppModel.repoRoot.appendingPathComponent("resources/machine/machine.step"))
-            }
+            let assembly = try await app.loadControlMachineModel()
             try Task.checkCancellation()
             let renderer = try ViewportRenderer(device: app.renderer.device)
             renderer.worldToDisplay = ViewportRenderer.machineToDisplay

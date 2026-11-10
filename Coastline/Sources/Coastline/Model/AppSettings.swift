@@ -1,4 +1,5 @@
 import AppKit
+import CoastlineCore
 import Foundation
 import SwiftUI
 
@@ -45,11 +46,12 @@ final class AppSettings {
     enum ClampKitProbing: String, CaseIterable, Identifiable {
         case electrical, edgeFinder
         var id: String { rawValue }
-        var title: String { self == .electrical ? "Electrical probing (G38.2)" : "Edge finder and paper" }
+        var title: String { self == .electrical ? "Electronic probing (G38.2)" : "Edge finder and paper" }
     }
 
     private let defaults = UserDefaults.standard
 
+    var units: DisplayUnits { didSet { defaults.set(units.rawValue, forKey: "displayUnits") } }
     var accent: Accent { didSet { defaults.set(accent.rawValue, forKey: "accent") } }
     var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: "appearance"); apply() } }
     /// 0 = automatic (by the number of cores).
@@ -59,6 +61,7 @@ final class AppSettings {
     var referenceBores: Bool { didSet { defaults.set(referenceBores, forKey: "referenceBores") } }
 
     private init() {
+        units = DisplayUnits(rawValue: defaults.string(forKey: "displayUnits") ?? "") ?? .metric
         accent = Accent(rawValue: defaults.string(forKey: "accent") ?? "") ?? .graphite
         appearance = Appearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
         engines = defaults.integer(forKey: "engines")

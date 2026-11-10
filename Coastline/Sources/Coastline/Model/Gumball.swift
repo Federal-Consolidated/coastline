@@ -8,7 +8,7 @@ import Viewport
 /// past where it still makes sense. X is up, Y along the table, Z toward the spindle.
 extension AppModel {
     /// Stage 1 shows only the stock as bought and the part in it.
-    var showingStockOnly: Bool { stage == .partStock && stock != nil }
+    var showingStockOnly: Bool { fixturePlacement == nil && [.partStock, .stock].contains(stage) }
 
     /// Where the part's centre sits in the model (the gumball's origin).
     func partCentreWorld() -> SIMD3<Float>? {
@@ -30,27 +30,36 @@ extension AppModel {
 
     /// What the gumball moves now: the part in its stock (stage 1), or the stop or a C-clamp
     /// picked on the bed (stage 3).
-    enum GumballTarget: Equatable { case part, bed(BedObject) }
+    enum GumballTarget: Equatable { case part, bed(BedObject), libraryFixture(String?) }
 
     var gumballTarget: GumballTarget? {
-        if showingStockOnly { return .part }
-        guard let b = bedSelection, pickValid(b) else { return nil }
-        return .bed(b)
+        if let session = fixturePlacement {
+            return session.pickingGrip ? nil : .libraryFixture(session.selectedComponent)
+        }
+        guard ![.partStock, .stock, .planning].contains(stage) else { return nil }
+        if let b = bedSelection, pickValid(b) { return .bed(b) }
+        if stage == .clampKit { return .part }
+        return nil
     }
 
     /// The arrows a target moves along: the stop only slides along the T-slots (Y); a C-clamp's
     /// pad slides on the bar (Y, Z) and the clamp turns about its screw (the ring).
     func gumballAxes(for t: GumballTarget) -> [(id: String, dir: SIMD3<Float>, color: SIMD4<Float>)] {
         switch t {
-        case .part: Self.gumballAxes
-        case .bed(.stop), .bed(.kitClamp): Self.gumballAxes.filter { $0.id == "gumball.y" }
-        case .bed(.clamp): Self.gumballAxes.filter { $0.id != "gumball.x" }
-        case .bed(.kitStock): Self.gumballAxes.filter { $0.id == "gumball.z" }
+        case .part: return Self.gumballAxes
+        case .libraryFixture(let id):
+            if placingBookends { return canMoveBookendComponent(id) ? Self.gumballAxes.filter { $0.id == "gumball.y" } : [] }
+            if placingMechanism { return mechanismAxis(id).map { a in Self.gumballAxes.filter { $0.id == ["gumball.x", "gumball.y", "gumball.z"][a] } } ?? [] }
+            return Self.gumballAxes
+        case .bed(.stop), .bed(.kitClamp): return Self.gumballAxes.filter { $0.id == "gumball.y" }
+        case .bed(.clamp): return Self.gumballAxes.filter { $0.id != "gumball.x" }
+        case .bed(.kitStock): return Self.gumballAxes.filter { $0.id == "gumball.z" }
         }
     }
 
     func gumballOrigin(_ t: GumballTarget) -> SIMD3<Float>? {
         switch t {
+        case .libraryFixture(let id): return placementGumballOrigin(id)
         case .part: return partCentreWorld()
         case .bed(.kitStock):
             guard let size = displayStockSize else { return nil }
@@ -83,6 +92,7 @@ extension AppModel {
     func ringAxes(for t: GumballTarget) -> [Int] {
         switch t {
         case .part: [0, 1, 2]
+        case .libraryFixture: placingBookends || placingMechanism ? [] : [0, 1, 2]
         case .bed(.clamp): [0]
         case .bed(.stop), .bed(.kitClamp), .bed(.kitStock): []
         }
@@ -190,12 +200,14 @@ extension AppModel {
         var moved = false
         /// Grabbed by an arrow or ring (a click there types a value), not by the object itself.
         var fromHandle = false
+        var fixtureStart: FixturePlanningProfile? = nil
     }
 
     /// Mouse down: an arrow or ring under the point (screen distance to its projection), or on
     /// the bed a fixture itself (picked and dragged in one go). False: the camera gets the drag.
     func gumballBegin(_ p: CGPoint, _ size: CGSize) -> Bool {
         guard size.width > 0 else { return false }
+        if fixturePlacement?.pickingGrip == true { return false }
         if let target = gumballTarget, let o = gumballOrigin(target) {
             let len = gumballLength
             var best: (id: String, dir: SIMD3<Float>, d: Double, ring: Int?)?
@@ -229,9 +241,31 @@ extension AppModel {
                                               downAt: p, fromHandle: true)
                 }
                 gumballPrompt = nil
+                gumballDrag?.fixtureStart = fixturePlacement?.fixture.planning
                 layoutGumball()
                 return true
             }
+        }
+        if fixturePlacement != nil {
+            guard let (id, hit) = pickPlacementComponent(p, size: size) else { return false }
+            pause(); selectPlacementComponent(id)
+            if placingBookends || placingMechanism {
+                let axis = placingBookends ? (canMoveBookendComponent(id) ? 1 : nil) : mechanismAxis(id)
+                var dir = SIMD3<Double>(repeating: 0)
+                if let axis { dir[axis] = 1 }
+                guard let axis, let t = axisParameter(p, size, origin: SIMD3<Double>(hit), dir: dir) else {
+                    layoutGumball(); return true
+                }
+                gumballDrag = GumballDrag(axis: ["gumball.x", "gumball.y", "gumball.z"][axis], dir: dir, origin: SIMD3<Double>(hit), t0: t,
+                    start: setup, target: .libraryFixture(id), downAt: p, fixtureStart: fixturePlacement?.fixture.planning)
+                layoutGumball(); return true
+            }
+            let ray = renderer.ray(at: p, viewSize: size)
+            gumballDrag = GumballDrag(axis: "gumball.fixturePlane", dir: SIMD3<Double>(ray.direction),
+                origin: SIMD3<Double>(hit), t0: 0, start: setup, target: .libraryFixture(id), downAt: p,
+                fixtureStart: fixturePlacement?.fixture.planning)
+            layoutGumball()
+            return true
         }
         // On the bed: press on the stop, the bar or a C-clamp and drag it straight away; in the
         // clamp kit, a universal clamp or the stock.
@@ -272,6 +306,9 @@ extension AppModel {
             guard let a = ringAngle(p, size, origin: d.origin, axis: k) else { return }
             let turn = remainder(a - d.t0, 2 * .pi)
             switch d.target {
+            case .libraryFixture(let id):
+                guard let start = d.fixtureStart else { return }
+                rotatePlacement(axis: k, turns: Int((turn / (.pi / 2)).rounded()), from: start, componentID: id, useSelection: false)
             case .part:
                 // Quarter turns: the part snaps to the next orientation past 45°.
                 let q = Int((turn / (Double.pi / 2)).rounded())
@@ -290,6 +327,18 @@ extension AppModel {
             layoutGumball()
             return
         }
+        if d.axis == "gumball.fixturePlane", case .libraryFixture(let id) = d.target, let start = d.fixtureStart {
+            let ray = renderer.ray(at: p, viewSize: size)
+            let ro = SIMD3<Double>(ray.origin), rd = SIMD3<Double>(ray.direction), normal = simd_normalize(d.dir)
+            let den = simd_dot(rd, normal)
+            guard abs(den) > 1e-6 else { return }
+            let hit = ro + rd * (simd_dot(d.origin - ro, normal) / den)
+            let scale = placementDragScale
+            let delta = (hit - d.origin) * scale
+            let snapped = SIMD3(delta.x.rounded(), delta.y.rounded(), delta.z.rounded()) / scale
+            movePlacement(snapped, from: start, componentID: id, useSelection: false, snapViewSize: size)
+            return
+        }
         if d.axis == "gumball.plane" {
             // The pad follows the mouse over the horizontal plane through where it was grabbed.
             guard case .bed(.clamp(let i)) = d.target else { return }
@@ -306,6 +355,12 @@ extension AppModel {
         }
         guard let t = axisParameter(p, size, origin: d.origin, dir: d.dir) else { return }
         switch d.target {
+        case .libraryFixture(let id):
+            guard let start = d.fixtureStart else { return }
+            let scale = placingBookends && id == BookendSetup.pressure ? max(10, placementDragScale) : placementDragScale
+            let delta = ((t - d.t0) * scale).rounded() / scale
+            let axis = d.axis == "gumball.x" ? 0 : d.axis == "gumball.y" ? 1 : 2
+            movePlacement(d.dir * delta, from: start, componentID: id, useSelection: false, snapViewSize: size, snapAxes: [axis])
         case .part:
             let delta = ((t - d.t0) * 2).rounded() / 2  // 0.5 mm snaps
             var s = d.start
@@ -338,6 +393,7 @@ extension AppModel {
     }
 
     func gumballEnd() {
+        let wasLibrary: Bool = gumballDrag.map { if case .libraryFixture = $0.target { return true }; return false } ?? false
         let wasBed = gumballDrag.map { $0.target != .part } ?? false
         // A click on an arrow or ring (no drag): type the move instead, like Rhino.
         if let d = gumballDrag, !d.moved, d.fromHandle {
@@ -348,6 +404,7 @@ extension AppModel {
         }
         gumballDrag = nil
         layoutGumball()
+        if wasLibrary { return }
         if kitEditable {
             recheckClearance()
         } else if wasBed {
@@ -360,25 +417,10 @@ extension AppModel {
 
     // MARK: Limits and snaps
 
-    /// How far the part may move in the stock as bought (work frame): its frame and the face-off
-    /// allowance stay inside.
+    /// How far the part may move while staying inside the stock (work frame).
     func placementRange(_ s: Setup) -> (x: ClosedRange<Double>, y: ClosedRange<Double>, depth: ClosedRange<Double>)? {
         guard let part, let stock else { return nil }
-        let (lo, hi) = s.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
-        // Inside the stock that reaches the clamp kit (after any prep), not the bar as bought.
-        var size = hi - lo
-        let raw = s.stockSize(stock)
-        // Batching: the whole row of copies has to fit.
-        if s.copies > 1 { size.y += Double(s.copies - 1) * Setup.copyPitch(partY: hi.y - lo.y, toolDiameter: roughingDiameter) }
-        let edge = GripZones.grip + GripZones.channelTool + 0.5
-        var mx = max((raw.x - size.x) / 2 - edge, 0), my = max((raw.y - size.y) / 2 - 7.35, 0)
-        if s.shoulders != nil {
-            // Held at the ends only: up to the bar's edges, and clear of the jaws at the ends.
-            mx = max((raw.x - size.x) / 2 - 0.5, 0)
-            my = max((raw.y - 2 * Shoulders.gripZone - 2 - size.y) / 2, 0)
-        }
-        let maxDepth = max(raw.z - size.z - 0.3, 0.3)
-        return (-mx ... mx, -my ... my, 0.3 ... maxDepth)
+        return s.placementLimits(partMin: part.boundsMin, partMax: part.boundsMax, stock: stock, toolDiameter: roughingDiameter)
     }
 
     func placementLimited(_ s: Setup) -> Setup {
@@ -392,7 +434,7 @@ extension AppModel {
 
     var placementWarning: String? {
         guard let r = placementRange(setup) else { return nil }
-        if setup.partOffsetX == r.x.upperBound || setup.partOffsetX == r.x.lowerBound { return "The part is as close to the clamped edge as its frame allows." }
+        if setup.partOffsetX == r.x.upperBound || setup.partOffsetX == r.x.lowerBound { return "The part meets the stock boundary. Existing finished stock faces can be left uncut; check the selected workholding's grip and clearance." }
         return nil
     }
 
@@ -403,7 +445,7 @@ extension AppModel {
         var s = setup
         switch snap {
         case .centre: s.partOffsetX = 0; s.partOffsetY = 0
-        case .face: s.topAllowance = 0.5
+        case .face: s.topAllowance = 0
         case .back: s.topAllowance = r.depth.upperBound
         case .top: s.partOffsetX = r.x.upperBound
         case .bottom: s.partOffsetX = r.x.lowerBound

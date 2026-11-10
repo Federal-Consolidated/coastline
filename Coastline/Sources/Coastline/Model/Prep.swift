@@ -12,10 +12,12 @@ extension AppModel {
 
     func autoPlanPrep() {
         guard part != nil, stock != nil else { return }
-        let current = stockOptions().first { $0.axes == setup.stockAxes }
+        guard setup.usesClampKit else { return }
+        guard setup.holding != .shoulders || setup.shoulders != nil else { return }
+        let current = stockOptions(forClampKit: true).first { $0.axes == setup.stockAxes }
         // This orientation only works held by shoulders: plan them (and undo them when it
         // fits another way again, if Coastline put them there).
-        if current?.viaShoulders == true, setup.shoulders == nil, !setup.onBed, let sh = shoulderProposal {
+        if setup.holding == nil, current?.viaShoulders == true, setup.shoulders == nil, let sh = shoulderProposal {
             shouldersAuto = true
             var s = setup
             s.shoulders = sh
@@ -27,7 +29,7 @@ extension AppModel {
                 : "The kit grips the bar's two ends only, so the part can reach its top and bottom edges."
             return
         }
-        if current?.viaShoulders == false, shouldersAuto, setup.shoulders != nil {
+        if setup.holding == nil, current?.viaShoulders == false, shouldersAuto, setup.shoulders != nil {
             shouldersAuto = false
             setup.shoulders = nil
             return
@@ -62,7 +64,7 @@ extension AppModel {
             if setup.downsizeHeight != nil { setup.downsizeHeight = nil }
             return
         }
-        let option = stockOptions().first { $0.axes == setup.stockAxes }
+        let option = stockOptions(forClampKit: true).first { $0.axes == setup.stockAxes }
         // A proper frame (strips under the jaws, a channel around the part) only fits the kit
         // without the soft jaws: take them off, with the disclaimer.
         if option?.softJawOff == true, setup.clampSoftJaw {
@@ -70,6 +72,9 @@ extension AppModel {
             status = "Soft jaws off so the part gets a proper frame: " + UniversalClamp.noSoftJawDisclaimer
             return  // setup's didSet plans again
         }
+        // Choosing the direct kit is explicit: report a fit problem rather than silently
+        // turning that selection into another holding method.
+        guard setup.holding != .clampKit else { return }
         guard let target = option?.prepHeight else {
             if prepAuto {
                 prepAuto = false
@@ -112,7 +117,7 @@ extension AppModel {
         return alongY ? ideal.y : ideal.z
     }
 
-    /// The largest uniform scale at which the part fits the stock with a proper frame, when it
+    /// The largest uniform scale at which the part fits the stock, when it
     /// doesn't fit at the current scale (nil when it does).
     var scaleToFitStock: Double? {
         guard let part, let stock else { return nil }
@@ -121,7 +126,7 @@ extension AppModel {
         let (lo, hi) = unit.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
         func fits(_ k: Double) -> Bool {
             StockOrientation.options(stock: stock, part: (hi - lo) * k, twoSided: twoSided, topAllowance: setup.topAllowance,
-                                     softJaw: true, toolDiameter: 6.35).contains(where: \.workable)
+                                     softJaw: true, toolDiameter: 6.35, requiresClampFrame: false).contains(where: \.workable)
         }
         guard !fits(setup.partScale) else { return nil }
         var a = 0.02, b = setup.partScale
@@ -133,6 +138,14 @@ extension AppModel {
     /// The machine's table and the squaring stop's face, from the machine model.
     var prepTable: FlatPrep.Table {
         var t = SideClamps.table(topX: machineModel?.tableTopX ?? -31.12, frontSlotZ: machineModel?.tSlotZ.max() ?? -13.4)
+        if let geometry = planningGeometry {
+            t.topX = geometry.model.tableTopX
+            t.northZ = geometry.supportBounds.maximum.z
+            t.backZ = geometry.supportBounds.minimum.z
+            t.thickness = t.topX - geometry.tableBounds.minimum.x
+            t.minimumY = geometry.tableBounds.minimum.y
+            t.maximumY = geometry.tableBounds.maximum.y
+        }
         if let r = cClampFrameAtBed { (t.clampInnerReach, t.clampHalfWidth) = r }
         return t
     }
@@ -164,10 +177,11 @@ extension AppModel {
         guard let frame = kitParts.first(where: { $0.kit == "cclamp" && $0.role == "frame" }) else { return nil }
         let v = frame.mesh.vertices
         var inner = Double.infinity, half = 0.0
+        let thickness = planningGeometry.map { $0.model.tableTopX - $0.tableBounds.minimum.x } ?? FlatPrep.tableThickness
         for i in stride(from: 0, to: v.count, by: 3) {
             // Kit x = 0 is the bed's underside (the fixed jaw under it), y away from the spindle.
             let x = Double(v[i]), y = Double(v[i + 1]), z = Double(v[i + 2])
-            guard x >= 0, x <= FlatPrep.tableThickness + 0.5, y > 10 else { continue }
+            guard x >= 0, x <= thickness + 0.5, y > 10 else { continue }
             inner = min(inner, y)
             half = max(half, abs(z))
         }
@@ -277,28 +291,29 @@ extension AppModel {
     }
 
     func generatePrep(tool: Tool, material: Material, stock: StockItem) {
+        guard planningMachineReady else { return }
         prepPrograms = []
         prepResults = []
         guard let m = prepMillDown(tool: tool) else { return }
         // The same prep (bar, steps, fixtures, tool, material) as last time: reuse its programs.
-        let key = "\(m)|\(material.id)|\(stock.finish)"
+        let key = "\(machine)|\(m)|\(material.id)|\(stock.finish)"
         let items: [GuidedJobBuilder.MillDown.Item]
         if let c = prepProgramCache, c.key == key {
             items = c.items
         } else {
-            items = m.programs(material: material, sawn: stock.finish == .sawn).items
+            items = m.programs(material: material, sawn: stock.finish == .sawn, machine: machine).items
             prepProgramCache = (key, items)
         }
         for (k, item) in items.enumerated() {
             let op = Operation(kind: item.stage.isEdge ? .adaptive : .facing, toolID: tool.id)
-            let data = FeedsEngine.compute(tool: tool, material: material, kind: op.kind)
+            let data = FeedsEngine.compute(tool: tool, material: material, kind: op.kind, machine: machine)
             let path = OperationToolpath(operationID: op.id, moves: item.moves)
             let posted = GRBLPost.programWithLineMap(
                 header: .init(programName: part?.fileName ?? "Prep", setupName: "Prep: flat on the squaring stop", tool: tool,
                               operationNames: [item.title], stockDescription: "\(material.name) \(stock.sizeDescription)"),
-                rpm: data.rpm, paths: [path])
+                rpm: data.rpm, paths: [path], machine: machine)
             var program = ToolProgram(index: 1000 + k, side: -1, tool: tool, operations: [op], rpm: data.rpm, gcode: posted.text,
-                                      report: item.report, seconds: TimeEstimate.seconds([path]), title: item.title)
+                                      report: item.report, seconds: TimeEstimate.seconds([path], machine: machine), title: item.title)
             program.clearanceHits = item.hits
             prepPrograms.append(program)
             prepResults.append(SideResult(side: -1, setup: setup, planned: [.init(operation: op, tool: tool, data: data)], paths: [path],

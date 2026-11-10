@@ -35,6 +35,8 @@ let gcodeTests: [TestCase] = [
 
         try expectEqual(GCodeLine("G20").units, 20)
         try expectEqual(GCodeLine("g91").distanceMode, 91)
+        try expectEqual(GCodeLine("G091.1").distanceMode, nil, "arc-centre mode must not change XYZ distance mode")
+        try expectEqual(GCodeLine("G90.0").distanceMode, 90)
 
         let spindle = GCodeLine("M3 S12000")
         try expect(spindle.kind == .mcode && spindle.group == .spindle)

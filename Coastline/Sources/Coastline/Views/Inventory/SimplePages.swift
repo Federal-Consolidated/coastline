@@ -1,5 +1,23 @@
 import CoastlineCore
 import SwiftUI
+import UniformTypeIdentifiers
+import Viewport
+
+enum FixtureModelImport {
+    static let types = ["step", "stp", "iges", "igs", "3dm", "stl", "3mf"].compactMap { UTType(filenameExtension: $0) }
+
+    static func store(_ url: URL) throws -> String {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let folder = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                                                appropriateFor: nil, create: true)
+            .appendingPathComponent("Coastline/Fixture Models", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let target = folder.appendingPathComponent(UUID().uuidString + "." + url.pathExtension.lowercased())
+        try FileManager.default.copyItem(at: url, to: target)
+        return target.path
+    }
+}
 
 // Fixtures, measuring tools and accessories: simpler lists with the same table + inspector layout.
 
@@ -8,6 +26,8 @@ struct FixturesPage: View {
     @Environment(AppModel.self) private var app
     @State private var selection: Set<Fixture.ID> = []
     @State private var pendingDelete: Set<Fixture.ID>?
+    @State private var importingModel = false
+    @State private var importError: String?
 
     var body: some View {
         Table(model.inventory.fixtures, selection: $selection) {
@@ -43,6 +63,8 @@ struct FixturesPage: View {
         .toolbar {
             ToolbarItemGroup {
                 Menu("Add Fixture", systemImage: "plus") {
+                    Button("Import Jig Model…", systemImage: "square.and.arrow.down") { importingModel = true }
+                    Divider()
                     ForEach(Fixture.Kind.allCases, id: \.self) { kind in
                         Button(kind.title, systemImage: kind.symbol) {
                             let f = Fixture(name: kind.title, kind: kind, clampAxis: kind == .vise ? .y : kind == .universalClamp ? .x : .none)
@@ -67,15 +89,40 @@ struct FixturesPage: View {
             .panelEdge(.leading).inspectorColumnWidth(min: 300, ideal: 340, max: 460)
         }
         .onAppear { if selection.isEmpty, let first = model.inventory.fixtures.first { selection = [first.id] } }
+        .fileImporter(isPresented: $importingModel, allowedContentTypes: FixtureModelImport.types) { result in
+            do {
+                let url = try result.get()
+                var fixture = Fixture(name: url.deletingPathExtension().lastPathComponent, kind: .jigPlate)
+                fixture.modelPath = try FixtureModelImport.store(url)
+                model.add(fixture, to: \.fixtures)
+                selection = [fixture.id]
+                app.showInspector = true
+            } catch { importError = error.localizedDescription }
+        }
+        .alert("Couldn't Import Jig", isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })) {
+            Button("OK") { importError = nil }
+        } message: { Text(importError ?? "") }
     }
 }
 
 struct FixtureInspector: View {
     @Binding var fixture: Fixture
     @Environment(AppModel.self) private var app
+    @State private var choosingModel = false
+    @State private var modelError: String?
 
     var body: some View {
         Form {
+            if fixture.planning != nil {
+                Section("Assembly and stock") {
+                    FixtureAssemblyPreview(fixture: fixture)
+                    Button("Place Around Stock in Workspace…", systemImage: "move.3d") {
+                        Task { await app.beginFixturePlacement(fixture) }
+                    }.disabled(app.part == nil || app.stock == nil)
+                }
+            } else if let path = fixture.modelPath, !path.isEmpty {
+                ImportedFixturePreview(path: path, name: fixture.name)
+            } else {
             InventoryPreviewSection(
                 name: fixture.name,
                 key: "\(fixture.id)-\(fixture.kind)-\(fixture.clampAxis)-\(fixture.height)-\(String(describing: fixture.gripRange))-\(app.machineLoaded)-\(app.kitParts.count)",
@@ -84,7 +131,13 @@ struct FixtureInspector: View {
                 let kit = app.fixtureMeshes(fixture.kind, device: device)
                 return kit.isEmpty ? fixture.sceneMeshes(device: device) : kit
             }
+            }
             Section("Fixture") {
+                if fixture.planning == nil {
+                    Button("Place Around Stock in Workspace…", systemImage: "move.3d") {
+                        Task { await app.beginFixturePlacement(fixture) }
+                    }.disabled(app.part == nil || app.stock == nil)
+                }
                 TextField("Name", text: $fixture.name)
                 Picker("Type", selection: $fixture.kind) {
                     ForEach(Fixture.Kind.allCases, id: \.self) { Label($0.title, systemImage: $0.symbol).tag($0) }
@@ -104,14 +157,71 @@ struct FixtureInspector: View {
                 Text("Isolated fixtures let the machine's probe wire touch off on the part (conductive probing). The universal clamp clamps along X, a vise along Y.")
             }
             Section("Model") {
+                Button(fixture.modelPath == nil ? "Choose Model…" : "Replace Model…", systemImage: "folder") {
+                    choosingModel = true
+                }
                 TextField("3D model file", text: Binding(get: { fixture.modelPath ?? "" }, set: { fixture.modelPath = $0.isEmpty ? nil : $0 }),
                           prompt: Text("STEP, 3MF or STL"))
                 TextField("Notes", text: $fixture.notes, axis: .vertical).lineLimit(2 ... 6)
+                Text("Imported models are copied into Coastline's library. Define Automatic setup planning below to make an assembled jig available for cut-driven fixture selection and clearance checks.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
+            FixturePlanningSection(fixture: $fixture)
         }
         .formStyle(.grouped)
         .darkPanel()
         .scrollEdgeEffectStyle(.soft, for: .all)
+        .fileImporter(isPresented: $choosingModel, allowedContentTypes: FixtureModelImport.types) { result in
+            do { fixture.modelPath = try FixtureModelImport.store(result.get()) }
+            catch { modelError = error.localizedDescription }
+        }
+        .alert("Couldn't Import Model", isPresented: Binding(get: { modelError != nil }, set: { if !$0 { modelError = nil } })) {
+            Button("OK") { modelError = nil }
+        } message: { Text(modelError ?? "") }
+    }
+}
+
+private struct ImportedFixturePreview: View {
+    let path: String
+    let name: String
+    @Environment(AppModel.self) private var app
+    @State private var mesh: MeshData?
+    @State private var failure: String?
+
+    var body: some View {
+        Section("3D preview") {
+            if let mesh {
+                ItemViewer3D(build: { device in
+                    guard let model = SceneMesh(device: device, id: "imported.fixture", positions: mesh.vertices,
+                                                normals: mesh.normals, indices: mesh.indices, color: SceneColor.part) else { return [] }
+                    return [model]
+                }, key: path, name: name)
+            } else if let failure {
+                ContentUnavailableView("Model Couldn't Be Loaded", systemImage: "cube",
+                                       description: Text(failure))
+                    .frame(height: 220)
+                Button("Retry") { self.failure = nil }
+            } else {
+                ProgressView("Loading jig model…").frame(maxWidth: .infinity).frame(height: 220)
+            }
+        }
+        .task(id: "\(path)|\(failure == nil)") {
+            guard failure == nil else { return }
+            mesh = nil
+            do {
+                let url = path.hasPrefix("/") ? URL(fileURLWithPath: path)
+                    : AppModel.repoRoot.appendingPathComponent("resources").appendingPathComponent(path)
+                let engine = try await app.liveEngine()
+                let loaded = try await engine.importPart(url)
+                try Task.checkCancellation()
+                guard !loaded.indices.isEmpty else {
+                    throw EngineClient.EngineError(type: "Empty", message: "The model contains no surfaces.")
+                }
+                mesh = loaded
+            } catch is CancellationError {
+            } catch { failure = error.localizedDescription }
+        }
+        .onChange(of: path) { _, _ in failure = nil; mesh = nil }
     }
 }
 

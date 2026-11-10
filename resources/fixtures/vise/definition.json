@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "id": "mini-vise-2in",
+  "revision": 3,
+  "modelSHA256": "202b461426c21c267684533de27d34a8c0b1014423cdd4d1d9a286019350a87c",
+  "isAssembled": true,
+  "components": [
+    {
+      "id": "vise-body",
+      "name": "Vise body",
+      "role": "physical",
+      "modelEntities": [
+        "0/0",
+        "3/0",
+        "5/0",
+        "6/0",
+        "7/0",
+        "8/0",
+        "9/0",
+        "10/0"
+      ]
+    },
+    {
+      "id": "moving-jaw",
+      "name": "Moving jaw and screw",
+      "parentID": "vise-body",
+      "role": "physical",
+      "modelEntities": [
+        "1/0",
+        "2/0",
+        "4/0"
+      ],
+      "joint": {
+        "id": "jaw-advance",
+        "kind": "screw",
+        "axis": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "origin": {
+          "x": 35.865,
+          "y": -245.4,
+          "z": 108.764
+        },
+        "minimum": -21.6,
+        "maximum": 4.5,
+        "referenceValue": 0,
+        "pitch": 1.25
+      }
+    }
+  ],
+  "vise": {
+    "seatX": 27.865,
+    "fixedJawY": -270.4,
+    "movingJawY": -245.4,
+    "jawX": [
+      27.865,
+      45.865
+    ],
+    "jawZ": [
+      88.764,
+      128.764
+    ],
+    "slotZ": [
+      118.764
+    ],
+    "nutY": [
+      -276.27,
+      -197.53
+    ],
+    "frontZ": 129.8436
+  }
+}

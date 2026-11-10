@@ -13,12 +13,14 @@ struct WorkspaceView: View {
     var body: some View {
         @Bindable var model = model
         ViewportContainer(renderer: model.renderer, onClick: { point, size in
-            if model.inspecting { model.inspect(at: point, viewSize: size) } else { model.handleClick(at: point, viewSize: size) }
+            if model.fixturePlacement != nil { model.handlePlacementClick(point, size: size) }
+            else if model.inspecting { model.inspect(at: point, viewSize: size) } else { model.handleClick(at: point, viewSize: size) }
         }, handles: .init(begin: { model.gumballBegin($0, $1) }, drag: { model.gumballMove($0, $1) }, end: { model.gumballEnd() }))
         .accessibilityLabel("3D View")
         .accessibilityValue(model.part.map { "\($0.fileName), \(model.title(model.stage)) stage" } ?? "No part imported")
-        .ignoresSafeArea()
-        .overlay { SceneLabelsOverlay().ignoresSafeArea() }
+        .ignoresSafeArea(.container, edges: .bottom)
+        .overlay { SceneLabelsOverlay() }
+        .overlay { FindingPinsOverlay() }
         .overlay(alignment: .topLeading) {
             if let prompt = model.gumballPrompt { TypedMoveField(prompt: prompt).offset(x: prompt.point.x + 14, y: prompt.point.y - 18) }
         }
@@ -42,7 +44,7 @@ struct WorkspaceView: View {
         }
         .overlay(alignment: .topLeading) {
             VStack(alignment: .leading, spacing: 10) {
-                ViewModeBar()
+                if model.fixturePlacement != nil { FixturePlacementBanner() } else { ViewModeBar() }
                 if model.partChangedOnDisk, let name = model.part?.fileName {
                     HStack(spacing: 10) {
                         Label("\(name) changed on disk", systemImage: "arrow.triangle.2.circlepath")
@@ -55,6 +57,7 @@ struct WorkspaceView: View {
                 if let error = model.errorMessage {
                     ErrorBanner(text: error, shape: .rect(cornerRadius: 14)) { model.errorMessage = nil }
                 }
+                FindingsLegend()
                 if model.undercutOverlayShown && model.timeline.entries.isEmpty { UndercutLegend() }
                 if model.loosePieces > 0 && model.showsMachiningResults { LooseLegend(count: model.loosePieces) }
                 if model.measuring { MeasureHUD() }
@@ -78,6 +81,17 @@ struct WorkspaceView: View {
         .navigationTitle(model.part?.fileName ?? "Workspace")
         .navigationSubtitle(model.status)
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                PlanningMachinePicker()
+            }
+            ToolbarItem(placement: .automatic) {
+                Menu("Job Resources", systemImage: "shippingbox") {
+                    Text("This job keeps its selected stock, material and tool definitions.")
+                    Button("Update from Library") { model.updateJobResources(from: inventory.inventory) }
+                        .disabled(!model.canChangePlanningMachine || model.stock == nil)
+                }
+                .help("Apply library edits to this job. Generated toolpaths will be cleared.")
+            }
             ToolbarItemGroup(placement: .navigation) {
                 Button("Undo", systemImage: "arrow.uturn.backward") { model.undoAnywhere() }
                     .disabled(!model.canUndo)
@@ -88,7 +102,7 @@ struct WorkspaceView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Button("Import Part…", systemImage: "square.and.arrow.down") { importing = true }
-                    .disabled(model.isBusy)
+                    .disabled(model.isBusy || model.fixturePlacement != nil)
                     .keyboardShortcut("i", modifiers: .command)
             }
         }
@@ -109,6 +123,8 @@ struct WorkspaceView: View {
         .task {
             model.stockLookup = { [inventory] id in inventory.inventory.stock.first { $0.id == id } }
             model.toolLookup = { [inventory] id in inventory.inventory.tools.first { $0.id == id } }
+            model.fixtureLookup = { [inventory] id in inventory.inventory.fixtures.first { $0.id == id } }
+            model.inventoryLookup = { [inventory] in inventory.inventory }
             model.addToInventory = { [inventory] tools, stock in
                 inventory.update { inv in
                     inv.tools += tools.filter { t in !inv.tools.contains { $0.id == t.id } }
@@ -116,14 +132,21 @@ struct WorkspaceView: View {
                 }
             }
             model.measuringToolNames = inventory.inventory.measuring.filter { [.micrometer, .caliper].contains($0.kind) }.map(\.name)
-            await model.loadMachine()
+            if ProcessInfo.processInfo.environment["COASTLINE_DEV"] != "1" { await model.loadMachine() }
             // The start sheet: continue the last session, open, import or try an example. The
             // first time, after the welcome.
-            if ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil, model.part == nil, !model.showWelcome {
+            if ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil,
+               ProcessInfo.processInfo.environment["COASTLINE_DEV"] != "1", model.part == nil, !model.showWelcome {
                 model.showStart = true
             }
         }
         .onChange(of: inventory.inventory.stock) { model.layoutScene() }
+        .onChange(of: AppSettings.shared.clampKitProbing) {
+            if model.operations.contains(where: { $0.engraving?.probeSurface == true }) {
+                model.cancelGenerationNow()
+                model.clearToolpathResults()
+            }
+        }
         // Reduce Motion: the camera jumps to a view instead of easing round.
         .onAppear { model.applyReduceMotion() }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification)) { _ in
@@ -151,12 +174,14 @@ struct WorkspaceView: View {
                             .padding(.horizontal, 9)
                             .help(view == .tool ? "Look down the spindle at the face being cut" : "\(view.title) view")
                     }
-                    Button("Fit", systemImage: "arrow.up.left.and.arrow.down.right") { model.focusWork() }
+                Button("Fit", systemImage: "arrow.up.left.and.arrow.down.right") {
+                    if model.fixturePlacement != nil { model.focusPlacementContext() } else { model.focusWork() }
+                }
                         .labelStyle(.iconOnly)
                         .buttonStyle(.borderless)
                         .foregroundStyle(.primary)
                         .padding(.horizontal, 9)
-                        .help("Frame the part and stock")
+                    .help(model.fixturePlacement == nil ? "Frame the part and stock" : "Frame the fixture, stock, X-table and spindle")
                 }
                 .padding(.vertical, 9)
                 .padding(.horizontal, 6)
@@ -170,7 +195,7 @@ struct WorkspaceView: View {
 
                 // M is the View menu's (it leaves a text field being typed in alone).
                 GlassToggle(title: "Measure", systemImage: "ruler", isOn: $model.measuring)
-                    .disabled(model.part == nil)
+                    .disabled(model.part == nil || model.fixturePlacement != nil)
                     .help("Measure faces and distances (M)")
             }
             .controlSize(.large)

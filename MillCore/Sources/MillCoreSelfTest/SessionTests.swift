@@ -210,14 +210,14 @@ let sessionTests: [TestCase] = [
                 }
             }
         }
-        let typical = try JobProgramCheck.clean(["G90 G94 G17", "G21", "M3 S8000", "G0 X1.5 Y-2. (comment)", "G1 Z-1. F600",
+        let typical = try JobProgramCheck.clean(["G90 G94 G17", "G21", "G40 G91.1", "M3 S8000", "G0 X1.5 Y-2. (comment)", "G1 Z-1. F600",
                                                  "G2 X2 Y-2 I0.25 J0", "G38.3 Z-5 F30", "G10 L20 P2 Z0", "G0 X+0.25",
                                                  "G53 G0 Z-1.", "M5"], settings: realSettings, envelope: envelope).get()
-        try expectEqual(typical.lines.count, 11)
+        try expectEqual(typical.lines.count, 12)
         let home = try JobProgramCheck.clean(["$H (home)", "G92.1", "$#", "G10 L20 P2 X0 Y0 Z0"], settings: realSettings, envelope: envelope).get()
         try expect(home.startsWithHome)
         try expectEqual(home.lines, ["$H", "G92.1", "G4P0", "$#", "G10L20P2X0Y0Z0"])
-        for bad in [["G20"], ["G28"], ["$X"], ["M6 T1"], ["M3 S9000"], ["G10 L1 P1 R2"], ["G53 G0 X10"], ["M100 G56X G57X"], ["M101 G57 G58 X 0.1"], ["$L"], ["G38.4 Z-5 F20"]] {
+        for bad in [["G20"], ["G28"], ["$X"], ["M6 T1"], ["M3 S9000"], ["G10 L1 P1 R2"], ["G53 G0 X10"], ["M100 G56X G57X"], ["M101 G57 G58 X 0.1"], ["$L"], ["G38.4 Z-5 F20"], ["G49 G0 Z-1"], ["G93"]] {
             if case .success = JobProgramCheck.clean(bad, settings: realSettings, envelope: envelope) {
                 throw TestFailure(description: "accepted \(bad)")
             }

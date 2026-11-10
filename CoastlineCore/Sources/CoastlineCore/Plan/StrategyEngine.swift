@@ -114,8 +114,8 @@ public enum StrategyEngine {
     // MARK: Search
 
     public static func candidates(facts: Facts, inventory: Inventory, calibration: Calibration = Calibration(),
-                                  includeSuggestions: Bool = false) -> [Candidate] {
-        let tools = OperationPlanner.usableTools(inventory, includeSuggestions: includeSuggestions)
+                                  includeSuggestions: Bool = false, machine: MachineProfile = .standard) -> [Candidate] {
+        let tools = OperationPlanner.usableTools(inventory, includeSuggestions: includeSuggestions, machine: machine)
         let flats = tools.filter { $0.kind == .flatEndMill }.sorted { $0.diameter > $1.diameter }
         let roughers = Array(flats.filter { $0.diameter <= 6.36 && $0.diameter >= 1.5 }.prefix(2))
         guard !roughers.isEmpty else { return [] }
@@ -142,7 +142,7 @@ public enum StrategyEngine {
             for step in steps {
                 if !facts.freeform || finishers3D.isEmpty {
                     out.append(build(facts, tools: tools, rougher: rougher, step: step, finisher3D: nil, strategy: nil,
-                                     cusp: 0.008, rest: nil, calibration: calibration))
+                                     cusp: 0.008, rest: nil, calibration: calibration, machine: machine))
                     continue
                 }
                 for ball in finishers3D {
@@ -152,7 +152,7 @@ public enum StrategyEngine {
                             let rests: [Tool?] = smaller.map { [nil, $0] } ?? [nil]
                             for rest in rests {
                                 out.append(build(facts, tools: tools, rougher: rougher, step: step, finisher3D: ball,
-                                                 strategy: strategy, cusp: cusp, rest: rest, calibration: calibration))
+                                                 strategy: strategy, cusp: cusp, rest: rest, calibration: calibration, machine: machine))
                             }
                         }
                     }
@@ -214,7 +214,7 @@ public enum StrategyEngine {
     // MARK: One candidate
 
     static func build(_ f: Facts, tools: [Tool], rougher: Tool, step: Double?, finisher3D: Tool?, strategy: OperationKind?,
-                      cusp: Double, rest: Tool?, calibration: Calibration) -> Candidate {
+                      cusp: Double, rest: Tool?, calibration: Calibration, machine: MachineProfile) -> Candidate {
         let a = f.analysis, m = f.material
         var ops: [Operation] = []
         var minutes: [UUID: Double] = [:]
@@ -242,7 +242,10 @@ public enum StrategyEngine {
             }
             risk += 0.2
             reasons.append("Risk: the cuts go \(Length.mm(cd)) mm deep on a side, the \(t.name) has \(Length.mm(t.fluteLength)) mm of flute: its shank rubs the walls.")
-            if let buy = ToolCatalog.suggestions.first(where: { $0.kind == t.kind && abs($0.diameter - t.diameter) < 0.05 && $0.fluteLength >= cd - 0.05 }) {
+            if let buy = ToolCatalog.suggestions.first(where: {
+                $0.kind == t.kind && abs($0.diameter - t.diameter) < 0.05 && $0.fluteLength >= cd - 0.05
+                    && InventoryChecks.check($0, machine: machine, inventory: Inventory()).allSatisfy { $0.severity < .error }
+            }) {
                 remedies.append(Remedy(title: "Use the \(buy.name) (not owned): it reaches \(Length.mm(buy.fluteLength)) mm", change: .swap(from: t.id, to: buy.id)))
             }
             reachChecked[t.id] = t
@@ -252,15 +255,19 @@ public enum StrategyEngine {
         let rougher = reaching(rougher)  // its flutes reach the depth too (no shank rubbing)
 
         // Facing.
-        let face = Operation(kind: .facing, toolID: rougher.id, faceDepth: f.faceDepth)
-        let fd = face.cuttingData(tool: rougher, material: m)
-        let passes = max(1, (f.faceDepth / max(fd.stepdown, 0.05)).rounded(.up))
-        add(face, rougher, f.stock.x * f.stock.y / max(fd.stepover, 0.1) * passes / max(fd.feed, 1) * 1.1)
+        if f.faceDepth > 1e-6 {
+            let face = Operation(kind: .facing, toolID: rougher.id, faceDepth: f.faceDepth)
+            let fd = face.cuttingData(tool: rougher, material: m, machine: machine)
+            let passes = max(1, (f.faceDepth / max(fd.stepdown, 0.05)).rounded(.up))
+            add(face, rougher, f.stock.x * f.stock.y / max(fd.stepover, 0.1) * passes / max(fd.feed, 1) * 1.1)
+        } else {
+            reasons.append("Zero face allowance: keep the existing stock face, with no facing operation.")
+        }
 
         // Roughing: the band around the part plus what's above its curved top.
         var rough = Operation(kind: .adaptive, toolID: rougher.id, leaveRadial: 0.2, leaveAxial: step == nil ? 0.1 : 0.15)
         rough.stepdownOverride = step
-        let rd = rough.cuttingData(tool: rougher, material: m)
+        let rd = rough.cuttingData(tool: rougher, material: m, machine: machine)
         let band = f.perimeter * (rougher.diameter + 1)
         let above = max(f.silhouetteArea * f.part.z - a.volume, 0)
         let volume = band * depth + above
@@ -286,7 +293,7 @@ public enum StrategyEngine {
             var op = Operation(kind: .adaptive, toolID: t.id, leaveRadial: 0.15, leaveAxial: 0.1)
             op.pocketsOnly = true
             op.minPocket = last ? 1.2 : Operation.defaultMinPocket
-            let d = op.cuttingData(tool: t, material: m)
+            let d = op.cuttingData(tool: t, material: m, machine: machine)
             let area = fits.reduce(0) { $0 + .pi * $1 * $1 / 4 }
             add(op, t, area * depth / max(d.feed * d.stepover * min(d.stepdown, depth), 1) * 1.6)
             pocketTools.append(t)
@@ -308,12 +315,12 @@ public enum StrategyEngine {
             .max { $0.diameter < $1.diameter }.map { f.pocketWidths.isEmpty && f.holeDiameters.isEmpty ? $0 : reaching($0) } ?? rougher  // holes are enclosed walls too
         if a.wallArea > 1 {
             let wall = Operation(kind: .contour, toolID: wallTool.id, springPass: true)
-            let wd = wall.cuttingData(tool: wallTool, material: m)
+            let wd = wall.cuttingData(tool: wallTool, material: m, machine: machine)
             add(wall, wallTool, a.wallArea / max(wd.stepdown, 0.1) * 2 / max(wd.feed, 1) * 1.2)
         }
         if f.hasFloors {
             let floor = Operation(kind: .floor, toolID: wallTool.id)
-            let fl = floor.cuttingData(tool: wallTool, material: m)
+            let fl = floor.cuttingData(tool: wallTool, material: m, machine: machine)
             add(floor, wallTool, a.flatArea / max(fl.stepover, 0.1) / max(fl.feed, 1) * 1.2)
             // Floors narrower than that tool: a second pass with one that fits (a tool to buy
             // when none of yours does), so no floor is left unfinished.
@@ -327,7 +334,7 @@ public enum StrategyEngine {
                 if let small = (reachesFloors.isEmpty ? fits : reachesFloors).max(by: { ($0.isSuggestion ? 0 : 1, $0.diameter) < ($1.isSuggestion ? 0 : 1, $1.diameter) }) {
                     var op2 = Operation(kind: .floor, toolID: small.id)
                     op2.floorMaxWidth = wallTool.diameter + 0.1  // only those the first pass couldn't do
-                    let fd = op2.cuttingData(tool: small, material: m)
+                    let fd = op2.cuttingData(tool: small, material: m, machine: machine)
                     add(op2, small, a.flatArea * 0.1 / max(fd.stepover, 0.05) / max(fd.feed, 1) * 1.3)
                     reasons.append("\(narrow.count) floor\(narrow.count == 1 ? " is" : "s are") narrower than the \(wallTool.name) (down to \(Length.mm(w)) mm): the \(small.name)\(small.isSuggestion ? " (to buy)" : "") finishes \(narrow.count == 1 ? "it" : "them").")
                 } else {
@@ -342,7 +349,7 @@ public enum StrategyEngine {
             let ball = reaching(ball0)
             var op = Operation(kind: strategy, toolID: ball.id)
             op.scallop = cusp
-            let d = op.cuttingData(tool: ball, material: m)
+            let d = op.cuttingData(tool: ball, material: m, machine: machine)
             let link: Double = switch strategy {
             case .spiral: 1.03
             case .parallel: 1.15
@@ -388,7 +395,7 @@ public enum StrategyEngine {
                 let rest = reaching(rest0)
                 var r = Operation(kind: .rest, toolID: rest.id)
                 r.scallop = cusp
-                let rd2 = r.cuttingData(tool: rest, material: m)
+                let rd2 = r.cuttingData(tool: rest, material: m, machine: machine)
                 add(r, rest, (a.freeformArea * 0.08 + a.wallArea * 0.05) * 2 / max(rd2.stepover, 0.01) / max(rd2.feed, 1) * 1.3)
                 reasons.append("Then the \(rest.name) cleans the creases and inside corners the bigger ball can't reach.")
                 if rest.diameter < 1 && m.difficulty >= .moderate {

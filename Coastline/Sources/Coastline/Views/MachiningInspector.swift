@@ -14,7 +14,7 @@ struct MachiningInspector: View {
         Form {
             if model.part == nil || model.stock == nil {
                 ContentUnavailableView("Set Up First", systemImage: "cube.transparent",
-                                       description: Text("Import a part and choose stock on the Setup tab."))
+                                       description: Text("Load a part and choose stock, then build the job in Plan."))
             } else {
                 let toBuy = model.jobToolsToBuy
                 if !toBuy.isEmpty {
@@ -32,45 +32,11 @@ struct MachiningInspector: View {
                     }
                 }
                 Section {
-                    if let m = model.stock?.material {
-                        LabeledContent("Material") { Badge(text: m.name, color: Theme.color(m.difficulty)) }
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Button {
-                            Task { await model.findPlans(inventory: inventory.inventory) }
-                        } label: {
-                            Group {
-                                if model.isFindingPlans {
-                                    HStack(spacing: 8) {
-                                        ProgressView().controlSize(.small).tint(.white)
-                                        Text("Comparing plans…")
-                                    }
-                                } else {
-                                    Label("Find the Best Plan", systemImage: "sparkles")
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .controlSize(.large)
-                        .disabled(model.isFindingPlans)
-                        .help("Costs every sensible plan your tools allow (roughing tool and step, finishing strategy, ball, cusp height, rest pass) and shows the best trade-offs between time, finish and risk.")
-                        HStack {
-                            Button("Or a Quick Suggestion", systemImage: "wand.and.stars") {
-                                Task { await model.suggestOperations(inventory: inventory.inventory) }
-                            }
-                            .plainGlassButton()
-                            .help("One reasonable plan from rules of thumb, without comparing alternatives.")
-                            Spacer()
-                            InfoTip(text: "Find the Best Plan costs every plan your tools allow (and ones with a tool to buy): roughing tool and step, finishing strategy, ball, cusp, rest pass. Then it shows the best trade-offs between time, finish and risk, each with its reasons. It takes a few seconds. A quick suggestion is one sensible plan from rules of thumb, at once, without comparing.")
-                        }
-                    }
-                    if !model.planCandidates.isEmpty || !model.planOptions.isEmpty { PlanOptionsView() }
-                    ForEach(model.planNotes, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
-                } header: {
-                    Text("Plan")
+                    LabeledContent("Job plan", value: model.chosenPlan ?? "Custom operations")
+                    Button("Change Job Plan…", systemImage: "sparkles") { model.enter(.planning) }
+                    Text("Inspect and refine the cuts here. Workholding and work zero are in Setups; export and running are in Review.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-
                 if !model.operations.isEmpty {
                     TunerSection().id("tuner")
                     Section("Operations") {
@@ -91,7 +57,7 @@ struct MachiningInspector: View {
                                     if kind == .engrave {
                                         op.engraving = Engraving(text: "Coastline")
                                         // The finest engraving-capable tool you have.
-                                        op.toolID = OperationPlanner.usableTools(inventory.inventory)
+                                        op.toolID = OperationPlanner.usableTools(inventory.inventory, machine: model.machine)
                                             .filter { [.engraver, .chamferMill, .flatEndMill, .ballEndMill].contains($0.kind) && $0.diameter <= 3.2 }
                                             .min { ($0.kind == .engraver ? 0 : 1, $0.diameter) < ($1.kind == .engraver ? 0 : 1, $1.diameter) }?.id
                                     }
@@ -106,7 +72,7 @@ struct MachiningInspector: View {
                                 e.texture = .preset(.barleycorn)
                                 op.engraving = e
                                 // A V engraver if you have one (crisp lines), else the finest tool that engraves.
-                                op.toolID = OperationPlanner.usableTools(inventory.inventory)
+                                op.toolID = OperationPlanner.usableTools(inventory.inventory, machine: model.machine)
                                     .filter { [.engraver, .chamferMill, .ballEndMill, .flatEndMill].contains($0.kind) && $0.diameter <= 3.2 }
                                     .min { ($0.kind == .engraver ? 0 : 1, $0.diameter) < ($1.kind == .engraver ? 0 : 1, $1.diameter) }?.id
                                 model.justAddedOperation = op.id
@@ -117,7 +83,7 @@ struct MachiningInspector: View {
                     }
                 }
 
-                if !model.programs.isEmpty { ResultsSection() }
+                if !model.programs.isEmpty { ResultsSection(showDeliveryActions: false) }
             }
         }
         .formStyle(.grouped)
@@ -145,7 +111,7 @@ struct OperationRow: View {
     @State private var expanded = false
 
     private var compatibleTools: [Tool] {
-        OperationPlanner.usableTools(inventory.inventory).filter { t in
+        OperationPlanner.usableTools(model.planningInventory(inventory.inventory), machine: model.machine).filter { t in
             switch operation.kind {
             case .drill: [.drill, .spotDrill].contains(t.kind)
             case .chamfer: [.chamferMill, .engraver].contains(t.kind)
@@ -157,14 +123,23 @@ struct OperationRow: View {
         }
     }
 
-    private var tool: Tool? { operation.toolID.flatMap { id in inventory.inventory.tools.first { $0.id == id } } }
+    private var tool: Tool? { operation.toolID.flatMap(model.jobTool) }
 
     /// The tools the picker offers: thread milling lists every thread mill you have or
     /// Coastline suggests (to buy), whatever its collet.
     private var choices: [Tool] {
         guard operation.kind == .thread else { return compatibleTools }
-        return inventory.inventory.tools.filter { $0.kind == .threadMill && $0.condition != .broken && ($0.quantity > 0 || $0.isSuggestion) }
+        return model.planningInventory(inventory.inventory).tools.filter {
+            $0.kind == .threadMill && $0.condition != .broken && ($0.quantity > 0 || $0.isSuggestion)
+                && InventoryChecks.check($0, machine: model.machine, inventory: inventory.inventory).allSatisfy { $0.severity < .error }
+        }
             .sorted { ($0.quantity > 0 ? 0 : 1, $0.diameter) < ($1.quantity > 0 ? 0 : 1, $1.diameter) }
+    }
+
+    private var pickerTools: [Tool] {
+        var values = choices
+        if let tool, !values.contains(where: { $0.id == tool.id }) { values.append(tool) }
+        return values
     }
 
     var body: some View {
@@ -172,7 +147,10 @@ struct OperationRow: View {
                                             set: { expanded = $0; if !$0, model.justAddedOperation == operation.id { model.justAddedOperation = nil } })) {
             Picker("Tool", selection: $operation.toolID) {
                 Text("Choose…").tag(UUID?.none)
-                ForEach(choices) { t in Text(t.isSuggestion ? "\(t.name) (to buy)" : t.name).tag(Optional(t.id)) }
+                ForEach(pickerTools) { t in
+                    let owned = (inventory.inventory.tools.first { $0.id == t.id }?.quantity ?? 0) > 0
+                    Text(owned ? t.name : "\(t.name) (not owned)").tag(Optional(t.id))
+                }
             }
             Text(operation.explanation).font(.caption).foregroundStyle(.secondary)
             if operation.kind == .thread {
@@ -210,7 +188,7 @@ struct OperationRow: View {
                 }
             }
             if let tool, let m = model.stock?.material {
-                let d = operation.cuttingData(tool: tool, material: m)
+                let d = operation.cuttingData(tool: tool, material: m, machine: model.machine)
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
                     GridRow { Text("Speed").foregroundStyle(.secondary); Text("\(Int(d.rpm)) RPM") }
                     GridRow { Text("Feed").foregroundStyle(.secondary); Text("\(Int(d.feed)) mm/min · plunge \(Int(d.plungeFeed))") }
@@ -264,9 +242,11 @@ struct OperationRow: View {
 
 /// Programs, safety checks, time and export.
 struct ResultsSection: View {
+    var showDeliveryActions = true
     @Environment(AppModel.self) private var model
     @Environment(InventoryModel.self) private var inventory
     @State private var exportMessage: String?
+    @State private var selectedCode: [GeneratedJob.CodeFile]?
 
     var body: some View {
         Section {
@@ -305,15 +285,36 @@ struct ResultsSection: View {
             }
             LabeledContent("Tool changes", value: "\(max(model.programs.count - 1, 0))")
             ForEach(model.programs) { p in ProgramRow(program: p) }
+            if showDeliveryActions {
+            Button("Run on Machine…", systemImage: "play.fill") {
+                do { try model.prepareGeneratedRun(measuring: inventory.inventory.measuring) }
+                catch { exportMessage = error.localizedDescription }
+            }
+                .buttonStyle(.glassProminent)
+                .disabled(!ready || model.jobs.run != nil)
+                .help("Open the guided runner for setup, probing, air cuts and cuts. Each program starts only when you press Run.")
+            if model.jobs.run != nil {
+                Button("Return to Guided Mode", systemImage: "list.bullet.clipboard") { model.openGuidedMode() }
+            }
             Button("Export Guided Job…", systemImage: "list.bullet.rectangle.portrait") { exportGuided() }
+                .disabled(!ready)
+                .help("A .crproj with mounting, probing or edge finding, tool changes, air cuts and measuring checkpoints")
             Button("Print a Nest for a Second Side…", systemImage: "cube.transparent") { model.showNestSheet = true }
                 .help("A printed block shaped like one face of the part, to hold it once it's cut free and machine the other face.")
                 .buttonStyle(.glassProminent)
                 .disabled(!model.programs.allSatisfy(\.report.passed))
-                .help("A .crproj with every step: mounting, edge finding, tool changes, air cuts, cuts and measuring checkpoints")
             Button("Export G-code Only…", systemImage: "square.and.arrow.up") { export() }
                 .plainGlassButton()
                 .disabled(!model.programs.allSatisfy(\.report.passed))
+            Button("Export Selected Code…", systemImage: "checklist") {
+                do {
+                    let input = try model.checkedGuidedInput(measuring: inventory.inventory.measuring)
+                    selectedCode = GeneratedJob.codeFiles(input, machine: model.machine)
+                } catch { exportMessage = error.localizedDescription }
+            }
+                .disabled(!ready)
+                .help("Choose individual probing, setup, cutting or air-cut files")
+            }
             // Say why the buttons are disabled, and what to do about it.
             let failed = model.programs.filter { !$0.report.passed }.count
             if failed > 0 {
@@ -329,6 +330,14 @@ struct ResultsSection: View {
                 InfoTip(text: "Every program is checked independently against the machine's limits before it can be exported. Always air-cut a new program first (spindle off, Z raised).")
             }
         }
+        .sheet(isPresented: Binding(get: { selectedCode != nil }, set: { if !$0 { selectedCode = nil } })) {
+            if let selectedCode { SelectedCodeExportSheet(files: selectedCode) }
+        }
+    }
+
+    private var ready: Bool {
+        !model.isGenerating && !model.programs.isEmpty && (model.programs + model.prepPrograms).allSatisfy(\.report.passed)
+            && (!model.setup.planFromFixtureLibrary || model.libraryWorkholdingPlan?.reviewed == true)
     }
 
     private func exportGuided() {
@@ -405,7 +414,7 @@ struct ProgramRow: View {
                 Image(systemName: p.report.passed ? "checkmark.shield.fill" : "xmark.shield.fill")
                     .foregroundStyle(p.report.passed ? Theme.ok : Theme.danger)
                     .accessibilityLabel(p.report.passed ? "Passed safety check" : "Failed safety check")
-                Text("\(model.twoSided ? (p.side == 0 ? "A · " : "B · ") : "")\(p.index + 1) · \(p.tool.name.components(separatedBy: " · ").first ?? p.tool.name)")
+                Text("\(p.side >= 2 ? SetupSide.words(p.side).capitalized + " · " : model.twoSided ? (p.side == 0 ? "A · " : "B · ") : "")\(p.index + 1) · \(p.tool.name.components(separatedBy: " · ").first ?? p.tool.name)")
                     .lineLimit(1)
                     .help(p.tool.name)
                 Spacer(minLength: 4)

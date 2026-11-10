@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "id": "c-clamp-pair",
+  "revision": 1,
+  "modelSHA256": "bc10325376db711475497a27841e29a87b710c57317697a112febb32528e4ace",
+  "isAssembled": true,
+  "components": [
+    {
+      "id": "clamp-a",
+      "name": "C-clamp A",
+      "role": "physical",
+      "modelEntities": [
+        "1/0"
+      ],
+      "joint": {
+        "id": "clamp-a-slide",
+        "kind": "prismatic",
+        "axis": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "origin": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "minimum": -1000,
+        "maximum": 1000,
+        "referenceValue": 0
+      }
+    },
+    {
+      "id": "screw-a",
+      "name": "C-clamp A screw",
+      "parentID": "clamp-a",
+      "role": "physical",
+      "modelEntities": [
+        "0/0",
+        "2/0",
+        "3/0"
+      ],
+      "joint": {
+        "id": "screw-a-advance",
+        "kind": "screw",
+        "axis": {
+          "x": -1,
+          "y": 0,
+          "z": 0
+        },
+        "origin": {
+          "x": 66.665,
+          "y": -323.0,
+          "z": 104.444
+        },
+        "minimum": -10.79,
+        "maximum": 50.8,
+        "referenceValue": 0,
+        "pitch": 2.54
+      }
+    },
+    {
+      "id": "clamp-b",
+      "name": "C-clamp B",
+      "role": "physical",
+      "modelEntities": [
+        "5/0"
+      ],
+      "joint": {
+        "id": "clamp-b-slide",
+        "kind": "prismatic",
+        "axis": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "origin": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "minimum": -1000,
+        "maximum": 1000,
+        "referenceValue": 0
+      }
+    },
+    {
+      "id": "screw-b",
+      "name": "C-clamp B screw",
+      "parentID": "clamp-b",
+      "role": "physical",
+      "modelEntities": [
+        "4/0",
+        "6/0",
+        "7/0"
+      ],
+      "joint": {
+        "id": "screw-b-advance",
+        "kind": "screw",
+        "axis": {
+          "x": -1,
+          "y": 0,
+          "z": 0
+        },
+        "origin": {
+          "x": 66.665,
+          "y": -159.8,
+          "z": 104.444
+        },
+        "minimum": -10.79,
+        "maximum": 50.8,
+        "referenceValue": 0,
+        "pitch": 2.54
+      }
+    }
+  ],
+  "clampPair": {
+    "seatX": 15.865,
+    "frontZ": 129.8436,
+    "padZ": 104.444,
+    "padRadius": 11.112,
+    "padX": 66.665,
+    "padY": [
+      -323.0,
+      -159.8
+    ],
+    "frameHalfWidth": 15.113
+  }
+}

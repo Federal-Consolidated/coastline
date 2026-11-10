@@ -42,6 +42,12 @@ public enum FlatPrep {
         /// The T-slot bed's back edge across its middle (raycast on the machine model; only the
         /// rounded ears at its far ends reach −77.4).
         public var backZ = -67.12
+        /// Physical table plate thickness. Legacy setups retain their original default;
+        /// imported profiles supply their measured model dimensions.
+        public var thickness = FlatPrep.tableThickness
+        /// Absolute table-plate extents along Y; nil retains the legacy centred envelope.
+        public var minimumY: Double?
+        public var maximumY: Double?
         /// The squaring stop's spindle-side face (bolted into both T-slots).
         public var stopNorthZ = -2.27
         public init() {}
@@ -51,11 +57,15 @@ public enum FlatPrep {
         /// The 3" clamp model.
         public var clampInnerReach = 32.3
         public var clampHalfWidth = 6.5
-        public init(topX: Double, northZ: Double = -2.4, backZ: Double = -67.12, stopNorthZ: Double = -2.27) {
+        public init(topX: Double, northZ: Double = -2.4, backZ: Double = -67.12, stopNorthZ: Double = -2.27,
+                    thickness: Double = FlatPrep.tableThickness, minimumY: Double? = nil, maximumY: Double? = nil) {
             self.topX = topX
             self.northZ = northZ
             self.backZ = backZ
             self.stopNorthZ = stopNorthZ
+            self.thickness = thickness
+            self.minimumY = minimumY
+            self.maximumY = maximumY
         }
         /// The C-clamp frame sits just behind the table's back edge.
         /// The C-clamp is pushed on until its frame touches the bed's back edge.

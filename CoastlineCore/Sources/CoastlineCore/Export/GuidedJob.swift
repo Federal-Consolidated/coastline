@@ -20,6 +20,7 @@ public enum GuidedJobBuilder {
         /// Probes the face first for an engraving that follows it (SurfaceProbe.program): run
         /// after the touch-off, before the air cut (the program's M112 needs the map).
         public var surfaceProbe: String?
+        public var workholding: LibraryWorkholdingPlan.Step?
         public init(tool: Tool, gcode: String, operationNames: [String], minutes: Double, side: Int = 0) {
             self.tool = tool
             self.gcode = gcode
@@ -87,6 +88,8 @@ public enum GuidedJobBuilder {
         public var millDown: MillDown?
         /// Holding path B: the whole job flat on the bed instead of the clamp kit.
         public var bed: BedHolding?
+        /// User-supplied workholding; the built-in clamp kit is not part of this setup.
+        public var customHolding: Setup.CustomFixture?
         /// Holding path D: the clamps grip shoulders at the ends (height, length).
         public var shoulders: Setup.Shoulders?
         public var probing = Probing()
@@ -353,9 +356,19 @@ public enum GuidedJobBuilder {
 
     /// Writes the guided project. MillCore's writer re-reads its own manifest before saving.
     public static func write(_ input: Input, to url: URL, machine: MachineProfile = .standard) throws {
+        try validateWorkholding(input)
         let (jobs, files) = build(input, machine: machine)
         try? FileManager.default.removeItem(at: url)
         try ProjectWriter.save(jobs: jobs, extraFiles: files, from: MemoryProjectSource([:]), to: url)
+    }
+
+    public static func validateWorkholding(_ input: Input) throws {
+        for program in input.programs {
+            if let step = program.workholding, !step.reviewed {
+                throw NSError(domain: "Coastline.Workholding", code: 1, userInfo: [NSLocalizedDescriptionKey:
+                    "Review placement and secure grip for \(step.title) before exporting or running."])
+            }
+        }
     }
 
     // MARK: The part job
@@ -418,7 +431,20 @@ public enum GuidedJobBuilder {
         let parallels = i.parallels > 0.05
             ? "Put **about \(Length.mm(i.parallels)) mm of parallels** behind the stock so its face sticks out **\(Length.mm(i.protrusion)) mm** past the jaws."
             : "Its face sticks out **\(Length.mm(i.protrusion)) mm** past the jaws."
-        if let b = i.bed {
+        if let custom = i.customHolding {
+            steps.append(step("Mount the Stock", markdown: """
+            Secure the stock in **\(custom.name)** with its \(Length.mm(size.x)) × \(Length.mm(size.y)) mm face toward the spindle.
+
+            Stock bottom: **\(Length.mm(custom.height)) mm above the table**. Stock face: **\(Length.mm(custom.faceProtrusion)) mm past the table's front edge**.
+
+            \(custom.notes)
+
+            The face toward the spindle is **Z0**; its centre is **X0 Y0**. Edge-find and touch off after mounting.
+
+            **Custom fixture geometry is not included in collision checks.** Check cutter, shank and holder clearance to your jaws and fasteners. Keep the part secured independently of material removed by these programs.
+            """, image: i.setupImage == nil ? "" : "Image/setup.png",
+                              popup: ("Stock secured?", "Is the stock secured in your fixture, with cutter and holder clearance checked?")))
+        } else if let b = i.bed {
             steps.append(step("Mount the Stock", markdown: mountOnBed(i, b), image: i.setupImage == nil ? "" : "Image/setup.png",
                               popup: ("Stock clamped?", "Is the stock flat on the riser, against the stop and clamped tight?")))
         } else {
@@ -472,7 +498,7 @@ public enum GuidedJobBuilder {
                 steps.append(step("Probe Z for Tool \(n)", text: "Click Next to probe the face and store Z.", gcode: touchZFile(p.touchZ, electrical: true), timeout: 120))
             } else {
                 steps.append(step("Touch Off Tool \(n) on the Face", markdown: """
-                The stock isn't insulated in this setup, so the machine can't feel the face: touch off by hand with paper.
+                Touch off the face by hand with paper for this setup.
 
                 \(paperTouchOff("a solid spot of the stock face (the frame, not over a cut)", extra: faced.isEmpty ? "" : "\n\n" + faced))
                 """, popup: ("Paper pinched?", "Is the paper just pinched between the tool and the stock face?"), noStep: "-0"))
@@ -483,10 +509,21 @@ public enum GuidedJobBuilder {
         /// X0 Y0 after a clamping: the edges (electrically with the tool in the spindle, or
         /// with the edge finder).
         func findEdges(side: Int, first k: Int) {
+            if let holding = i.programs[k].workholding {
+                steps.append(step("Establish Work Zero · \(holding.title)", markdown: """
+                In Machine Control, establish **G54 X0 Y0 at the original stock-face centre and Z0 at the original stock face**, using this fixture's locating datum. Account for material removed in previous setups.
+
+                Do not use an edge or surface that has been machined away as though it were the original blank. Use the fixture's repeatable reference or a measured offset. This step does not move or probe automatically.
+
+                \(holding.fixture.notes)
+                """, popup: ("Work zero verified?", "Have you established and verified G54 for \(holding.fixture.name) using its locating reference?")))
+                spindle = nil
+                return
+            }
             let lower = pr.lowerXReachable[min(side, 1)], upper = pr.upperXReachable[min(side, 1)]
             // Side B: turned about the vertical in the same clamps, so it sits where side A
             // did. The machine can bring the tool or finder close; the edges are still found.
-            let lastZ = side == 1 ? i.programs[..<k].last?.tool : nil
+            let lastZ = side == 1 && i.customHolding == nil ? i.programs[..<k].last?.tool : nil
             if pr.electrical {
                 installTool(k + 1, i.programs[k])
                 // Z0 was just probed on this face with this tool.
@@ -495,7 +532,7 @@ public enum GuidedJobBuilder {
             } else {
                 let near = lastZ.map { Approach(centre: .zero, size: size, zShift: EdgeFinding.tool.stickout - $0.stickout) }
                 steps += edgeFindSteps(machine: machine, lower: lower, upper: upper, height: size.x, previous: fitted, approach: near,
-                                       tag: "s\(side)", files: &files)
+                                       tag: "s\(side)p\(k)", files: &files)
                 spindle = nil
                 fitted = EdgeFinding.tool
             }
@@ -504,7 +541,32 @@ public enum GuidedJobBuilder {
         findEdges(side: 0, first: 0)
         for (k, p) in i.programs.enumerated() {
             let n = k + 1
-            if p.side == 1 && (k == 0 || i.programs[k - 1].side == 0) {
+            if k > 0, let holding = p.workholding, holding.id != i.programs[k - 1].workholding?.id {
+                let before = i.programs[k - 1].side
+                let flip = p.side == before ? "Keep the part's current orientation. "
+                    : p.side >= 2 ? ""  // its instructions say how to turn it
+                    : p.side == 1 && before == 0 ? "Turn the stock front-to-back about its vertical axis for side B. "
+                    : "Turn the stock so its \(SetupSide.words(p.side)) faces the spindle. "
+                steps.append(step("Change Workholding · \(holding.title)", markdown: """
+                Stop the spindle and move the tool clear by hand before releasing any fixture. \(flip)
+
+                \(holding.instructions)
+
+                This continues the same partially machined stock. Do not substitute a fresh blank. The next steps establish work zero again; the previous fixture's zero is not reused.
+                """, popup: ("New setup secured?", "Is the stock secured in \(holding.fixture.name), with the defined grip patches intact and the tool clear?")))
+                spindle = nil
+                findEdges(side: p.side, first: k)
+            } else if p.workholding == nil && p.side == 1 && (k == 0 || i.programs[k - 1].side == 0) {
+                if let custom = i.customHolding {
+                    steps.append(step("Flip the Stock", markdown: """
+                    Vacuum the chips. Turn the stock front-to-back about its vertical axis and secure it in **\(custom.name)** for side B.
+
+                    \(custom.notes)
+
+                    Check cutter and holder clearance to the fixture again. The next steps find the stock's edges and face afresh; the previous clamping's position is not assumed.
+                    """, image: i.flipImage == nil ? "" : "Image/flip.png",
+                                      popup: ("Stock secured for side B?", "Is the stock turned front-to-back and secured in your fixture with clearance checked?")))
+                } else {
                 steps.append(step("Flip the Stock", markdown: """
                 Side A is done. Vacuum the chips from the stock, clamps and table\(pr.bores != nil ? ", and out of the two reference bores in the frame" : "").
 
@@ -515,6 +577,7 @@ public enum GuidedJobBuilder {
                 The part is still joined to the uncut frame between the sides, so the frame stays rigid and clamps exactly like before.\(pr.bores != nil ? " Side B's edges give a first zero; the reference bores then set the exact one." : "")
                 """, image: i.flipImage == nil ? "" : "Image/flip.png", gcode: "Code/tool_change_position.nc", timeout: 90,
                 popup: ("Flipped and clamped?", "Is the stock turned front-to-back, on the same bottom edge, and clamped tight?")))
+                }
                 spindle = nil
                 findEdges(side: 1, first: k)
             }
@@ -563,7 +626,7 @@ public enum GuidedJobBuilder {
         let free: String
         if let t = i.tabs {
             free = "cut the part free. It hangs in the frame on **\(t.count) small tabs** (\(Length.mm(t.width)) mm wide, \(Length.mm(t.height)) mm thick): cut each one close to the part with a jeweller's saw\(i.material.family == .wax || i.material.family == .plastic ? " or flush cutters" : ""), then file and sand the stubs flush"
-        } else if twoSided {
+        } else if twoSided && i.customHolding == nil {
             free = "saw through the thin web to free the part, then file the web marks flush"
         } else {
             free = "deburr the part"
