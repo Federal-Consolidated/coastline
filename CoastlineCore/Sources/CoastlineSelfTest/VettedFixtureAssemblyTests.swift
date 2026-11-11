@@ -145,7 +145,8 @@ let vettedFixtureAssemblyTests: [TestCase] = [
         try expect(step.instructions.contains("secure both bases") && step.instructions.contains("advance the side screw"))
         step.side = 1
         try expect(step.instructions.contains("Release the side screw") && step.instructions.contains("Keep the bases mounted"))
-        try expect(step.instructions.contains("do not prove clamping force"))
+        // The bookends have no model yet: the step says no clearance check was made against them.
+        try expect(step.instructions.contains(bookend.modelPath == nil ? "no clearance check was made" : "do not prove clamping force"))
     },
     TestCase(name: "collisionFieldFollowsPressureScrewState") {
         let (definition, parts) = articulatedFixture()

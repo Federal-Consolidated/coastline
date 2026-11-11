@@ -187,11 +187,14 @@ public enum StrategyEngine {
     }
 
     /// The candidates no other beats on time, finish and risk together.
-    public static func pareto(_ cs: [Candidate]) -> [Candidate] {
+    /// Times within `tolerance` of each other count as equal (as in `pick`): a twin that is only
+    /// a hair slower stays, so a small drift in the time model can't drop it and flip the pick.
+    public static func pareto(_ cs: [Candidate], tolerance: Double = 0.1) -> [Candidate] {
         cs.filter { c in
-            !cs.contains { o in
-                o.id != c.id && o.minutes <= c.minutes && o.finish <= c.finish && o.risk <= c.risk
-                    && (o.minutes < c.minutes || o.finish < c.finish || o.risk < c.risk)
+            let band = abs(c.minutes) * tolerance + 1e-9
+            return !cs.contains { o in
+                o.id != c.id && o.minutes <= c.minutes + band && o.finish <= c.finish && o.risk <= c.risk
+                    && (o.minutes < c.minutes - band || o.finish < c.finish || o.risk < c.risk)
             }
         }
     }

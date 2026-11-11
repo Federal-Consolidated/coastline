@@ -111,11 +111,13 @@ let sideBTests: [TestCase] = [
         a.partOffsetY = 7
         let lo = SIMD3<Double>(-15, -15, 0), hi = SIMD3<Double>(15, 15, 5)
         let b = a.sideB(partMin: lo, partMax: hi, stock: stock)
-        // A part point maps through side A, then the flip (y → −y, z → −T − z), to side B.
+        // The stock lies along work Y (150 long), so it rolls over about its length: a part point
+        // maps through side A, then the flip (x → −x, z → −T − z), to side B, and stays in place.
+        try expect(b.flipAxis == 1)
         let ma = a.partToWork(partMin: lo, partMax: hi), mb = b.partToWork(partMin: lo, partMax: hi)
         for p in [SIMD3<Double>(10, -3, 1), SIMD3<Double>(-15, 15, 5), SIMD3<Double>(0, 0, 0)] {
             let wa = ma * SIMD4(p, 1), wb = mb * SIMD4(p, 1)
-            try expect(abs(wb.x - wa.x) < 1e-9 && abs(wb.y + wa.y) < 1e-9 && abs(wb.z - (-20 - wa.z)) < 1e-9, "\(p): \(wa) vs \(wb)")
+            try expect(abs(wb.x + wa.x) < 1e-9 && abs(wb.y - wa.y) < 1e-9 && abs(wb.z - (-20 - wa.z)) < 1e-9, "\(p): \(wa) vs \(wb)")
         }
         try expect(abs(b.topAllowance - 14.5) < 1e-9, "20 − 0.5 − 5")
     },
