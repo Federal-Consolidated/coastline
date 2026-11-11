@@ -190,6 +190,22 @@ struct ShoppingListPage: View {
         let al = MaterialLibrary.material(id: "al-6061") ?? MaterialLibrary.all[0]
         let list = ToolLife.shoppingList(inventory.inventory, material: al)
         Form {
+            let holding = model.jobWorkholdingToBuy
+            if !holding.isEmpty {
+                Section {
+                    ForEach(holding) { w in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(w.title).font(.headline)
+                            Text(w.detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            Button("Add It to My Fixtures…") { model.page = .fixtures }.font(.caption)
+                        }
+                    }
+                } header: {
+                    Text("Workholding for \(model.part?.fileName ?? "this job")")
+                } footer: {
+                    Text("Once it is in your fixtures with its model, Coastline fits it and makes those setups' toolpaths.")
+                }
+            }
             let forJob = model.jobToolsToBuy
             if !forJob.isEmpty {
                 Section {

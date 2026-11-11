@@ -9,10 +9,22 @@ struct LibraryWorkholdingSection: View {
             if model.setup.planFromFixtureLibrary {
                 if let plan = model.libraryWorkholdingPlan {
                     ForEach(plan.issues, id: \.self) { Text($0).font(.caption).foregroundStyle(Theme.warning) }
+                    if let note = model.stepOrderNote {
+                        Label(note, systemImage: "arrow.up.arrow.down").font(.caption).foregroundStyle(Theme.warning)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     ForEach(plan.steps) { step in
                         VStack(alignment: .leading, spacing: 5) {
-                            Button { model.inspectLibraryStep(step) } label: {
-                                Label(step.title, systemImage: "eye").font(.callout.weight(.semibold))
+                            HStack(spacing: 4) {
+                                Button { model.inspectLibraryStep(step) } label: {
+                                    Label(step.title, systemImage: "eye").font(.callout.weight(.semibold))
+                                }
+                                Spacer(minLength: 4)
+                                // Your order: the guided job and its programs follow it.
+                                Button { model.moveLibraryStep(step.id, by: -1) } label: { Image(systemName: "chevron.up") }
+                                    .disabled(plan.steps.first?.id == step.id).help("Do this setup earlier")
+                                Button { model.moveLibraryStep(step.id, by: 1) } label: { Image(systemName: "chevron.down") }
+                                    .disabled(plan.steps.last?.id == step.id).help("Do this setup later")
                             }.buttonStyle(.borderless)
                             Text((step.side >= 2 ? SetupSide.words(step.side).capitalized : "Side \(step.side == 0 ? "A" : "B")") + " · " + step.operations.joined(separator: " → "))
                                 .font(.caption)

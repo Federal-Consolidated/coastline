@@ -44,10 +44,22 @@ extension AppModel {
         return SetupReach(x: x, y: y, originZ: originZ, envelope: e)
     }
 
+    /// The reach in one clamping of an end setup held by the vise to buy (StandInVise): the stock
+    /// on its floor, its physical face `StandInVise.facePast` past the table edge, work Z0
+    /// `facedBefore` mm in front of it (where the original face was).
+    func standInReach(stockSize s: SIMD3<Double>, facedBefore: Double) -> SetupReach? {
+        let e = machine.machineEnvelope, t = tableGeometry
+        let model = SIMD3(t.topX + StandInVise.floor + s.x / 2, travelCentreY, t.northZ + StandInVise.facePast + facedBefore)
+        guard let o = machineOrigin(modelOrigin: model, stickout: 0) else { return nil }
+        return SetupReach(x: (e.x.lowerBound - o.x)...(e.x.upperBound - o.x), y: (e.y.lowerBound - o.y)...(e.y.upperBound - o.y),
+                          originZ: o.z, envelope: e)
+    }
+
     /// Each operation kept to the depth its tool reaches in this setup (what lies deeper is
     /// another setup's, from the other side), with a plan note; an operation wholly out of
     /// reach is left out.
-    func withinReach(_ planned: [EngineClient.PlannedOperation], reach: SetupReach, stockDepth: Double, setupName: String) -> [EngineClient.PlannedOperation] {
+    func withinReach(_ planned: [EngineClient.PlannedOperation], reach: SetupReach, stockDepth: Double, setupName: String,
+                     materialTop: Double = 0) -> [EngineClient.PlannedOperation] {
         var noted = Set<UUID>()
         var faceNoted = false
         return planned.compactMap { p in
@@ -65,8 +77,12 @@ extension AppModel {
             // The deepest the tool goes: the Z travel, and its own stick-out (deeper, the collet
             // nut meets the stock face; the engine checks the real cavity, this keeps the plan
             // from making metres of path it will then reject).
-            let travelFloor = reach.zFloor(stickout: p.tool.stickout) + 0.05
-            let nutFloor = -(p.tool.stickout - 1.05)
+            // A quarter millimetre inside each limit: boring and two-sided cuts go 0.2 mm past
+            // their depth so the cuts from both sides meet.
+            let travelFloor = reach.zFloor(stickout: p.tool.stickout) + 0.3
+            // Facing takes the whole face: no wall stands beside the nut. Below a faced end piece
+            // the nut clears the faced surface (`materialTop`).
+            let nutFloor = p.operation.kind == .facing ? -Double.infinity : materialTop - (p.tool.stickout - 1.3)
             let floor = max(travelFloor, nutFloor)
             // Deeper than the stock is of no concern (the tool never goes there).
             guard floor > -stockDepth + 0.01 else { return p }

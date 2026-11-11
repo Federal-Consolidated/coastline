@@ -135,7 +135,8 @@ def facing(op: Op, stock_min, stock_max, tp: Toolpath) -> Toolpath:
         xs.append(x)
         x += op.stepover
     y0, y1 = ymin - r - 1.0, ymax + r + 1.0
-    depth = min(op.face_depth, 30.0)
+    depth = min(op.face_depth, 80.0)  # an end piece faced off a bar runs to tens of mm
+    top = op.z_top  # below 0 once an earlier clamping faced part of it
     # Facing to thickness: roughing passes (~1 mm with a 1/4" tool) down to the last 0.25 mm,
     # then one finishing pass at the facing stepdown.
     finish = min(op.stepdown, depth)
@@ -143,8 +144,8 @@ def facing(op: Op, stock_min, stock_max, tp: Toolpath) -> Toolpath:
     zs = []
     if depth - finish > 1e-6:
         n = max(1, math.ceil((depth - finish) / rough_step - 1e-9))
-        zs = [-(depth - finish) * k / n for k in range(1, n + 1)]
-    zs.append(-depth)
+        zs = [top - (depth - finish) * k / n for k in range(1, n + 1)]
+    zs.append(top - depth)
     for z in zs:
         tp.go_to(xs[0], y0, z, op.plunge, op.link_feed)
         forward = True
@@ -989,6 +990,11 @@ def bore(op: Op, holes, tp: Toolpath, skin_top: float | None = None) -> Toolpath
             shallow.append(1)
             if bottom >= top - 0.05:
                 continue
+        # A hole that starts out of reach (deep in a hollow part, below the depth window or a
+        # shank's length under the material) isn't this tool's: the clamped bottom would sit
+        # above its top and the helix would start down there.
+        if bottom >= top - 0.05 or top < op.z_min - 1e-6:
+            continue
         core = skin_top is not None and h.get("through") and rc - op.r > 0.05
         if core:
             # The skin's disc first, from the centre out, while the ring still holds it.

@@ -107,6 +107,12 @@ public struct LibraryWorkholdingPlan: Codable, Equatable, Sendable {
         public var reasons: [String]
         public var modelSignature: String? = nil
         public var reviewed = false
+        public init(number: Int, side: Int, fixture: Fixture, cutKeys: [String], operations: [String], reasons: [String],
+                    modelSignature: String? = nil) {
+            self.number = number; self.side = side; self.fixture = fixture
+            self.cutKeys = cutKeys; self.operations = operations; self.reasons = reasons
+            self.modelSignature = modelSignature
+        }
         public var title: String { "Setup \(number) · \(fixture.name)" }
         public var instructions: String {
             let patches = fixture.planning?.contacts ?? []
@@ -127,12 +133,18 @@ public struct LibraryWorkholdingPlan: Codable, Equatable, Sendable {
                     : "Open the vise, flip the stock, and seat it on the floor against the fixed jaw as before. Close the vise. "
             } else { placement = "Use \(fixture.name). " }
             return turn + placement + fixture.notes + "\n\n"
-                + "Keep its \(patches.count) defined grip/support patches engaged. Establish X0 Y0 at the stock-face centre and Z0 at its original face; account for material already faced away."
-                + "\n\nCutter, shank and holder paths were checked against the placed CAD assembly. Confirm secure gripping, mounting, and material connectivity; geometric contact checks do not prove clamping force or rigidity."
+                + (patches.isEmpty ? "" : "Keep its \(patches.count) defined grip/support patches engaged. ")
+                + "Establish X0 Y0 at the stock-face centre and Z0 at its original face; account for material already faced away."
+                + (fixture.modelPath == nil
+                   ? "\n\nThis fixture has no model yet: no clearance check was made against it. Keep the jaws behind the depth this setup cuts."
+                   : "\n\nCutter, shank and holder paths were checked against the placed CAD assembly. Confirm secure gripping, mounting, and material connectivity; geometric contact checks do not prove clamping force or rigidity.")
         }
     }
     public var steps: [Step] = []
     public var issues: [String] = []
+    /// True once the user has put the steps in their own order (the planner's order is the side
+    /// setups on the whole block first, then side A and B). Optional: plans saved before decode.
+    public var reordered: Bool? = nil
     public var complete: Bool { !steps.isEmpty && issues.isEmpty }
     public var reviewed: Bool { complete && steps.allSatisfy(\.reviewed) }
     public init() {}
@@ -185,7 +197,8 @@ public enum LibraryWorkholdingPlanner {
         return issues
     }
 
-    public static func plan(cuts: [Cut], candidates: [Candidate], stock: SIMD3<Double>, machine: MachineProfile = .standard) -> LibraryWorkholdingPlan {
+    public static func plan(cuts: [Cut], candidates: [Candidate], stock: SIMD3<Double>, machine: MachineProfile = .standard,
+                            flipAxis: Int? = nil) -> LibraryWorkholdingPlan {
         var result = LibraryWorkholdingPlan()
         guard [stock.x, stock.y, stock.z].allSatisfy({ $0.isFinite && $0 > 0 && $0 <= 10_000 }),
               cuts.allSatisfy({ cut in
@@ -204,7 +217,7 @@ public enum LibraryWorkholdingPlanner {
         let cell = max(0.2, max(stock.x, stock.y, stock.z) / 400)
         var removal = StockRemoval(stock: stock, cell: cell)
         var cleared = removal.grids[2]
-        func stockPoint(_ p: SIMD3<Double>, side: Int) -> SIMD3<Double> { SetupSide.toA(p, side: side, stock: stock) }
+        func stockPoint(_ p: SIMD3<Double>, side: Int) -> SIMD3<Double> { SetupSide.toA(p, side: side, stock: stock, flipAxis: flipAxis) }
         func contactsRemain(_ fixture: Fixture, side: Int, removal: StockRemoval) -> Bool {
             guard let contacts = fixture.planning?.contacts else { return false }
             let s = SetupSide.stockSize(stock, side: side)

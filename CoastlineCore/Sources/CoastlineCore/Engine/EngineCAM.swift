@@ -66,6 +66,9 @@ extension EngineClient {
         public var restFrom: [(diameter: Double, minPocket: Double, leave: Double)] = []
         /// 3D finishing in strips: only this work-Y stretch (each strip its own job).
         public var tile: ClosedRange<Double>?
+        /// The clearance height (work Z) for its rapids and lifts when it isn't 3 mm above Z0: a
+        /// clamping after part of the stock was faced away (work Z0 stays at the original face).
+        public var clearance: Double?
         /// A setup from a side: only the holes and floors inside this work-XY window.
         public var window: (min: SIMD2<Double>, max: SIMD2<Double>)?
         /// Boring at these circles instead of the part's own holes (reference bores): centre,

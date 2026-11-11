@@ -52,17 +52,29 @@ struct JobPlanInspector: View {
                 }
                 LabeledContent("Usable tools", value: "\(OperationPlanner.usableTools(inventory.inventory, machine: model.machine).count)")
             }
-            MachinabilitySection(numbered: true)
-            if let coverage = model.planCoverage { PlanCoverageSection(coverage: coverage) }
+            // What stops Build Toolpaths or Use This Plan, where it can't be missed (the same
+            // text the buttons act on; before, it sat under the button or only in the status).
+            if let blocker = model.libraryPlanningBlocker(in: inventory.inventory) ?? (model.operations.isEmpty ? nil : model.generationBlocker) {
+                Section {
+                    Label(blocker, systemImage: "hand.raised.fill").font(.callout).foregroundStyle(Theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if blocker.contains("Setups") || blocker.localizedCaseInsensitiveContains("workholding") {
+                        Button("Go to Setups") { model.enter(.setups) }.controlSize(.small)
+                    }
+                } header: { Text("Before building") }
+            }
             if !model.planOptions.isEmpty {
                 Section("Machining alternatives") {
                     if let chosen = model.chosenPlan { LabeledContent("Current proposal", value: chosen) }
                     DisclosureGroup("Compare time, finish and tools") { PlanOptionsView() }
                 }
             }
+            // The setups come first: they are the job. The part check is a line of warnings below.
             if model.setup.planFromFixtureLibrary, model.libraryWorkholdingPlan != nil {
                 LibraryWorkholdingSection()
             }
+            if let coverage = model.planCoverage { PlanCoverageSection(coverage: coverage) }
+            MachinabilitySection(numbered: true, compact: true)
             if let error = model.errorMessage {
                 Section("Planning needs attention") { Text(error).font(.caption).textSelection(.enabled) }
             }

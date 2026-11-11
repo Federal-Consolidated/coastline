@@ -97,6 +97,44 @@ extension AppModel {
         return f
     }
 
+    /// The angle the stock turns between two sides' setups, degrees (0 for the same side).
+    func turnAngle(from a: Int, to b: Int) -> Double {
+        guard a != b else { return 0 }
+        let base = setup.partRotation.transpose
+        let r = (setupFor(side: b).partRotation * base) * (setupFor(side: a).partRotation * base).transpose
+        let c = min(max((r[0][0] + r[1][1] + r[2][2] - 1) / 2, -1), 1)
+        return acos(c) * 180 / .pi
+    }
+
+    /// The setup orders worth comparing, the planner's own first (the side setups on the whole
+    /// block, then A and B). Side B stays last (it frees the part). Up to three others: every
+    /// order; more: the planner's and the one turning least step by step.
+    static func setupOrders(_ sides: [Int], turn: (Int, Int) -> Double) -> [[Int]] {
+        var unique: [Int] = []
+        for s in sides where !unique.contains(s) { unique.append(s) }
+        let last = unique.contains(1) ? [1] : []
+        let movable = unique.filter { $0 != 1 }
+        var out = [movable + last]
+        func permutations(_ a: [Int]) -> [[Int]] {
+            guard a.count > 1 else { return [a] }
+            return a.indices.flatMap { i -> [[Int]] in
+                var rest = a; let x = rest.remove(at: i)
+                return permutations(rest).map { [x] + $0 }
+            }
+        }
+        if movable.count <= 3 {
+            for p in permutations(movable) where p != movable { out.append(p + last) }
+        } else if let start = movable.first {
+            var order = [start], left = Array(movable.dropFirst())
+            while !left.isEmpty {
+                let next = left.min { turn(order.last!, $0) < turn(order.last!, $1) }!
+                order.append(next); left.removeAll { $0 == next }
+            }
+            if order != movable { out.append(order + last) }
+        }
+        return out
+    }
+
     /// The setup for a side (0 = A, 1 = B, the stock turned front-to-back).
     func setupFor(side: Int) -> Setup {
         guard side > 0, let part, let stock else { return setup }
@@ -252,6 +290,13 @@ extension AppModel {
             // Roughing keeps clear of the fixtures (the planner's clearance check holds every tool to it).
             let keepOut = fixtureKeepOut(candidates: libraryCandidates, stockSize: setup.stockSize(stock))
             let keepOutBelow = 0.5
+            // The end pieces stay on through the long-face setups (SideSetups.endPieces): nothing
+            // there cuts into them and the part never hangs on tabs; the end setups face them off.
+            let ends = endPieces(part: part, stock: stock)
+            if let ends {
+                let note = "The stock past the part's ends (\(Length.mm(ends.low)) and \(Length.mm(ends.high)) mm) stays on through the long-face setups: the fixture grips it and the bar sits on full-length faces. The end setups face it off."
+                if !planNotes.contains(note) { planNotes.append(note) }
+            }
             if ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil {
                 print("keepout below \(keepOutBelow) rects \(keepOut.count) stock \(setup.stockSize(stock)) inside the stock: \(keepOut.filter { $0.max.x > -setup.stockSize(stock).x / 2 && $0.min.x < setup.stockSize(stock).x / 2 && $0.max.y > -setup.stockSize(stock).y / 2 && $0.min.y < setup.stockSize(stock).y / 2 }.map { String(format: "x %.1f…%.1f y %.1f…%.1f", $0.min.x, $0.max.x, $0.min.y, $0.max.y) })")
             }
@@ -290,9 +335,9 @@ extension AppModel {
                     let z: Double
                     if setup.holding == .custom {
                         z = side == 0 ? split : s.sideBZ(split, stock: stock) - Self.throughOvershoot
-                    } else if holdWithTabs {
+                    } else if holdWithTabs || ends != nil {
                         z = side == 0 ? split : s.sideBZ(split, stock: stock) - Self.throughOvershoot
-                        if side == 1 {
+                        if side == 1, ends == nil {
                             let r = tabRange(sideB: s, stock: stock, split: split)
                             tabSpec = tabs
                             tabSpec?.height = r.upperBound - r.lowerBound
@@ -368,11 +413,14 @@ extension AppModel {
                 }
                 let reach = reachInSetup(candidates: libraryCandidates, stockSize: s.stockSize(stock))
                 if reach == nil, ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil { print("reach unknown for side \(side) stock \(s.stockSize(stock))") }
-                let sideKeepOut = keepOut + Self.outOfReachStrips(reach)
+                let (eplo, ephi) = s.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
+                let lengthY = (s.partOffsetY - (ephi.y - eplo.y) / 2)...(s.partOffsetY + (ephi.y - eplo.y) / 2)
+                let endKeepOut = ends == nil ? [] : Self.endKeepOut(partY: lengthY, stock: s.stockSize(stock))
+                let sideKeepOut = keepOut + Self.outOfReachStrips(reach) + endKeepOut
                 if !sideKeepOut.isEmpty {
                     planned = planned.map { p in
                         var p = p
-                        if p.operation.kind == .adaptive { p.keepOut = sideKeepOut; p.keepOutBelow = keepOutBelow }
+                        if p.operation.kind == .adaptive, p.operation.reference == nil { p.keepOut = sideKeepOut; p.keepOutBelow = keepOutBelow }
                         return p
                     }
                 }
@@ -404,12 +452,14 @@ extension AppModel {
                 run.sides.append(.init(side: side, setup: s, planned: planned, materialTop: materialTop,
                                        tabSpec: tabSpec, tabBottom: tabBottom, transform: transform,
                                        partX: partLo.x...partHi.x, partY: partLo.y...partHi.y, reachX: reach?.x,
-                                       fields: fixtureFields(candidates: libraryCandidates, stockSize: s.stockSize(stock))))
+                                       fields: fixtureFields(candidates: libraryCandidates, stockSize: s.stockSize(stock)),
+                                       keepY: ends == nil ? nil : partLo.y...partHi.y))
             }
             // Setups from the other sides (upper, lower side, ends): each cuts only the features
             // that need it. They come first at the machine, while the stock is still a whole block.
             if setup.planFromFixtureLibrary {
-                for sp in sideSetupPlans(base: base, part: part, stock: stock) {
+                let sidePlans = sideSetupPlans(base: base, part: part, stock: stock)
+                for sp in sidePlans {
                     let transform = sp.setup.partToWork(partMin: part.boundsMin, partMax: part.boundsMax)
                     var partLo = SIMD2<Double>(repeating: .infinity), partHi = -partLo
                     for i in 0..<8 {
@@ -418,11 +468,30 @@ extension AppModel {
                         let w = transform * SIMD4(c, 1)
                         partLo = simd_min(partLo, SIMD2(w.x, w.y)); partHi = simd_max(partHi, SIMD2(w.x, w.y))
                     }
-                    let sideBox = sp.setup.stockBox(stock)
+                    var sideBox = sp.setup.stockBox(stock)
+                    // The other end faced first (its end setup comes before this one): that much
+                    // less stock at this setup's back.
+                    if sp.side == 5, sidePlans.contains(where: { $0.side == 4 }) { sideBox.min.z += endPieceThickness(side: 4) }
                     var planned = sp.planned
-                    let reach = reachInSetup(candidates: libraryCandidates, stockSize: sp.setup.stockSize(stock))
+                    let endPiece = endPieceThickness(side: sp.side)
+                    // Nothing in the library holds the stock turned this way: no cuts from it (the
+                    // workholding plan would fail the whole job); its features stay open. An end
+                    // setup that faces its end piece off is planned with the vise to buy.
+                    let turnedSize = sp.setup.stockSize(stock)
+                    let owned = libraryCandidates.contains(where: { c in
+                        c.fixture.planning.map { simd_distance(SIMD3($0.stockSize.x, $0.stockSize.y, $0.stockSize.z), turnedSize) < 0.1 } ?? false
+                    })
+                    let standIn = setup.planFromFixtureLibrary && !owned && endPiece > 0.5
+                    if setup.planFromFixtureLibrary, !owned, !standIn {
+                        planNotes.append("\(Self.setupTitle(side: sp.side, twoSided: twoSided)): no fixture you own holds the stock this way, so this setup is left out until you have a vise that opens to \(Int((turnedSize.y + 1).rounded(.up))) mm or more (on the Shopping List). Its features stay open until then.")
+                        continue
+                    }
+                    let reach = standIn ? standInReach(stockSize: turnedSize, facedBefore: 0) : reachInSetup(candidates: libraryCandidates, stockSize: sp.setup.stockSize(stock))
                     if reach == nil, ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil { print("reach unknown for side \(sp.side) stock \(sp.setup.stockSize(stock))") }
+                    // The upper and lower sides are long faces too: they leave the end pieces on.
+                    let keepsEnds = ends != nil && sp.side <= 3
                     let sideKeepOut = fixtureKeepOut(candidates: libraryCandidates, stockSize: sp.setup.stockSize(stock)) + Self.outOfReachStrips(reach)
+                        + (keepsEnds ? Self.endKeepOut(partY: partLo.y...partHi.y, stock: sp.setup.stockSize(stock)) : [])
                     if !sideKeepOut.isEmpty {
                         planned = planned.map { p in
                             var p = p
@@ -430,15 +499,59 @@ extension AppModel {
                             return p
                         }
                     }
-                    if let reach {
-                        planned = withinReach(planned, reach: reach, stockDepth: sp.setup.stockSize(stock).z, setupName: Self.setupTitle(side: sp.side, twoSided: twoSided))
+                    // Below a faced end piece the work starts at the faced surface.
+                    let sideTop = endPiece > 0.5 ? -endPiece : 0
+                    let setupName = Self.setupTitle(side: sp.side, twoSided: twoSided)
+                    var clampings: [GenerationRun.StandInClamping] = [], clampOf: [Int] = []
+                    if standIn, let first = reach {
+                        // In the vise to buy the face always stands at the table edge: the end piece
+                        // comes off in as many clampings as the facing tool reaches (the bar slid
+                        // toward the spindle between them, the jaws behind what each faces), then a
+                        // last clamping, the faced end at the edge again, cuts the end's features.
+                        var ops: [EngineClient.PlannedOperation] = []
+                        var done = 0.0
+                        if let f = planned.first(where: { $0.operation.kind == .facing }) {
+                            let most = max(1, -first.zFloor(stickout: f.tool.stickout) - 1)
+                            while done < endPiece - 1e-6 {
+                                let c = min(most, endPiece - done)
+                                var p = f
+                                p.zTop = -done; p.zMin = -(done + c); p.operation.faceDepth = c
+                                if done > 0 { p.clearance = -done + 3 }
+                                let jaw = -done - c - 3
+                                clampOf.append(clampings.count)
+                                clampings.append(.init(facedBefore: done, jawFront: jaw, facing: c,
+                                                       field: StandInVise.field(stockSize: turnedSize, facedBefore: done, jawFront: jaw, table: tableGeometry)))
+                                ops.append(p)
+                                done += c
+                            }
+                        }
+                        let features = planned.filter { $0.operation.kind != .facing }
+                        if !features.isEmpty, let r = standInReach(stockSize: turnedSize, facedBefore: endPiece) {
+                            let kept = withinReach(features, reach: r, stockDepth: turnedSize.z, setupName: setupName, materialTop: -endPiece)
+                                .map { p -> EngineClient.PlannedOperation in var p = p; p.clearance = -endPiece + 3; return p }
+                            if !kept.isEmpty {
+                                let jaw = -endPiece - StandInVise.facePast
+                                clampOf += Array(repeating: clampings.count, count: kept.count)
+                                clampings.append(.init(facedBefore: endPiece, jawFront: jaw, facing: nil,
+                                                       field: StandInVise.field(stockSize: turnedSize, facedBefore: endPiece, jawFront: jaw, table: tableGeometry)))
+                                ops += kept
+                            }
+                        }
+                        planned = ops
+                    } else if let reach {
+                        planned = withinReach(planned, reach: reach, stockDepth: sp.setup.stockSize(stock).z, setupName: setupName,
+                                              materialTop: sideTop)
                     }
                     guard !planned.isEmpty else { continue }
-                    run.sides.append(.init(side: sp.side, setup: sp.setup, planned: planned, materialTop: 0,
+                    if ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil {
+                        for p in planned { print("side \(sp.side) op \(p.operation.title) \(p.tool.name.prefix(18)) zTop \(p.zTop) zMin \(p.zMin.map { String(format: "%.1f", $0) } ?? "-") window \(p.window.map { "\($0.min) \($0.max)" } ?? "-")") }
+                    }
+                    run.sides.append(.init(side: sp.side, setup: sp.setup, planned: planned, materialTop: sideTop,
                                            tabSpec: nil, tabBottom: 0, transform: transform,
                                            partX: partLo.x...partHi.x, partY: partLo.y...partHi.y,
                                            boxMin: sideBox.min, boxMax: sideBox.max, reachX: reach?.x,
-                                           fields: fixtureFields(candidates: libraryCandidates, stockSize: sp.setup.stockSize(stock))))
+                                           fields: standIn ? [] : fixtureFields(candidates: libraryCandidates, stockSize: sp.setup.stockSize(stock)),
+                                           keepY: keepsEnds ? partLo.y...partHi.y : nil, clampings: clampings, clampOf: clampOf))
                 }
             }
             // Machining order: side A's operations, then side B's. Several engines take them in
@@ -480,35 +593,84 @@ extension AppModel {
                 status = "\(run.finished) of \(run.total) operations ready · \(run.failed.count) failed"
                 return
             }
-            for (si, sp) in run.sides.enumerated() {
+            // The clamping (vise to buy) of each generated path, per side.
+            var generatedClamping: [Int: [Int]] = [:]
+            func flatten(_ si: Int) -> (side: Int, setup: Setup, planned: [EngineClient.PlannedOperation], paths: [OperationToolpath], materialTop: Double) {
+                let sp = run.sides[si]
                 // An operation with nothing to cut on this side (its pockets all done from the
                 // other side, say) gets no program: no tool change for nothing.
                 var planned: [EngineClient.PlannedOperation] = [], paths: [OperationToolpath] = []
+                var clamps: [Int] = []
                 for k in sp.planned.indices {
                     let ps = run.done[si][k] ?? []
                     guard ps.contains(where: { $0.moves.contains { $0.role == .cut || $0.role == .ramp || $0.role == .plunge } }) else { continue }
                     // Keep every returned path paired with its operation. Some generators
                     // return more than one path; zip must not drop their later cuts.
                     planned.append(contentsOf: repeatElement(sp.planned[k], count: ps.count))
+                    if sp.clampOf.indices.contains(k) { clamps.append(contentsOf: repeatElement(sp.clampOf[k], count: ps.count)) }
                     paths += ps
                 }
-                generated.append((sp.side, sp.setup, planned, paths, sp.materialTop))
+                if !sp.clampings.isEmpty { generatedClamping[sp.side] = clamps }
+                return (sp.side, sp.setup, planned, paths, sp.materialTop)
             }
+            for si in run.sides.indices { generated.append(flatten(si)) }
             // At the machine the side setups come first, on the whole block; then side A and B.
             generated = generated.filter { $0.side >= 2 } + generated.filter { $0.side < 2 }
             if setup.planFromFixtureLibrary {
                 status = "Comparing generated cuts with library fixtures and remaining stock…"
-                let cuts = generated.flatMap { g in
+                // Setups held by the vise to buy aren't the planner's: their steps follow its own.
+                let standInSides = Set(run.sides.filter { !$0.clampings.isEmpty }.map(\.side))
+                let cuts = generated.filter { !standInSides.contains($0.side) }.flatMap { g in
                     zip(g.planned, g.paths).enumerated().map { index, pair in
                         LibraryWorkholdingPlanner.Cut(key: "\(g.side):\(index)", side: g.side,
                             operation: pair.0.operation, tool: pair.0.tool, moves: pair.1.moves)
                     }
                 }
-                let candidates = libraryCandidates, size = setup.stockSize(stock), machine = machine
-                let plan = await Task.detached(priority: .userInitiated) {
-                    LibraryWorkholdingPlanner.plan(cuts: cuts, candidates: candidates, stock: size, machine: machine)
+                let candidates = libraryCandidates, size = setup.stockSize(stock), machine = machine, flip = setupFor(side: 1).flipAxis
+                // The order of the setups: of the ones the planner can hold all the way (it
+                // tracks the stock each setup leaves for the next), the one that turns the stock
+                // least between them; the side setups first (the whole block) when that ties.
+                let orders = Self.setupOrders(generated.map(\.side).filter { !standInSides.contains($0) }, turn: { self.turnAngle(from: $0, to: $1) })
+                var angles: [String: Double] = [:]
+                for a in orders[0] { for b in orders[0] { angles["\(a)>\(b)"] = turnAngle(from: a, to: b) } }
+                let turns = angles
+                let chosen = await Task.detached(priority: .userInitiated) { () -> (LibraryWorkholdingPlan, [Int]) in
+                    var best: (plan: LibraryWorkholdingPlan, turn: Double, order: [Int])?
+                    var first: LibraryWorkholdingPlan?
+                    for order in orders {
+                        let ordered = order.flatMap { side in cuts.filter { $0.side == side } }
+                        let p = LibraryWorkholdingPlanner.plan(cuts: ordered, candidates: candidates, stock: size, machine: machine, flipAxis: flip)
+                        if first == nil { first = p }
+                        guard p.complete else { continue }
+                        let sides = p.steps.map(\.side)
+                        let turn = zip(sides, sides.dropFirst()).reduce(0.0) { $0 + (turns["\($1.0)>\($1.1)"] ?? 0) }
+                        if best == nil || turn < best!.turn - 1e-6 { best = (p, turn, order) }
+                    }
+                    return best.map { ($0.plan, $0.order) } ?? (first ?? LibraryWorkholdingPlan(), orders[0])
                 }.value
+                var plan = chosen.0
+                let order = chosen.1
                 guard generationSignature == run.signature, !cancelGeneration else { throw CancellationError() }
+                if plan.complete {
+                    for g in generated where standInSides.contains(g.side) {
+                        guard let sp = run.sides.first(where: { $0.side == g.side }) else { continue }
+                        // One step per clamping; its clearance field checks the posted programs too.
+                        for (c, clamping) in sp.clampings.enumerated() {
+                            let clamps = generatedClamping[g.side] ?? []
+                            let keys = g.planned.indices.filter { clamps.indices.contains($0) && clamps[$0] == c }
+                            guard !keys.isEmpty else { continue }
+                            let fixture = standInFixture(side: g.side, clamping: c, stockSize: g.setup.stockSize(stock), facedBefore: clamping.facedBefore,
+                                                         jawFront: clamping.jawFront, facing: clamping.facing)
+                            libraryFixtureFields[fixtureStateKey(fixture)] = clamping.field
+                            plan.steps.append(.init(number: plan.steps.count + 1, side: g.side, fixture: fixture,
+                                                    cutKeys: keys.map { "\(g.side):\($0)" }, operations: keys.map { g.planned[$0].operation.title },
+                                                    reasons: ["Held in a vise you don't have yet (on the Shopping List): running waits until it is in your fixtures."]))
+                        }
+                    }
+                }
+                // The programs follow the setups' order (the end setups last, + Y end first).
+                let rank = { (side: Int) -> Int in order.firstIndex(of: side) ?? (order.count + side) }
+                generated.sort { rank($0.side) < rank($1.side) }
                 libraryWorkholdingPlan = plan
                 selectedLibraryStep = plan.steps.first?.id
                 guard plan.complete else {
@@ -519,6 +681,59 @@ extension AppModel {
                     status = "Workholding needs attention; no cutting program is ready to run."
                     return
                 }
+            }
+            // Every pass against the stock as the cuts before it leave it (StockModel: all setups,
+            // in the order they run, each operation in turn): roughing, finishing, floors, holes
+            // and threads lift over stretches where their cutter meets nothing (an earlier setup
+            // or operation already cut there).
+            if let mesh = partMeshData {
+                status = "Checking each pass against the stock the cuts before it leave…"
+                let t0Air = Date()
+                let t = setup.partToWork(partMin: part.boundsMin, partMax: part.boundsMax)
+                var verts = [Float](repeating: 0, count: mesh.positions.count)
+                var vi = 0
+                while vi + 2 < mesh.positions.count {
+                    let w = t * SIMD4(Double(mesh.positions[vi]), Double(mesh.positions[vi + 1]), Double(mesh.positions[vi + 2]), 1)
+                    verts[vi] = Float(w.x); verts[vi + 1] = Float(w.y); verts[vi + 2] = Float(w.z)
+                    vi += 3
+                }
+                let entries = generated, size = setup.stockSize(stock), flip = setupFor(side: 1).flipAxis, indices = mesh.indices
+                // The stock as each setup step starts (for the workspace and the simulation).
+                var stepOfKey: [String: String] = [:]
+                for s in libraryWorkholdingPlan?.steps ?? [] { for key in s.cutKeys { stepOfKey[key] = "step:\(s.id)" } }
+                let keys = stepOfKey
+                let (filtered, snapshots) = await Task.detached(priority: .userInitiated) { () -> ([[OperationToolpath]], [String: StockModel]) in
+                    var model = StockModel(stock: size, partVertices: verts, indices: indices, flipAxis: flip)
+                    var out: [[OperationToolpath]] = []
+                    var snapshots: [String: StockModel] = [:]
+                    for g in entries {
+                        var paths = g.paths
+                        for i in paths.indices where g.planned.indices.contains(i) {
+                            let at = keys["\(g.side):\(i)"] ?? "side:\(g.side)"
+                            if snapshots[at] == nil { snapshots[at] = model }
+                            if snapshots["side:\(g.side)"] == nil { snapshots["side:\(g.side)"] = model }
+                            let op = g.planned[i]
+                            if Self.checksForAir(op.operation) {
+                                let roughing = op.operation.kind == .adaptive
+                                let (moves, skipped) = model.liftAir(paths[i].moves, side: g.side, tool: op.tool, step: roughing ? 1 : 0.5,
+                                                                     safeZ: Self.safeHeight(op), slice: roughing ? op.data.stepdown : nil,
+                                                                     plungeFeed: op.data.plungeFeed)
+                                paths[i].moves = moves
+                                if skipped > 1 {
+                                    paths[i].notes.append("\(Length.mm(skipped)) mm of this pass met no stock (a cut before it had already taken it): lifted over.")
+                                }
+                            }
+                            model.sweep(paths[i].moves, side: g.side, tool: op.tool, slice: op.data.stepdown)
+                        }
+                        out.append(paths)
+                    }
+                    return (out, snapshots)
+                }.value
+                guard generationSignature == run.signature, !cancelGeneration else { throw CancellationError() }
+                for gi in generated.indices where filtered.indices.contains(gi) { generated[gi].paths = filtered[gi] }
+                inProcessSnapshots = snapshots
+                inProcessMeshes = [:]
+                if ProcessInfo.processInfo.environment["COASTLINE_TIMING"] != nil { print("timing air check \(String(format: "%.1f", Date().timeIntervalSince(t0Air))) s") }
             }
             let t0Post = Date()
             let stockSize = setup.stockSize(stock)
@@ -557,7 +772,13 @@ extension AppModel {
                     let tool = group[0].0.tool
                     let rpm = group.map(\.0.data.rpm).max() ?? machine.spindleRPM.upperBound
                     let groupPaths = group.map(\.1), names = group.map { $0.0.operation.title }
-                    let top = materialTop, bmin = sideBox.min, bmax = sideBox.max
+                    // Where this program's material starts: in a clamping of the vise to buy, what
+                    // the clampings before it faced away (the side's own top otherwise).
+                    let top = step.flatMap { s in isStandIn(s.fixture) ? -max((s.fixture.planning?.facePastTable ?? StandInVise.facePast) - StandInVise.facePast, 0) : nil } ?? materialTop
+                    let bmin = sideBox.min, bmax = sideBox.max
+                    let standInStep = step.map { isStandIn($0.fixture) } ?? false
+                    let facingOnly = group.allSatisfy { $0.0.operation.kind == .facing }
+                    let faced = group.reduce(0.0) { $0 + $1.0.operation.faceDepth }
                     let fixtures = step.flatMap { libraryFixtureFields[fixtureStateKey($0.fixture)] }
                     let setupName = step?.title ?? setupName
                     // Posting and the safety check are heavy for 3D programs (tens of thousands of
@@ -573,6 +794,11 @@ extension AppModel {
                         let (probe, probeNote) = Self.followProbedFace(&posted, probing: probing, blocked: probeBlocked, machine: machine)
                         var ctx = GCodeValidator.Context(stockMin: bmin, stockMax: bmax, tool: tool)
                         ctx.materialTop = top
+                        // Facing the whole face leaves no wall for the collet nut to meet: its depth
+                        // counts from the faced surface.
+                        if facingOnly { ctx.materialTop = top - faced }
+                        // In a later clamping of the vise to buy the face is lower: rapids stay above it.
+                        if standInStep { ctx.safeZ = min(top, 0) + 1 }
                         var report = GCodeValidator(machine: machine).validate(posted.text, context: ctx)
                         // The clamps, parallels and table: the tool, shank and collet nut keep clear.
                         var hits: [FixtureClearance.Hit] = []
@@ -743,9 +969,10 @@ extension AppModel {
             let rough = planned.filter { $0.operation.kind == .adaptive }.map(\.tool.diameter).max() ?? 6.35
             let clear = max(1.6 * rough + 1, holdWithTabs ? 1.6 * rough + 3.75 : 0) + 0.5
             let strips: [(min: SIMD2<Double>, max: SIMD2<Double>)] = []
-            guard let plan = ReferenceBores.place(stock: size, partMin: lo, partMax: hi, clear: clear, keepOut: strips,
+            guard var plan = ReferenceBores.place(stock: size, partMin: lo, partMax: hi, clear: clear, keepOut: strips,
                                                   xReach: nil, toolDiameter: tool.diameter,
                                                   maxDepth: tool.stickout - 2) else { return planned }
+            plan.flipAxis = setupFor(side: 1).flipAxis  // side B's windows land where its flip puts the bores
             referencePlan = plan
             var op = Operation(id: Self.referenceBoresID, kind: .bore, toolID: tool.id)
             op.reference = .bores
@@ -891,12 +1118,27 @@ extension AppModel {
     /// tool, feeds, depth window, keep-outs, band, transform, stock box and tabs).
     nonisolated static func generationKey(partID: String, _ p: EngineClient.PlannedOperation, _ transform: simd_double4x4,
                                           _ lo: SIMD3<Double>, _ hi: SIMD3<Double>, _ tabs: HoldingTabs?, _ tabBottom: Double, machine: MachineProfile) -> String {
-        [partID, String(describing: machine), String(describing: p.operation), String(describing: p.tool), String(describing: p.data),
+        ([partID, String(describing: machine), String(describing: p.operation), String(describing: p.tool), String(describing: p.data),
          String(describing: p.zMin), String(describing: p.through), String(describing: p.zTop), String(describing: p.keepOut), String(describing: p.keepOutBelow),
          String(describing: p.band), String(describing: p.frameTop), String(describing: p.refTool), String(describing: transform),
          String(describing: lo), String(describing: hi), String(describing: tabs), String(describing: tabBottom),
-         String(describing: p.tile), String(describing: p.restFrom), String(describing: p.holes), String(describing: p.window)].joined(separator: "|")
+         String(describing: p.tile), String(describing: p.restFrom), String(describing: p.holes), String(describing: p.window)]
+            // The clearance height only when it isn't the usual one (keeps the cache's other keys).
+            + (safeHeight(p) == 3 ? [] : ["safe:\(safeHeight(p))"])).joined(separator: "|")
     }
+
+    /// The clearance height for an operation's rapids and lifts (work Z): 3 mm above the stock as
+    /// its clamping holds it. Not its own start depth (a depth slice starts below material the
+    /// slices before it left round the part); lower only in a clamping after part of the stock
+    /// was faced away (`clearance`), so the spindle stays within its travel.
+    nonisolated static func safeHeight(_ p: EngineClient.PlannedOperation) -> Double { p.clearance ?? 3 }
+
+    /// The passes checked against the stock left (StockModel.liftAir): roughing and finishing
+    /// alike; not facing (it takes the whole face), engraving, or the reference bores and windows.
+    nonisolated static func checksForAir(_ op: Operation) -> Bool {
+        ![.facing, .engrave].contains(op.kind) && op.reference == nil
+    }
+
 
     func storeInCache(_ key: String, _ value: ([OperationToolpath], [PlacedTab])) {
         opCache[key] = value

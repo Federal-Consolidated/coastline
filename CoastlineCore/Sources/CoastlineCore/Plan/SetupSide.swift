@@ -17,10 +17,11 @@ public enum SetupSide {
     }
 
     /// The rotation taking side-A work directions into this side's work frame: the side's
-    /// outward direction becomes +Z.
-    public static func rotation(_ side: Int) -> simd_double3x3 {
+    /// outward direction becomes +Z. Side B turns about the setup's flip axis (`Setup.flipAxis`:
+    /// 0 the vertical X, 1 the stock's length Y).
+    public static func rotation(_ side: Int, flipAxis: Int? = nil) -> simd_double3x3 {
         switch side {
-        case 1: Setup.rotation(axis: SIMD3(1, 0, 0), quarterTurns: 2)
+        case 1: Setup.rotation(axis: flipAxis == 1 ? SIMD3(0, 1, 0) : SIMD3(1, 0, 0), quarterTurns: 2)
         case 2: Setup.rotation(axis: SIMD3(0, 1, 0), quarterTurns: -1)
         case 3: Setup.rotation(axis: SIMD3(0, 1, 0), quarterTurns: 1)
         case 4: Setup.rotation(axis: SIMD3(1, 0, 0), quarterTurns: 1)
@@ -42,9 +43,9 @@ public enum SetupSide {
     }
 
     /// A point in this side's work frame, in side A's (both relative to the same stock).
-    public static func toA(_ p: SIMD3<Double>, side: Int, stock a: SIMD3<Double>) -> SIMD3<Double> {
+    public static func toA(_ p: SIMD3<Double>, side: Int, stock a: SIMD3<Double>, flipAxis: Int? = nil) -> SIMD3<Double> {
         let s = stockSize(a, side: side)
-        return rotation(side).transpose * (p - SIMD3(0, 0, -s.z / 2)) + SIMD3(0, 0, -a.z / 2)
+        return rotation(side, flipAxis: flipAxis).transpose * (p - SIMD3(0, 0, -s.z / 2)) + SIMD3(0, 0, -a.z / 2)
     }
 
     /// A point in side A's work frame, in this side's.

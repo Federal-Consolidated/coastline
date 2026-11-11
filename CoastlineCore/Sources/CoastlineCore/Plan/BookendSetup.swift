@@ -107,6 +107,12 @@ public struct BookendSetup: Sendable {
               d.screwAxisZ - d.pressureTipRadius >= d.stockBackZ, d.screwAxisZ + d.pressureTipRadius <= d.stockBackZ + stock.z else {
             throw PlacementError.invalid("This stock is too small for the side screw to contact its end face while seated against the locating lip.")
         }
+        // The stock seats against the lip at its back, so a deep one stands out toward the
+        // spindle: past the limit, the bookends don't hold it this way.
+        let facePast = table.slotZ.min()! - d.slotZ.min()! + d.stockBackZ + stock.z - table.frontZ
+        guard facePast <= FixtureMechanism.maxFacePastTable + 1e-6 else {
+            throw PlacementError.invalid("The stock is \(DFM.mm(stock.z, 0.1)) mm deep this way. Against the bookends' back lip its face would stand \(DFM.mm(facePast, 0.1)) mm past the table, into the machine.")
+        }
         self.definition = d; self.assembly = assembly; self.table = table; self.stock = stock; self.screw = screw
     }
 

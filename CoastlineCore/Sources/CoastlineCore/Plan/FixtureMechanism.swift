@@ -244,7 +244,11 @@ public struct ViseSetup: Sendable {
         var p = profile
         p.facing = .plusZ; p.spin = 0; p.componentPlacements = nil
         p.stockSize = Vec3(stock.x, stock.y, stock.z)
-        let front = d.jawZ[1] + max(0, stock.z - grip)
+        // The face stands past the jaws by what the jaws don't hold, up to the limit past the
+        // table edge; the rest of a long stock runs back between the jaws and out the back.
+        let jawsPastTable = d.jawZ[1] + slotOffset - table.frontZ
+        let standout = min(max(0, stock.z - grip), max(0, FixtureMechanism.maxFacePastTable - jawsPastTable))
+        let front = d.jawZ[1] + standout
         p.datum = Vec3(d.seatX + stock.x / 2, d.fixedJawY + stock.y / 2, front)
         p.facePastTable = front + slotOffset - table.frontZ
         var state = FixtureAssemblyState(mounted: true)
@@ -313,6 +317,11 @@ public struct ViseSetup: Sendable {
 /// A reviewed fixture mechanism that fits itself to the stock. Fixtures without one are placed
 /// by hand.
 public enum FixtureMechanism: Sendable {
+    /// The most a fitted stock's face stands past the table's spindle-side edge, mm. Stock
+    /// longer than its fixture holds hangs out the back, away from the spindle, never further
+    /// into the machine.
+    public static let maxFacePastTable = 25.0
+
     case bookends(BookendSetup), clampPair(ClampPairSetup), vise(ViseSetup)
 
     /// One adjustable joint, for the placement controls.

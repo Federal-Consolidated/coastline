@@ -9,6 +9,10 @@ extension AppModel {
     func show(side: Int) {
         let old = viewSide
         guard old != side else { return }
+        // The step shown follows the side: a step of another side would bring its fixture along.
+        if let plan = libraryWorkholdingPlan, let step = plan.steps.first(where: { $0.id == selectedLibraryStep }), step.side != side {
+            selectedLibraryStep = plan.steps.first { $0.side == side }?.id
+        }
         switchingView = true
         viewSide = side
         switchingView = false
@@ -33,8 +37,19 @@ extension AppModel {
             finish()
             return
         }
-        // Side A ↔ B: front-to-back about the vertical.
-        animateClamping(from: stockBox(forSide: old), to: to, axis: SIMD3<Float>(1, 0, 0), angle: .pi, then: finish)
+        // The turn the stock really makes between the two setups: A ↔ B front-to-back about
+        // the vertical, the upper and lower sides rolled about the bar's length, the ends stood
+        // toward the spindle. Work axes are the workspace's, so the setups' rotations apply as they are.
+        animateClamping(from: stockBox(forSide: old), to: to, turn: turn(from: old, to: viewSide), then: finish)
+    }
+
+    /// The rotation taking the stock as one side's setup holds it to how the other's holds it
+    /// (each setup's part rotation relative to side A's: side B's flip axis included).
+    func turn(from old: Int, to new: Int) -> simd_quatf {
+        let base = setup.partRotation.transpose
+        let r = (setupFor(side: max(new, 0)).partRotation * base) * (setupFor(side: max(old, 0)).partRotation * base).transpose
+        let f = simd_float3x3(SIMD3<Float>(r.columns.0), SIMD3<Float>(r.columns.1), SIMD3<Float>(r.columns.2))
+        return simd_normalize(simd_quatf(f))
     }
 
     /// One frame-paced animation step (t 0…1, eased by the caller); false when cancelled.
@@ -54,7 +69,7 @@ extension AppModel {
     /// The clamping sequence (see `transition`), with a stand-in box for the stock; the real
     /// stock, part and paths are hidden until it's in.
     func animateClamping(from a: (centre: SIMD3<Float>, size: SIMD3<Float>)?, to b: (centre: SIMD3<Float>, size: SIMD3<Float>),
-                         axis: SIMD3<Float>, angle: Float, then done: @escaping @MainActor () -> Void) {
+                         turn q: simd_quatf, then done: @escaping @MainActor () -> Void) {
         flipTask?.cancel()
         stockAnimating = true
         let scene = renderer.scene
@@ -68,7 +83,7 @@ extension AppModel {
         func hideWork() {
             for id in hide { scene.mesh(id)?.isVisible = false; scene.lineSet(id)?.isVisible = false }
         }
-        let q = simd_quatf(angle: angle, axis: simd_normalize(axis))
+        // The box's own size at the end: the old one, turned (it never changes shape on the way).
         let endLocal = simd_abs(q.inverse.act(b.size))
         func place(_ centre: SIMD3<Float>, _ turn: Float, _ size: SIMD3<Float>) {
             let rot = simd_slerp(simd_quatf(angle: 0, axis: SIMD3(1, 0, 0)), q, turn)

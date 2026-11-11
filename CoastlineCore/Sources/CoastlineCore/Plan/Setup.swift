@@ -79,14 +79,18 @@ public struct Setup: Equatable, Sendable, Codable {
     /// Uniform scale of the imported part (1 = as modelled), so a big design can be machined
     /// smaller from the stock there is.
     public var partScale: Double = 1
-    /// Side B of a two-sided job: the stock is turned front-to-back about the vertical (X) axis,
-    /// so the back of the part faces the spindle.
+    /// Side B of a two-sided job: the stock is turned front-to-back so the back of the part
+    /// faces the spindle, about `flipAxis`.
     public var flipped = false
+    /// The axis side B turns about: nil or 0 the vertical (X, the stock's ends swap), 1 the
+    /// stock's length across the table (Y: it rolls over onto its next long face, its ends stay
+    /// put). `sideB` picks the longer of the two.
+    public var flipAxis: Int? = nil
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
-        case fixtureAssemblies, selectedFixtureIDs, planFromFixtureLibrary, holding, customFixture, facing, spin, stockAxes, topAllowance, partOffsetX, partOffsetY, flipped, partScale
+        case fixtureAssemblies, selectedFixtureIDs, planFromFixtureLibrary, holding, customFixture, facing, spin, stockAxes, topAllowance, partOffsetX, partOffsetY, flipped, flipAxis, partScale
     }
 
     /// Tolerant decoding: sessions saved by older versions miss newer keys, and may name holding
@@ -105,6 +109,7 @@ public struct Setup: Equatable, Sendable, Codable {
         partOffsetX = try c.decodeIfPresent(Double.self, forKey: .partOffsetX) ?? 0
         partOffsetY = try c.decodeIfPresent(Double.self, forKey: .partOffsetY) ?? 0
         flipped = try c.decodeIfPresent(Bool.self, forKey: .flipped) ?? false
+        flipAxis = try c.decodeIfPresent(Int.self, forKey: .flipAxis)
         partScale = try c.decodeIfPresent(Double.self, forKey: .partScale) ?? 1
     }
 
@@ -122,7 +127,7 @@ public struct Setup: Equatable, Sendable, Codable {
         case .minusY: base = Self.rotation(axis: SIMD3(1, 0, 0), quarterTurns: -1)
         }
         let r = Self.rotation(axis: SIMD3(0, 0, 1), quarterTurns: spin) * base
-        return flipped ? Self.rotation(axis: SIMD3(1, 0, 0), quarterTurns: 2) * r : r
+        return flipped ? SetupSide.rotation(1, flipAxis: flipAxis) * r : r
     }
 
     /// The part turned a quarter turn (or several) about a work axis (0 = X, 1 = Y, 2 = Z), as
@@ -156,10 +161,13 @@ public struct Setup: Equatable, Sendable, Codable {
     public func sideB(partMin lo: SIMD3<Double>, partMax hi: SIMD3<Double>, stock: StockItem) -> Setup {
         var b = self
         b.flipped = true
-        let thickness = stockSize(stock).z
+        let size = stockSize(stock), thickness = size.z
         let (rlo, rhi) = rotatedPartBounds(min: lo, max: hi)
         b.topAllowance = thickness - topAllowance - (rhi.z - rlo.z)
-        b.partOffsetY = -partOffsetY
+        // A bar lying along the table rolls over about its length onto its next long face;
+        // stock taller than long turns about the vertical. The turn mirrors the other axis.
+        b.flipAxis = size.y > size.x + 1e-6 ? 1 : 0
+        if b.flipAxis == 1 { b.partOffsetX = -partOffsetX } else { b.partOffsetY = -partOffsetY }
         return b
     }
 

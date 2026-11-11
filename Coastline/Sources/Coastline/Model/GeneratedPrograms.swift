@@ -11,6 +11,10 @@ extension AppModel {
 
     /// A generated job is a snapshot. Preparing it never connects or starts the machine.
     func prepareGeneratedRun(measuring: [MeasuringTool]) throws {
+        guard !planWaitsForWorkholding else {
+            throw NSError(domain: "Coastline", code: 1, userInfo: [NSLocalizedDescriptionKey:
+                "A setup is held in workholding you don't have yet (see the Shopping List). Add it to your fixtures, then generate again."])
+        }
         guard planningMachineReference.isLegacy else {
             throw MachineDefinitionError("This machine profile is ready for planning and workspace simulation. Commission its physical machine before running generated jobs through Machine Control.")
         }

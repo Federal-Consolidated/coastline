@@ -79,6 +79,30 @@ public enum StrategyEngine {
         public var needsTools: [Tool] { tools.filter(\.isSuggestion) }
         /// What lowers each risk, as one-click changes.
         public var remedies: [Remedy] = []
+        /// The passes and their tools as one key ("adaptive:1/4 flat contour:1/4 flat …"): two
+        /// plans that cut the same way with the same tools share it, whatever their estimate.
+        public var signature: String {
+            operations.map { op in
+                op.kind.rawValue + ":" + (op.toolID.flatMap { id in tools.first { $0.id == id }?.name } ?? "")
+                    + (op.pocketsOnly == true ? "(pockets)" : "")
+            }.joined(separator: " ")
+        }
+    }
+
+    /// The candidate with the lowest score. Scores within `tolerance` of the best (as a fraction
+    /// of it) count as equal: the time model is a guess that every simulation teaches, and a
+    /// small drift in it must not flip the pick between plans it can't tell apart (a rerun of
+    /// the same job must give the same plan, and the cached toolpaths with it). Among equals:
+    /// the better finish, the lower risk, fewer tools, then the passes and tools by name.
+    public static func pick(_ cs: [Candidate], tolerance: Double = 0.1, by score: (Candidate) -> Double) -> Candidate? {
+        pool(cs, tolerance: tolerance, by: score)
+            .min { ($0.finish, $0.risk, $0.tools.count, $0.signature, $0.minutes) < ($1.finish, $1.risk, $1.tools.count, $1.signature, $1.minutes) }
+    }
+
+    /// The candidates whose score is within `tolerance` of the best: the ones `pick` can't tell apart.
+    public static func pool(_ cs: [Candidate], tolerance: Double = 0.1, by score: (Candidate) -> Double) -> [Candidate] {
+        guard let best = cs.map(score).min() else { return [] }
+        return cs.filter { score($0) <= best + abs(best) * tolerance + 1e-9 }
     }
 
     /// A change that makes a plan less risky.
@@ -179,20 +203,17 @@ public enum StrategyEngine {
         // A plan that leaves holes out isn't offered while another one makes the whole part.
         if front.contains(where: { $0.finish < unmadeHoleFinish }) { front.removeAll { $0.finish >= unmadeHoleFinish } }
         guard !front.isEmpty else {
-            // Nothing safe: the quickest, named for what it is.
-            return cs.min { $0.minutes < $1.minutes }.map { var c = $0; c.name = "Quickest (risky)"; return [c] } ?? []
+            // Nothing safe: the quickest (the finest of the ones about as quick), named for what it is.
+            return pick(cs) { $0.minutes }.map { var c = $0; c.name = "Quickest (risky)"; return [c] } ?? []
         }
         let tMin = front.map(\.minutes).min()!, tMax = front.map(\.minutes).max()!
         let fMin = front.map(\.finish).min()!, fMax = front.map(\.finish).max()!
         func norm(_ v: Double, _ lo: Double, _ hi: Double) -> Double { hi - lo < 1e-9 ? 0 : (v - lo) / (hi - lo) }
         // Risk weighs in: a minute quicker isn't worth a tool that may deflect or break.
-        let fastest = front.filter { $0.finish <= 20 }.min { $0.minutes * (1 + $0.risk) < $1.minutes * (1 + $1.risk) }
-            ?? front.min { $0.minutes * (1 + $0.risk) < $1.minutes * (1 + $1.risk) }!
-        let finest = front.min { ($0.finish, $0.risk, $0.minutes) < ($1.finish, $1.risk, $1.minutes) }!
-        let balanced = front.min { a, b in
-            (norm(a.minutes, tMin, tMax) + norm(a.finish, fMin, fMax) + a.risk * 0.5)
-                < (norm(b.minutes, tMin, tMax) + norm(b.finish, fMin, fMax) + b.risk * 0.5)
-        }!
+        let fastest = pick(front.filter { $0.finish <= 20 }) { $0.minutes * (1 + $0.risk) }
+            ?? pick(front) { $0.minutes * (1 + $0.risk) }!
+        let finest = pick(front.filter { $0.finish <= fMin + 1e-9 }) { $0.minutes }!
+        let balanced = pick(front) { norm($0.minutes, tMin, tMax) + norm($0.finish, fMin, fMax) + $0.risk * 0.5 }!
         var picks: [Candidate] = []
         for c in [fastest, balanced, finest] where !picks.contains(where: { $0.operations.map(\.kind) == c.operations.map(\.kind) && abs($0.minutes - c.minutes) < 0.5 && $0.finish == c.finish }) {
             picks.append(c)

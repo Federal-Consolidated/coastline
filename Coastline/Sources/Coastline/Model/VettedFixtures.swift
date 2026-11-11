@@ -100,9 +100,9 @@ extension AppModel {
 
     var automaticPreviewFixtures: [Fixture] { automaticFixtures(inventoryLookup()).fitted }
 
-    func mechanism(for fixture: Fixture) throws -> FixtureMechanism? {
+    func mechanism(for fixture: Fixture, stock size: SIMD3<Double>? = nil) throws -> FixtureMechanism? {
         guard FixtureMechanism.has(fixture.assembly) else { return nil }
-        guard let stock = placementStockSize else { throw BookendSetup.PlacementError.invalid("Choose the stock block for this job first.") }
+        guard let stock = size ?? placementStockSize else { throw BookendSetup.PlacementError.invalid("Choose the stock block for this job first.") }
         guard !isSwitchingPlanningMachine else { throw BookendSetup.PlacementError.invalid("Loading \(planningMachineTitle)…") }
         guard let table = bookendMountTable else {
             throw BookendSetup.PlacementError.invalid(planningMachineReference.isLegacy

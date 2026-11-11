@@ -33,7 +33,10 @@ extension AppModel {
     }
     var currentLibraryStep: LibraryWorkholdingPlan.Step? {
         guard setup.planFromFixtureLibrary, let plan = libraryWorkholdingPlan else { return nil }
-        return plan.steps.first { $0.id == selectedLibraryStep } ?? plan.steps.first { $0.side == max(viewSide, 0) } ?? plan.steps.first
+        // A turned side the plan has no step for shows no step (and so no fixture): the first
+        // step's fixture holds the stock the other way round.
+        return plan.steps.first { $0.id == selectedLibraryStep } ?? plan.steps.first { $0.side == max(viewSide, 0) }
+            ?? (viewSide >= 2 ? nil : plan.steps.first)
     }
 
     /// Keep the chosen assembly visible while designing a job, before CAM creates steps.
@@ -41,9 +44,12 @@ extension AppModel {
     var displayedJobFixture: Fixture? {
         if let step = currentLibraryStep { return step.fixture }
         guard setup.planFromFixtureLibrary, let stock else { return nil }
-        let size = setup.stockSize(stock)
+        // The stock as shown (a turned side is another size): only a fixture fitted to that.
+        let size = displayStockSize ?? setup.stockSize(stock)
         let snapshots = setup.fixtureAssemblies ?? []
-        let candidates = automaticWorkholding ? automaticPreviewFixtures : setup.selectedFixtureIDs.map { ids in
+        // Automatic: the library's fixtures fitted to the stock as shown, so a turned side the
+        // plan has no step for (an end the machine can't reach) is still shown held.
+        let candidates = automaticWorkholding ? automaticFixtures(inventoryLookup(), stockSize: size).fitted : setup.selectedFixtureIDs.map { ids in
             ids.compactMap { id in snapshots.first { $0.id == id } }
         } ?? snapshots
         return candidates.first { fixture in
@@ -224,7 +230,7 @@ extension AppModel {
         let machineReference = planningMachineReference
         func isCurrent() -> Bool {
             planningMachineReference == machineReference && generationSignature == inputSignature
-                && !isSwitchingPlanningMachine && fixturePlacement == nil && libraryWorkholdingPlan == nil
+                && !isSwitchingPlanningMachine && fixturePlacement == nil && (libraryWorkholdingPlan == nil || currentLibraryStep == nil)
                 && displayedJobFixture.map(fixtureStateKey) == key
         }
         do {
@@ -236,7 +242,8 @@ extension AppModel {
             guard geometry.placementsMatch(profile), profile.componentModelSignature == signature else {
                 throw EngineClient.EngineError(type: "Fixture", message: "The saved fixture CAD changed. Review its placement again.")
             }
-            if let mechanism = try mechanism(for: fixture) { try mechanism.validate(profile) }
+            let fitted = SIMD3(profile.stockSize.x, profile.stockSize.y, profile.stockSize.z)
+            if let mechanism = try mechanism(for: fixture, stock: fitted) { try mechanism.validate(profile) }
             libraryFixtureMeshes[key] = geometry.workMesh(profile: profile)
             layoutScene()
         } catch is CancellationError { return }
@@ -291,6 +298,28 @@ extension AppModel {
             programs[k].workholdingStep?.reviewed = reviewed
         }
         noteProjectChange()
+    }
+
+    /// Moves a setup earlier (-1) or later (+1) in the plan. The list, the guided job and its
+    /// program order follow; the toolpaths themselves don't change (see `stepOrderNote`).
+    func moveLibraryStep(_ id: UUID, by delta: Int) {
+        guard var plan = libraryWorkholdingPlan, let i = plan.steps.firstIndex(where: { $0.id == id }),
+              plan.steps.indices.contains(i + delta) else { return }
+        plan.steps.swapAt(i, i + delta)
+        for k in plan.steps.indices { plan.steps[k].number = k + 1 }
+        plan.reordered = true
+        libraryWorkholdingPlan = plan
+        for k in programs.indices {
+            if let s = programs[k].workholdingStep, let now = plan.steps.first(where: { $0.id == s.id }) { programs[k].workholdingStep = now }
+        }
+        noteProjectChange()
+    }
+
+    /// Shown over the setups once their order is the user's: each setup's cuts were made for
+    /// the stock as the planner's order leaves it (the side setups first, on the whole block).
+    var stepOrderNote: String? {
+        guard libraryWorkholdingPlan?.reordered == true else { return nil }
+        return "Your order. The cuts were planned for the side setups first, on the whole block, then side A and B: a setup done earlier meets more stock, one done later less."
     }
 
     func inspectLibraryStep(_ step: LibraryWorkholdingPlan.Step) {

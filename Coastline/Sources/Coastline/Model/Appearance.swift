@@ -90,7 +90,15 @@ extension AppModel {
             m.xrayThrough = id != "simstock.loose"
         }
         scene.mesh("stock")?.xrayThrough = true
-        scene.lineSet("stock.edges")?.isVisible = fixturePlacement != nil || (stage != .partStock && stockDisplay != .hidden)
+        // The stock as the shown step starts, in place of the plain box (same look).
+        if let ip = scene.mesh("stock.inprocess"), let box = scene.mesh("stock") {
+            ip.isVisible = box.isVisible
+            ip.color.w = box.color.w
+            ip.material = box.material
+            ip.xrayThrough = true
+            box.isVisible = false
+        }
+        scene.lineSet("stock.edges")?.isVisible = scene.mesh("stock.inprocess") == nil && (fixturePlacement != nil || (stage != .partStock && stockDisplay != .hidden))
         scene.lineSet("toolpath")?.xray = realistic ? 0.35 : 0
     }
 }

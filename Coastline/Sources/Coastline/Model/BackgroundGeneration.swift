@@ -34,6 +34,23 @@ final class GenerationRun {
         /// The fixtures fitted to this setup's stock, as the clearance check sees them (the tool,
         /// shank and collet nut keep out of them; their dilation caches fill as the paths come).
         var fields: [FixtureField] = []
+        /// The part's length (work Y) in a long-face setup that leaves the end pieces on
+        /// (AppModel.endPieces): the tool never goes past it, the end setups face them off.
+        var keepY: ClosedRange<Double>? = nil
+        /// An end setup held by the vise to buy (StandInVise): its clampings, and which one
+        /// each planned operation is cut in. Empty: held by a fixture you own.
+        var clampings: [StandInClamping] = []
+        var clampOf: [Int] = []
+    }
+
+    /// One clamping of an end setup in the vise to buy: what earlier clampings faced off (work Z0
+    /// stays at the original face), where the jaws' fronts are (work Z), how much this one faces
+    /// (nil: the features), and the clearance field of the vise and the table there.
+    struct StandInClamping {
+        var facedBefore: Double
+        var jawFront: Double
+        var facing: Double?
+        var field: FixtureField
     }
 
     var sides: [SidePlan] = []
@@ -234,7 +251,7 @@ extension AppModel {
         if let xr = sp.reachX {
             var skipped = 0.0
             for i in clipped.indices {
-                let (m, s) = Self.liftOutside(clipped[i].moves, x: xr, plungeFeed: p.data.plungeFeed)
+                let (m, s) = Self.liftOutside(clipped[i].moves, x: xr, safeZ: Self.safeHeight(p), plungeFeed: p.data.plungeFeed)
                 clipped[i].moves = m
                 skipped += s
             }
@@ -242,14 +259,43 @@ extension AppModel {
                 clipped[0].warnings.append("\(Length.mm(skipped)) mm of this pass lies beyond the machine's X travel with the stock held like this: left uncut here (another setup may reach it; to cut it from this side, stand the stock \(xr.lowerBound > -1e3 ? "higher" : "lower") in the fixture).")
             }
         }
+        // The end pieces stay on (keepY): what would cut into them (the outline round the part's
+        // ends) lifts over them. Not the reference bores and windows, which are in them on purpose.
+        if let ky = sp.keepY, p.operation.reference == nil {
+            let band = (ky.lowerBound - 0.05)...(ky.upperBound + 0.05)
+            var skipped = 0.0
+            for i in clipped.indices {
+                let (m, s) = Self.liftWhere(clipped[i].moves, blocked: { !band.contains($0.y) }, safeZ: Self.safeHeight(p), plungeFeed: p.data.plungeFeed)
+                clipped[i].moves = m
+                skipped += s
+            }
+            if skipped > 1, !clipped.isEmpty {
+                clipped[0].notes.append("\(Length.mm(skipped)) mm of this pass is on the stock past the part's ends: left for the end setups, which face it off.")
+            }
+        }
         // The fixtures and the table: where the cutter, shank or collet nut would meet them, the
         // pass lifts over (roughing keeps out of them already; finishing along a stock edge that
         // is the part's own face has nothing to cut there anyway).
+        // The vise to buy, in this operation's clamping: the same lift over its jaws and floor.
+        if run.sides[si].clampOf.indices.contains(k), p.operation.kind != .facing {
+            let c = run.sides[si].clampOf[k]
+            var skipped = 0.0
+            for i in clipped.indices {
+                let (m, s) = FixtureClearance.clip(clipped[i].moves, tool: p.tool, field: &run.sides[si].clampings[c].field, safeZ: Self.safeHeight(p),
+                                                   plungeFeed: p.data.plungeFeed)
+                clipped[i].moves = m
+                skipped += s
+            }
+            if skipped > 1, !clipped.isEmpty {
+                clipped[0].warnings.append("\(Length.mm(skipped)) mm of this pass was lifted to keep the tool clear of the vise's jaws: what it skips stays uncut.")
+            }
+        }
         if !run.sides[si].fields.isEmpty, p.operation.kind != .facing {
             var skipped = 0.0
             for i in clipped.indices {
                 for f in run.sides[si].fields.indices {
-                    let (m, s) = FixtureClearance.clip(clipped[i].moves, tool: p.tool, field: &run.sides[si].fields[f], plungeFeed: p.data.plungeFeed)
+                    let (m, s) = FixtureClearance.clip(clipped[i].moves, tool: p.tool, field: &run.sides[si].fields[f], safeZ: Self.safeHeight(p),
+                                                       plungeFeed: p.data.plungeFeed)
                     clipped[i].moves = m
                     skipped += s
                 }
@@ -270,9 +316,15 @@ extension AppModel {
     /// and comes back down where the path is within reach again. Rapids are left as they are
     /// (above the work). Returns the new moves and how much cutting (mm) was skipped.
     nonisolated static func liftOutside(_ moves: [Move], x: ClosedRange<Double>, safeZ: Double = 3, plungeFeed: Double) -> (moves: [Move], skipped: Double) {
+        liftWhere(moves, blocked: { $0.x < x.lowerBound || $0.x > x.upperBound }, inside: { min(max($0, x.lowerBound), x.upperBound) },
+                  safeZ: safeZ, plungeFeed: plungeFeed)
+    }
+
+    /// The moves with every stretch where `blocked` lifted out (as `liftOutside`). `inside`
+    /// brings a rapid's X back where the tool may go (identity: rapids stay as they are).
+    nonisolated static func liftWhere(_ moves: [Move], blocked: (SIMD3<Double>) -> Bool, inside: (Double) -> Double = { $0 },
+                                      safeZ: Double = 3, plungeFeed: Double) -> (moves: [Move], skipped: Double) {
         guard let first = moves.first else { return (moves, 0) }
-        func blocked(_ p: SIMD3<Double>) -> Bool { p.x < x.lowerBound || p.x > x.upperBound }
-        func inside(_ v: Double) -> Double { min(max(v, x.lowerBound), x.upperBound) }
         var out: [Move] = []
         out.reserveCapacity(moves.count)
         var skipped = 0.0
@@ -333,7 +385,8 @@ extension AppModel {
     private func generateJob(_ run: GenerationRun, _ si: Int, _ k: Int, engine: EngineClient, partID: String) async throws -> ([OperationToolpath], [PlacedTab]) {
         let sp = run.sides[si]
         let r = try await engine.generate(partID: partID, transform: sp.transform, stockMin: sp.boxMin ?? run.boxMin, stockMax: sp.boxMax ?? run.boxMax,
-                                          operations: [sp.planned[k]], tabs: sp.tabSpec, tabBottom: sp.tabBottom, machine: run.machine)
+                                          operations: [sp.planned[k]], safeZ: Self.safeHeight(sp.planned[k]), tabs: sp.tabSpec, tabBottom: sp.tabBottom,
+                                          machine: run.machine)
         return (r.paths, r.tabs)
     }
 

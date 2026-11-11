@@ -287,7 +287,8 @@ def _generate(params, blobs):
     all_feats = feats
     for raw in params["ops"]:
         op = O.Op(raw)
-        tp = Toolpath(safe_z=safe)
+        # The approach height follows the clearance (below the original face after a facing).
+        tp = Toolpath(safe_z=safe, approach_z=min(1.0, safe - 2.0))
         k = op.kind
         # A setup from a side cuts only its own features: holes and floors inside its window
         # (work X/Y min, max). Roughing is kept to it by keep-out rectangles.

@@ -97,6 +97,7 @@ extension AppModel {
             input.tabs = holdWithTabs && !placedTabs.isEmpty ? tabs : nil
             input.tabs?.count = placedTabs.count  // as placed (a side without frame gets none)
             input.flipImage = setupSnapshot(side: 1)
+            input.flipAxis = setupFor(side: 1).flipAxis
         }
         input.probing = probing(stockSize: setup.stockSize(stock))
         // The job's tool-change spot (ToolChange.swift): room around the spindle in every clamping.

@@ -40,14 +40,18 @@ public enum ReferenceBores {
         public var depthA: Double
         /// Stock thickness, mm.
         public var thickness: Double
-        public init(centresA: [SIMD2<Double>], depthA: Double, thickness: Double) {
+        /// Side B's flip axis (Setup.flipAxis): nil or 0 about X, 1 about Y.
+        public var flipAxis: Int? = nil
+        public init(centresA: [SIMD2<Double>], depthA: Double, thickness: Double, flipAxis: Int? = nil) {
             self.centresA = centresA
             self.depthA = depthA
             self.thickness = thickness
+            self.flipAxis = flipAxis
         }
 
-        /// The same centres in side B's work frame: turned front-to-back about X, Y mirrors.
-        public var centresB: [SIMD2<Double>] { centresA.map { SIMD2($0.x, -$0.y) } }
+        /// The same centres in side B's work frame: turned front-to-back about X, Y mirrors;
+        /// rolled over about Y, X mirrors.
+        public var centresB: [SIMD2<Double>] { centresA.map { flipAxis == 1 ? SIMD2(-$0.x, $0.y) : SIMD2($0.x, -$0.y) } }
         /// How deep side B's windows go (from its face): through the skin and `overlap` into
         /// the bore.
         public var windowDepth: Double { thickness - depthA + ReferenceBores.overlap }

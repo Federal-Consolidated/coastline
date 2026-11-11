@@ -219,6 +219,47 @@ let camTests: [TestCase] = [
         cal.learn(.adaptive, estimated: 10, simulated: 20)
         try expect(abs(cal.apply(.adaptive, 10) - 14) < 1e-9)
     },
+    TestCase(name: "pickHoldsThePlanSteadyWhenTheTimeModelDrifts") {
+        // The pendant again, with a second 1/4" flat (longer flutes, otherwise the twin of the
+        // first): plans that differ only in which twin they use, or only in parallel vs scallop
+        // passes, estimate the same minutes (22.54) and the same finish (15 µm).
+        var inv = Inventory()
+        inv.accessories = [Accessory(name: "1/8", kind: .collet, size: 3.175), Accessory(name: "1/4", kind: .collet, size: 6.35)]
+        let twin = Tool(name: "1/4 flat long", kind: .flatEndMill, diameter: 6.35, shankDiameter: 6.35, flutes: 3,
+                        fluteLength: 19, stickout: 32, overallLength: 63)
+        let ball = Tool(name: "1/8 ball", kind: .ballEndMill, diameter: 3.175, shankDiameter: 3.175, flutes: 2, fluteLength: 9.5,
+                        stickout: 20, overallLength: 38)
+        inv.tools = [twin, quarter, eighth, ball]
+        let a = PartAnalysis(minCornerRadius: 1.2, depth: 5, freeformArea: 830, flatArea: 630, wallArea: 236, steepArea: 0,
+                             volume: 2800, circularity: 0.78)
+        let facts = StrategyEngine.Facts(analysis: a, part: SIMD3(30, 30, 5), stock: SIMD3(40, 60, 7),
+                                         material: MaterialLibrary.material(id: "brass-c360")!)
+        let all = StrategyEngine.candidates(facts: facts, inventory: inv)
+        let tMin = all.map(\.minutes).min()!
+        let quick = StrategyEngine.pick(all) { $0.minutes }!
+        // About as quick as the quickest (the spiral, 21 µm), and the finest of those (15 µm).
+        try expect(quick.minutes <= tMin * 1.1 + 1e-9, "\(quick.minutes) vs \(tMin)")
+        try expect(all.filter { $0.minutes <= tMin * 1.1 + 1e-9 }.allSatisfy { $0.finish >= quick.finish - 1e-9 })
+        try expect(quick.finish < StrategyEngine.pick(all, tolerance: 0) { $0.minutes }!.finish)
+        // The four that tie (two twins × parallel/scallop) resolve the same way whatever order
+        // the candidates come in.
+        let ties = all.filter { abs($0.minutes - quick.minutes) < 1e-9 && $0.finish == quick.finish }
+        try expect(ties.count == 4, "\(ties.count)")
+        try expect(StrategyEngine.pick(Array(all.reversed())) { $0.minutes }!.signature == quick.signature)
+        try expect(StrategyEngine.pick(Array(all.shuffled())) { $0.minutes }!.signature == quick.signature)
+        // A per cent learnt on the finishing passes doesn't change the pick; the old way (the
+        // lowest minutes) flipped between parallel and scallop on any drift, as they tied.
+        var cal = StrategyEngine.Calibration()
+        cal.factor[OperationKind.parallel.rawValue] = 1.01
+        cal.factor[OperationKind.scallop.rawValue] = 0.99
+        let drifted = StrategyEngine.candidates(facts: facts, inventory: inv, calibration: cal)
+        try expect(drifted.filter { $0.signature.contains("scallop") }.map(\.minutes).min()! < drifted.filter { $0.signature.contains("parallel") }.map(\.minutes).min()!)
+        try expect(StrategyEngine.pick(drifted) { $0.minutes }!.signature == quick.signature,
+                   "\(StrategyEngine.pick(drifted) { $0.minutes }!.signature) vs \(quick.signature)")
+        let fastest = StrategyEngine.recommend(all).first { $0.name == "Fastest" }!
+        let fastestDrifted = StrategyEngine.recommend(drifted).first { $0.name == "Fastest" }!
+        try expect(fastest.signature == fastestDrifted.signature, "\(fastest.signature) vs \(fastestDrifted.signature)")
+    },
     TestCase(name: "plansThatLeaveHolesOutAreUnfinishedAndToolsToBuyMakeThem") {
         // A watch bridge: ⌀0.8 pin holes and ⌀1.0 jewel holes. Your tools can't make them; the
         // suggested Kyocera micro drills can.

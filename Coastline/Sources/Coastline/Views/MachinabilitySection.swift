@@ -12,7 +12,11 @@ struct MachinabilitySection: View {
     /// Plan: rows numbered like the pins on the part, details in the card beside the pin.
     /// Elsewhere (the setups sheet, no pins): details and ways forward in the row.
     var numbered = false
+    /// Plan: one line ("3 warnings on this part") with the rows behind it. The setups and the
+    /// plan matter more there; the checks are warnings to open when wanted.
+    var compact = false
     @State private var showPassed = false
+    @State private var showProblems = false
 
     var body: some View {
         if model.part != nil {
@@ -23,8 +27,16 @@ struct MachinabilitySection: View {
                     let problems = findings.filter { $0.category != .ok }
                     if problems.isEmpty {
                         Label("No problems found for this setup.", systemImage: "checkmark.circle").font(.callout).foregroundStyle(Theme.ok)
+                    } else if compact {
+                        DisclosureGroup(isExpanded: $showProblems) {
+                            ForEach(Array(problems.enumerated()), id: \.element.id) { n, f in row(f, number: n + 1) }
+                        } label: {
+                            Label("\(problems.count) warning\(problems.count == 1 ? "" : "s") on this part", systemImage: "exclamationmark.triangle.fill")
+                                .font(.callout).foregroundStyle(Theme.warning)
+                        }
+                    } else {
+                        ForEach(Array(problems.enumerated()), id: \.element.id) { n, f in row(f, number: n + 1) }
                     }
-                    ForEach(Array(problems.enumerated()), id: \.element.id) { n, f in row(f, number: n + 1) }
                     if !passed.isEmpty {
                         DisclosureGroup(isExpanded: $showPassed) {
                             ForEach(passed) { row($0, number: nil) }
@@ -52,7 +64,7 @@ struct MachinabilitySection: View {
                     InfoTip(text: "Checked on the exact CAD as the part sits now, against your tools, collets, stock and machine. Problems are marked on the part: click a pin or a row.")
                 }
             } footer: {
-                Text(DFM.notChecked).font(.caption).foregroundStyle(.secondary)
+                if !compact { Text(DFM.notChecked).font(.caption).foregroundStyle(.secondary) }
             }
             .onChange(of: findings, initial: true) { _, now in model.syncFindingSelection(now) }
         }
@@ -162,10 +174,14 @@ struct PlanCoverageSection: View {
         Section {
             ForEach(coverage.setups) { cut in
                 let selected = model.selectedFindingID == "setup\(cut.side)"
+                let hold = SetupSide.index(cut.side).map { model.coverageWorkholding(side: $0) }
+                let buy = SetupSide.index(cut.side).flatMap { model.workholdingToBuy(side: $0, number: cut.number) }
+                let held = hold?.fixture.map { "\nHeld in \($0.name)." }
+                    ?? buy.map { "\nNo fixture you own holds it this way. To buy: \($0.title.prefix(1).lowercased() + $0.title.dropFirst()), on the Shopping List." } ?? ""
                 Button { model.selectCoverage(selected ? nil : cut) } label: {
                     FindingRow(title: "Setup \(cut.number): \(DFM.sideWords(cut.side)) toward the spindle",
-                               summary: Self.list(cut.titles) + (cut.note.map { "\n" + $0 } ?? "")
-                                   + (cut.toolpaths ? "" : "\nCoastline can't make toolpaths from this side yet.")) {
+                               summary: Self.list(cut.titles) + (cut.note.map { "\n" + $0 } ?? "") + held
+                                   + (cut.toolpaths || hold?.fixture == nil ? "" : "\nNo toolpaths from this side: see the plan's notes.")) {
                         Text("\(cut.number)")
                             .font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white)
                             .frame(width: 18, height: 18)

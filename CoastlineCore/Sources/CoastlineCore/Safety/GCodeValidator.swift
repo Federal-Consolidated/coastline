@@ -136,7 +136,9 @@ public struct GCodeValidator {
                 let movesXY = abs(d.x) > 1e-6 || abs(d.y) > 1e-6
                 let inFootprint = target.x > c.stockMin.x - r && target.x < c.stockMax.x + r
                     && target.y > c.stockMin.y - r && target.y < c.stockMax.y + r
-                if knownZ && min(pos.z, target.z) < c.safeZ && inFootprint && (movesXY || target.z < c.safeZ) {
+                // Programs are written to 0.001 mm: a rapid exactly at the safe height may read a hair under it.
+                let safe = c.safeZ - 0.001
+                if knownZ && min(pos.z, target.z) < safe && inFootprint && (movesXY || target.z < safe) {
                     add(.error, n, "rapid move below the safe height (Z\(GRBLPost.fmt(c.safeZ))) over the stock. Rapids into material break tools.")
                 }
             } else {

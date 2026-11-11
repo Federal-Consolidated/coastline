@@ -320,15 +320,28 @@ extension AppModel {
         }
     }
 
-    /// Side B's back: side A's surface turned front-to-back (Y mirrored, Z from the far face).
+    /// The stock model's snapshot as this side's first step starts (nil before a generation
+    /// made one).
+    func inProcessStart(side: Int) -> StockModel? {
+        if let step = libraryWorkholdingPlan?.steps.first(where: { $0.side == side }), let m = inProcessSnapshots["step:\(step.id)"] { return m }
+        return inProcessSnapshots["side:\(side)"]
+    }
+
+    /// Side B's back: side A's surface turned over (Y mirrored turned about X, X mirrored
+    /// rolled about Y; Z from the far face).
     private func backSurface(for hm: Heightmap) -> [Float]? {
         guard twoSided, viewSide == 1, let a = sideAFinal, a.cols == hm.cols, a.rows == hm.rows else { return nil }
         let thickness = Float(hm.top - hm.bottom)
+        let rollY = setupFor(side: 1).flipAxis == 1
         var back = [Float](repeating: Float(hm.bottom), count: hm.cols * hm.rows)
         for r in 0..<hm.rows {
             let y = hm.origin.y + Double(r) * hm.cell
-            let ra = min(max(Int(((-y - a.origin.y) / a.cell).rounded()), 0), a.rows - 1)
-            for c in 0..<hm.cols { back[r * hm.cols + c] = Float(hm.top) - thickness - a.heights[ra * a.cols + c] }
+            let ra = rollY ? r : min(max(Int(((-y - a.origin.y) / a.cell).rounded()), 0), a.rows - 1)
+            for c in 0..<hm.cols {
+                let x = hm.origin.x + Double(c) * hm.cell
+                let ca = rollY ? min(max(Int(((-x - a.origin.x) / a.cell).rounded()), 0), a.cols - 1) : c
+                back[r * hm.cols + c] = Float(hm.top) - thickness - a.heights[ra * a.cols + ca]
+            }
         }
         return back
     }
@@ -356,6 +369,29 @@ extension AppModel {
         let origin = SIMD3<Float>(workOrigin(stockSize: displayStockSize ?? setup.stockSize(stock)))
         let c = stock.material?.linearSwatch ?? SIMD3(0.5, 0.5, 0.5)
         var back = backSurface(for: hm)
+        // From what the cuts before this side left (the stock model's snapshot as its first
+        // step starts): its top from the spindle, its back below; through where nothing is left.
+        var fromModel = false
+        if let start = inProcessStart(side: max(viewSide, 0)) {
+            var top = hm.heights, bottom = [Float](repeating: Float(hm.bottom), count: hm.heights.count)
+            let (k, sign) = start.toolAxis(side: max(viewSide, 0))
+            let a = setup.stockSize(stock), flip = setupFor(side: 1).flipAxis
+            for r in 0..<hm.rows {
+                for c in 0..<hm.cols {
+                    let x = hm.origin.x + Double(c) * hm.cell, y = hm.origin.y + Double(r) * hm.cell
+                    let pA = SetupSide.toA(SIMD3(x, y, 0), side: max(viewSide, 0), stock: a, flipAxis: flip)
+                    let spans = start.materialAlong(axis: k, through: pA)
+                    let i = r * hm.cols + c
+                    guard !spans.isEmpty else { top[i] = Float(hm.bottom); continue }
+                    let zs = spans.flatMap { [sign * (Double($0.x) - pA[k]), sign * (Double($0.y) - pA[k])] }
+                    top[i] = Float(min(zs.max()!, hm.top))
+                    bottom[i] = Float(max(zs.min()!, hm.bottom))
+                }
+            }
+            hm.heights = top
+            back = bottom
+            fromModel = true
+        }
         simBack = back
         if let g = SceneMesh.grid(device: renderer.device, id: "simstock", x0: Float(hm.origin.x), y0: Float(hm.origin.y),
                                   cell: Float(hm.cell), cols: hm.cols, rows: hm.rows, z: Float(hm.top),
@@ -369,7 +405,9 @@ extension AppModel {
             renderer.scene.setMesh(g)
             hm.markAllDirty()  // draws the back (and opens what side A already cut through)
         }
+        if fromModel { hm.markAllDirty() }
         heightmap = hm
+        if fromModel { refreshSimMesh() }
         renderer.scene.mesh("stock")?.isVisible = false
         applySurfaces()
         applyStockDisplay()

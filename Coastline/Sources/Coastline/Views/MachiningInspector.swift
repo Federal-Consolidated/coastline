@@ -275,6 +275,11 @@ struct ResultsSection: View {
                 .buttonStyle(.glassProminent)
                 .disabled(!ready || model.jobs.run != nil)
                 .help("Open the guided runner for setup, probing, air cuts and cuts. Each program starts only when you press Run.")
+            if model.planWaitsForWorkholding {
+                Text("Running waits for the workholding to buy: it holds a setup. See the Shopping List.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Open the Shopping List") { model.page = .shopping }.buttonStyle(.link).font(.caption)
+            }
             if model.jobs.run != nil {
                 Button("Return to Guided Mode", systemImage: "list.bullet.clipboard") { model.openGuidedMode() }
             }
@@ -313,6 +318,7 @@ struct ResultsSection: View {
     private var ready: Bool {
         !model.isGenerating && !model.programs.isEmpty && model.programs.allSatisfy(\.report.passed)
             && (!model.setup.planFromFixtureLibrary || model.libraryWorkholdingPlan?.reviewed == true)
+            && !model.planWaitsForWorkholding  // a vise to buy holds a setup
     }
 
     private func export() {
@@ -521,7 +527,9 @@ extension AppModel {
     func generateOrApply(inventory: Inventory) async {
         guard part != nil, stock != nil, !isGenerating else { return }
         if let blocker = generationBlocker {
+            // In the status and in the Plan panel's "Before building" (a beep alone read as "it won't let me").
             status = blocker
+            errorMessage = blocker
             NSSound.beep()
             return
         }

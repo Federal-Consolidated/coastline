@@ -113,6 +113,10 @@ final class AppModel {
     @ObservationIgnored var clampFieldCache: (key: String, field: FixtureField?)?
     @ObservationIgnored var clearanceRecheck: Task<Void, Never>?
     @ObservationIgnored var partMeshData: (positions: [Float], normals: [Float], indices: [UInt32])?
+    /// The stock as each setup step starts ("step:<id>", or "side:<n>" for a side's first cut),
+    /// from the last generation's stock model; and their meshes once drawn.
+    @ObservationIgnored var inProcessSnapshots: [String: StockModel] = [:]
+    @ObservationIgnored var inProcessMeshes: [String: (positions: [Float], normals: [Float], indices: [UInt32])] = [:]
     /// The job journal.
     let journal = JournalModel()
     /// The live connection to the machine (Control page).
@@ -585,15 +589,21 @@ final class AppModel {
 
     func customWorkOrigin(stockSize s: SIMD3<Double>) -> SIMD3<Double> {
         let fixture = displayedJobFixture
-        return SIMD3(tableGeometry.topX + (fixture?.height ?? setup.customFixture.height) + s.x / 2,
-              travelCentreY, tableGeometry.northZ + (fixture?.planning?.facePastTable ?? setup.customFixture.faceProtrusion))
+        let standIn = fixture == nil && showsStandInVise
+        return SIMD3(tableGeometry.topX + (fixture?.height ?? (standIn ? StandInVise.floor : setup.customFixture.height)) + s.x / 2,
+              travelCentreY, tableGeometry.northZ + (fixture?.planning?.facePastTable ?? (standIn ? StandInVise.facePast : setup.customFixture.faceProtrusion)))
     }
 
     /// Where work X0 Y0 Z0 is in machine coordinates for a tool sticking out `stickout`,
     /// whatever is on screen (the job's fixture or the custom one).
     func machineOrigin(stickout: Double) -> SIMD3<Double>? {
-        guard let mm = machineModel, let stock else { return nil }
-        let o = customWorkOrigin(stockSize: setup.stockSize(stock))
+        guard let stock else { return nil }
+        return machineOrigin(modelOrigin: customWorkOrigin(stockSize: setup.stockSize(stock)), stickout: stickout)
+    }
+
+    /// The same for work zero at a model position `o`.
+    func machineOrigin(modelOrigin o: SIMD3<Double>, stickout: Double) -> SIMD3<Double>? {
+        guard let mm = machineModel else { return nil }
         let t = tipAtModelPose(stickout: stickout), m = mm.modelPose
         return SIMD3(m.x - t.x + o.x, m.y + o.y - t.y, m.z + o.z - t.z)
     }
@@ -652,7 +662,8 @@ final class AppModel {
         scene.remove(id: "stock")
         scene.remove(id: "stock.edges")
         if let stock {
-            let box = (min: SIMD3(-stockSize.x / 2, -stockSize.y / 2, -stockSize.z), max: SIMD3(stockSize.x / 2, stockSize.y / 2, 0))
+            let trim = displayStockTrim
+            let box = (min: SIMD3(-stockSize.x / 2, -stockSize.y / 2, -stockSize.z + trim.back), max: SIMD3(stockSize.x / 2, stockSize.y / 2, -trim.front))
             _ = stock
             let lo = SIMD3<Float>(box.min + origin), hi = SIMD3<Float>(box.max + origin)
             let c = stock.material?.linearSwatch ?? SIMD3(0.5, 0.5, 0.5)
@@ -665,6 +676,7 @@ final class AppModel {
                 }
         }
         layoutClamps(stockSize: stockSize)
+        layoutInProcessStock(stockSize: stockSize, origin: origin)
         origin = partOrigin
         layoutTabs(origin: origin)
         layoutWorkArea(stockSize: stockSize, origin: origin)
@@ -700,7 +712,7 @@ final class AppModel {
         var bodies: [BedBody] = []
         defer { scheduleCollisionCheck(bodies, stockSize: stockSize) }
         if stock != nil {
-            if setup.planFromFixtureLibrary, !showingStockOnly, automaticWorkholding, libraryWorkholdingPlan == nil,
+            if setup.planFromFixtureLibrary, !showingStockOnly, automaticWorkholding, libraryWorkholdingPlan == nil || currentLibraryStep == nil,
                fixturePlacement == nil, let fixture = displayedJobFixture, libraryFixtureMeshes[fixtureStateKey(fixture)] == nil,
                automaticPreviewRequested != fixtureStateKey(fixture) {
                 automaticPreviewRequested = fixtureStateKey(fixture)
@@ -722,8 +734,80 @@ final class AppModel {
                 }
             }
         }
+        if stock != nil, showsStandInVise {
+            for id in layoutStandInVise(stockSize: stockSize) { used.insert(id) }
+        }
         for m in scene.meshes where m.id.hasPrefix("fixture.") && !used.contains(m.id) { m.isVisible = false }
         applyFixtureDisplay()
+    }
+
+    /// The stand-in vise (StandInVise) around the stock as shown, see-through orange: the same
+    /// boxes the clearance check uses (the table's is drawn by the machine). Its ids.
+    private func layoutStandInVise(stockSize s: SIMD3<Double>) -> [String] {
+        let o = workToModel(stockSize: s)
+        var ids: [String] = []
+        for b in StandInVise.boxes(stockSize: s, facedBefore: standInFacedBefore, jawFront: standInJawFront(side: viewSide), table: tableGeometry)
+        where b.name != "table" {
+            let id = "fixture.standin.\(b.name)"
+            if let m = SceneMesh.box(device: renderer.device, id: id, min: SIMD3<Float>(b.min + o), max: SIMD3<Float>(b.max + o),
+                                     color: SIMD4(0.95, 0.62, 0.25, 0.55)) {
+                m.group = "x"
+                m.material.metallic = 0; m.material.roughness = 0.05  // drawn see-through (applyFixtureDisplay)
+                renderer.scene.setMesh(m)
+                ids.append(id)
+            }
+        }
+        return ids
+    }
+
+    /// The snapshot of the stock for the step (or side) shown: what is left when it starts.
+    var shownInProcessKey: String? {
+        guard !showingStockOnly, fixturePlacement == nil, stock != nil else { return nil }
+        let key = currentLibraryStep.map { "step:\($0.id)" } ?? "side:\(max(viewSide, 0))"
+        return inProcessSnapshots[key] == nil ? nil : key
+    }
+
+    /// Side A's frame into this side's work frame (SetupSide.fromA, side B's flip included).
+    func sideFromA(_ side: Int, stockA a: SIMD3<Double>) -> simd_double4x4 {
+        let s = SetupSide.stockSize(a, side: side)
+        let r = SetupSide.rotation(side, flipAxis: setupFor(side: 1).flipAxis)
+        let rot = simd_double4x4(columns: (SIMD4(r.columns.0, 0), SIMD4(r.columns.1, 0), SIMD4(r.columns.2, 0), SIMD4(0, 0, 0, 1)))
+        return simd_double4x4(translation: SIMD3(0, 0, -s.z / 2)) * rot * simd_double4x4(translation: SIMD3(0, 0, a.z / 2))
+    }
+
+    /// The stock as the shown setup step starts: what every cut before it left (the plain box
+    /// otherwise). Drawn in place of the box in the setup steps, not over the simulation.
+    private func layoutInProcessStock(stockSize: SIMD3<Double>, origin: SIMD3<Double>) {
+        let scene = renderer.scene
+        guard !showsMachiningResults, let key = shownInProcessKey, let model = inProcessSnapshots[key], let stock else {
+            scene.remove(id: "stock.inprocess")
+            return
+        }
+        let mesh: (positions: [Float], normals: [Float], indices: [UInt32])
+        if let m = inProcessMeshes[key] { mesh = m } else {
+            mesh = DexelMesher.mesh(model.material(axis: 2), axis: 2)
+            inProcessMeshes[key] = mesh
+        }
+        guard !mesh.indices.isEmpty else { scene.remove(id: "stock.inprocess"); return }
+        let t = simd_double4x4(translation: origin) * sideFromA(max(viewSide, 0), stockA: setup.stockSize(stock))
+        let c = stock.material?.linearSwatch ?? SIMD3(0.5, 0.5, 0.5)
+        if let m = SceneMesh(device: renderer.device, id: "stock.inprocess", positions: mesh.positions, normals: mesh.normals,
+                             indices: mesh.indices, color: SIMD4(c, 0.22), transform: t.float) {
+            m.group = "x"
+            scene.setMesh(m)
+        }
+    }
+
+    /// What is gone from the shown stock before this clamping (mm off its front and back): an
+    /// end setup's earlier clampings faced its front; the other end setup, done first, its back.
+    var displayStockTrim: (front: Double, back: Double) {
+        guard viewSide >= 4, !showingStockOnly else { return (0, 0) }
+        let front = standInFacedBefore
+        var back = 0.0
+        if viewSide == 5, let plan = libraryWorkholdingPlan,
+           let mine = plan.steps.firstIndex(where: { $0.id == currentLibraryStep?.id }),
+           plan.steps[..<mine].contains(where: { $0.side == 4 }) { back = endPieceThickness(side: 4) }
+        return (front, back)
     }
 
     /// Fixtures follow the machine display: see-through when the machine is ghosted.
@@ -1282,6 +1366,8 @@ final class AppModel {
     /// Generated results no longer match the inputs: drop them (paths, programs, simulation).
     func clearToolpathResults() {
         pause()
+        inProcessSnapshots = [:]
+        inProcessMeshes = [:]
         if !isGenerating { opGenState = [:] }
         programs = []
         libraryWorkholdingPlan = nil

@@ -64,14 +64,20 @@ extension AppModel {
     /// front-to-back: its (x, y) is side A's (x, −y), its z side A's −T − z): the cells where
     /// side A left material through the tabs' bottom, connected to the stock's edge (what's
     /// left by the part inside the channel isn't frame).
-    nonisolated static func tabFrame(sideA a: Heightmap, thickness: Double, tabBottom: Double) -> TabFrame {
+    nonisolated static func tabFrame(sideA a: Heightmap, thickness: Double, tabBottom: Double, flipAxis: Int? = nil) -> TabFrame {
         let cols = a.cols, rows = a.rows
         let need = Float(-thickness - tabBottom - 0.05)
         var material = [Bool](repeating: false, count: cols * rows)
+        // Side B's cell (x, y) is side A's (x, -y) turned about X, (-x, y) rolled about Y.
+        let rollY = flipAxis == 1
         for r in 0..<rows {
             let y = a.origin.y + Double(r) * a.cell
-            let ra = min(max(Int(((-y - a.origin.y) / a.cell).rounded()), 0), rows - 1)
-            for c in 0..<cols where a.height(col: c, row: ra) >= need { material[r * cols + c] = true }
+            let ra = rollY ? r : min(max(Int(((-y - a.origin.y) / a.cell).rounded()), 0), rows - 1)
+            for c in 0..<cols {
+                let x = a.origin.x + Double(c) * a.cell
+                let ca = rollY ? min(max(Int(((-x - a.origin.x) / a.cell).rounded()), 0), cols - 1) : c
+                if a.height(col: ca, row: ra) >= need { material[r * cols + c] = true }
+            }
         }
         // Connected to the edge (4-neighbours).
         var frame = [Bool](repeating: false, count: cols * rows)
@@ -142,9 +148,9 @@ extension AppModel {
             return
         }
         let ops = needed.compactMap { k in run.done[0][k].map { (paths: $0, tool: a.planned[k].tool) } }
-        let size = setup.stockSize(stock), bottom = run.sides[si].tabBottom
+        let size = setup.stockSize(stock), bottom = run.sides[si].tabBottom, flip = setupFor(side: 1).flipAxis
         let task = Task.detached(priority: .userInitiated) {
-            Self.tabFrame(sideA: Self.simulate(ops, stockSize: size), thickness: size.z, tabBottom: bottom)
+            Self.tabFrame(sideA: Self.simulate(ops, stockSize: size), thickness: size.z, tabBottom: bottom, flipAxis: flip)
         }
         run.frameTask = task
         let f = await task.value
@@ -154,10 +160,10 @@ extension AppModel {
     /// For each placed tab: whether it holds, in the finished job (both sides simulated to the
     /// end): material all along it at its height, and its far end in the frame.
     nonisolated static func tabsHold(_ tabs: [PlacedTab], a: Heightmap?, b: Heightmap, thickness: Double,
-                                     z: ClosedRange<Double>) -> [Bool] {
+                                     z: ClosedRange<Double>, flipAxis: Int? = nil) -> [Bool] {
         // The frame: two sides, what side A left at the tabs' height; one side, what it didn't
         // cut down to the tabs' top (the uncut frame round the clearing).
-        let frame = a.map { tabFrame(sideA: $0, thickness: thickness, tabBottom: z.lowerBound) }
+        let frame = a.map { tabFrame(sideA: $0, thickness: thickness, tabBottom: z.lowerBound, flipAxis: flipAxis) }
             ?? oneSidedFrame(b, level: (z.lowerBound + z.upperBound) / 2)
         let mid = (z.lowerBound + z.upperBound) / 2
         func surface(_ hm: Heightmap, _ p: SIMD2<Double>) -> Double {
@@ -173,7 +179,8 @@ extension AppModel {
             var s = 0.6
             while s < g.length - 0.4 {
                 let q = t.centre + n * s
-                let fromA = a.map { -thickness - surface($0, SIMD2(q.x, -q.y)) } ?? -thickness  // where side A's material starts (B's frame)
+                let qa = flipAxis == 1 ? SIMD2(-q.x, q.y) : SIMD2(q.x, -q.y)  // the same point in side A's frame
+                let fromA = a.map { -thickness - surface($0, qa) } ?? -thickness  // where side A's material starts (B's frame)
                 if !(fromA <= mid + 1e-3 && mid <= surface(b, q) + 1e-3) {
                     if ProcessInfo.processInfo.environment["COASTLINE_TAB_DEBUG"] != nil {
                         print("tab \(t.centre) gap at \(s) of \(g.length): A from \(fromA) B to \(surface(b, q)) mid \(mid)")
@@ -207,7 +214,7 @@ extension AppModel {
               let rb = sideResults.first(where: { $0.side == tabSide }) else { return nil }
         let ra = twoSided ? sideResults.first(where: { $0.side == 0 }) : nil
         if twoSided && ra == nil { return nil }
-        let size = setup.stockSize(stock)
+        let size = setup.stockSize(stock), flip = setupFor(side: 1).flipAxis
         let tabs = placedTabs
         func ops(_ r: SideResult) -> [(paths: [OperationToolpath], tool: Tool)] {
             r.paths.indices.compactMap { k in r.planned.indices.contains(k) ? ([r.paths[k]], r.planned[k].tool) : nil }
@@ -215,7 +222,7 @@ extension AppModel {
         let oa = ra.map(ops), ob = ops(rb)
         return await Task.detached(priority: .userInitiated) {
             let a = oa.map { Self.simulate($0, stockSize: size) }, b = Self.simulate(ob, stockSize: size)
-            return Self.tabsHold(tabs, a: a, b: b, thickness: size.z, z: z)
+            return Self.tabsHold(tabs, a: a, b: b, thickness: size.z, z: z, flipAxis: flip)
         }.value
     }
 

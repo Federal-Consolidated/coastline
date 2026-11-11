@@ -241,6 +241,44 @@ enum Automation {
                    let png = rep.representation(using: .png, properties: [:]) {
                     try? png.write(to: URL(fileURLWithPath: arg)); print("thumb written \(arg)")
                 } else { print("thumb none") }
+            case "dumpprogram":  // "dumpprogram 3 /tmp/p3.nc": that program's G-code as posted
+                let p = arg.split(separator: " ", maxSplits: 1).map(String.init)
+                if p.count == 2, let n = Int(p[0]), model.programs.indices.contains(n - 1) {
+                    try? model.programs[n - 1].gcode.write(toFile: p[1], atomically: true, encoding: .utf8); print("dumped program \(n)")
+                }
+            case "stage":  // "stage machining": the workflow stage, as the stage bar sets it
+                let stages: [String: JobStage] = ["part": .partStock, "stock": .stock, "setups": .setups, "planning": .planning, "machining": .machining, "review": .review]
+                if let s = stages[arg] { model.enter(s); print("stage \(model.stage) canVisit \(model.canVisit(s))") }
+            case "shot":  // "shot /tmp/s.png": the workspace as it is shown (camera and visibility untouched)
+                do { try model.renderer.snapshot(width: 1200, height: 800, to: URL(fileURLWithPath: arg)); print("shot written \(arg)") }
+                catch { print("shot failed: \(error)") }
+            case "showside":  // "showside 3": that side's setup in the workspace, framed
+                model.show(side: Int(arg) ?? 0); model.focusWork()
+                let fixtures = model.renderer.scene.meshes.filter { $0.id.hasPrefix("fixture.") && $0.isVisible }.map(\.id)
+                print("showside \(model.viewSide) stock \(model.displayStockSize.map { "\($0)" } ?? "-") fixture \(model.displayedJobFixture?.name ?? "-") meshes \(fixtures)")
+            case "setupstep":  // "setupstep 2": the plan's second setup, as at the machine
+                if let plan = model.libraryWorkholdingPlan, let n = Int(arg), plan.steps.indices.contains(n - 1) {
+                    let step = plan.steps[n - 1]
+                    model.inspectLibraryStep(step)
+                    let fixtures = model.renderer.scene.meshes.filter { $0.id.hasPrefix("fixture.") && $0.isVisible }.map(\.id)
+                    print("setupstep \(n) side \(step.side) fixture \(step.fixture.name) stock \(model.displayStockSize.map { "\($0)" } ?? "-") meshes \(fixtures)")
+                } else { print("setupstep none (\(model.libraryWorkholdingPlan?.steps.count ?? 0) steps)") }
+            case "movestep":  // "movestep 3 -1": the plan's third setup one earlier
+                let p = arg.split(separator: " ").compactMap { Int($0) }
+                if p.count == 2, let plan = model.libraryWorkholdingPlan, plan.steps.indices.contains(p[0] - 1) {
+                    model.moveLibraryStep(plan.steps[p[0] - 1].id, by: p[1])
+                    print("movestep order \(model.libraryWorkholdingPlan?.steps.map { "\($0.number):\($0.side)" } ?? []) note \(model.stepOrderNote ?? "-")")
+                }
+            case "coverageselect":  // "coverageselect 5": click that setup in the Setups list
+                if let c = model.planCoverage, let s = c.setups.first(where: { $0.number == Int(arg) }) {
+                    model.selectCoverage(s)
+                    let fixtures = model.renderer.scene.meshes.filter { $0.id.hasPrefix("fixture.") && $0.isVisible }.map(\.id)
+                    print("coverageselect \(s.number) side \(model.viewSide) stock \(model.displayStockSize.map { "\($0)" } ?? "-") fixture \(model.displayedJobFixture?.name ?? "-") meshes \(fixtures) status \(model.status)")
+                }
+            case "coverage":  // the setups the part check proposes, and what each cuts
+                if let c = model.planCoverage {
+                    for s in c.setups { print("coverage setup \(s.number) \(s.side) toolpaths=\(s.toolpaths) faces=\(s.faces.count) \(s.titles.prefix(3)) note=\(s.note ?? "-")") }
+                } else { print("coverage none") }
             case "optimes":  // simulated minutes per operation, both sides, longest first
                 var rows: [(String, Double)] = []
                 for r in model.sideResults {

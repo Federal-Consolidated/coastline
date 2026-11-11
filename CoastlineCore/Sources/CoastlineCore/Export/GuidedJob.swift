@@ -71,6 +71,9 @@ public enum GuidedJobBuilder {
         public var tabs: HoldingTabs?
         /// PNG of side B's setup, shown on the flip step.
         public var flipImage: Data?
+        /// How side B turns (Setup.flipAxis): nil or 0 front-to-back about the vertical, 1
+        /// rolled over about the stock's length.
+        public var flipAxis: Int?
         /// User-supplied workholding (outside the fixture library).
         public var customHolding: Setup.CustomFixture?
         public var probing = Probing()
@@ -352,7 +355,7 @@ public enum GuidedJobBuilder {
                 let before = i.programs[k - 1].side
                 let flip = p.side == before ? "Keep the part's current orientation. "
                     : p.side >= 2 ? ""  // its instructions say how to turn it
-                    : p.side == 1 && before == 0 ? "Turn the stock front-to-back about its vertical axis for side B. "
+                    : p.side == 1 && before == 0 ? (i.flipAxis == 1 ? "Roll the stock over about its length for side B. " : "Turn the stock front-to-back about its vertical axis for side B. ")
                     : "Turn the stock so its \(SetupSide.words(p.side)) faces the spindle. "
                 steps.append(step("Change Workholding · \(holding.title)", markdown: """
                 Stop the spindle and move the tool clear by hand before releasing any fixture. \(flip)
@@ -366,7 +369,7 @@ public enum GuidedJobBuilder {
             } else if p.workholding == nil && p.side == 1 && (k == 0 || i.programs[k - 1].side == 0) {
                 if let custom = i.customHolding {
                     steps.append(step("Flip the Stock", markdown: """
-                    Vacuum the chips. Turn the stock front-to-back about its vertical axis and secure it in **\(custom.name)** for side B.
+                    Vacuum the chips. \(i.flipAxis == 1 ? "Roll the stock over about its length" : "Turn the stock front-to-back about its vertical axis") and secure it in **\(custom.name)** for side B.
 
                     \(custom.notes)
 
@@ -377,7 +380,9 @@ public enum GuidedJobBuilder {
                 steps.append(step("Flip the Stock", markdown: """
                 Side A is done. Vacuum the chips from the stock, the fixture and the table\(pr.bores != nil ? ", and out of the two reference bores in the frame" : "").
 
-                Release the stock and **turn it front-to-back** about its vertical axis: the face that was at the back now faces the spindle, and the end that was on the left is now on the right. Secure it again.
+                \(i.flipAxis == 1
+                    ? "Release the stock and **roll it over** about its length: the face that was at the back now faces the spindle, and the face that was on the table is now on top. Its ends stay where they were. Secure it again."
+                    : "Release the stock and **turn it front-to-back** about its vertical axis: the face that was at the back now faces the spindle, and the end that was on the left is now on the right. Secure it again.")
 
                 The next steps find the stock's edges and face afresh.\(pr.bores != nil ? " Side B's edges give a first zero; the reference bores then set it exactly." : "")
                 """, image: i.flipImage == nil ? "" : "Image/flip.png", gcode: "Code/tool_change_position.nc", timeout: 90,
