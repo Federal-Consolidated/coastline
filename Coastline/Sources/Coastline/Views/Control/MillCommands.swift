@@ -39,6 +39,10 @@ struct MachineCommands: Commands {
                     .disabled(program.homesFirst ? !mill.canHome : !mill.canRun)
                 }
                 Divider()
+                Button("Open G-code File…") {
+                    model.page = .control
+                    mill.openProgramFile()
+                }
                 Button("Manage Programs…") { mill.showProgramLibrary = true }
             }
             Menu("Go To") {

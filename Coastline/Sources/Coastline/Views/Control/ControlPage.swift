@@ -223,8 +223,19 @@ struct RunConfirmSheet: View {
     @Environment(AppModel.self) private var app
     let program: SavedTestProgram
     let run: () -> Bool
+    /// Numbered as the code check counts, so "Line n" in a refusal can be found. A long file
+    /// shows its start; the whole program is checked and sent.
+    private let preview: String
     @Environment(\.dismiss) private var dismiss
     @State private var clear = false
+
+    init(program: SavedTestProgram, run: @escaping () -> Bool) {
+        self.program = program
+        self.run = run
+        let lines = program.lines
+        let shown = lines.prefix(400).enumerated().map { "\($0.offset + 1)\t\($0.element)" }.joined(separator: "\n")
+        preview = lines.count > 400 ? shown + "\n… \(lines.count - 400) more lines" : shown
+    }
 
     var body: some View {
         let check = app.mill.check(program)
@@ -236,7 +247,7 @@ struct RunConfirmSheet: View {
             Text(program.kind == .motionCheck ? "Spindle-off motion check" : "Setup program: may probe, change work offsets and run the spindle")
                 .font(.caption).foregroundStyle(.secondary)
             ScrollView {
-                Text(program.lines.joined(separator: "\n"))
+                Text(preview)
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)

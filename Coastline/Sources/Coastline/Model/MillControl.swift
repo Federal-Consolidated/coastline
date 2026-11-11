@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import MillCore
 import Foundation
 import Observation
@@ -86,6 +87,8 @@ final class MillControl {
     /// Ports not to connect to by themselves until they are unplugged: connected once already
     /// (the operator may have disconnected), or the connect failed.
     @ObservationIgnored private var autoSkip: Set<String> = []
+    @ObservationIgnored private var setupCheck: (id: UUID, code: String, settings: MillSettings, envelope: MillEnvelope,
+                                                 result: Result<JobProgramCheck.Program, MillRefusal>)?
 
     init() {
         switch UserDefaults.standard.string(forKey: "millPort") ?? "auto" {
@@ -329,7 +332,15 @@ final class MillControl {
             guard let start = snapshot.status?.machinePosition else { return .failure(.statusStale) }
             return ProgramCheck.clean(program.lines, start: start, envelope: envelope)
         case .setup:
-            return JobProgramCheck.clean(program.lines, settings: snapshot.settings, envelope: envelope).flatMap { checked in
+            // The confirmation sheet asks on every status report; a large file is checked once.
+            let result: Result<JobProgramCheck.Program, MillRefusal>
+            if let c = setupCheck, c.id == program.id, c.code == program.code, c.settings == snapshot.settings, c.envelope == envelope {
+                result = c.result
+            } else {
+                result = JobProgramCheck.clean(program.lines, settings: snapshot.settings, envelope: envelope)
+                setupCheck = (program.id, program.code, snapshot.settings, envelope, result)
+            }
+            return result.flatMap { checked in
                 if let why = checked.startsWithHome ? snapshot.gates.home : snapshot.gates.run { return .failure(why) }
                 return .success(checked.lines)
             }
@@ -350,6 +361,23 @@ final class MillControl {
     }
 
     func run(_ program: TestProgram) { run(SavedTestProgram(program)) }
+
+    static let programFileExtensions = ["nc", "gcode", "ngc", "tap", "cnc", "txt"]
+
+    /// Opens a G-code or NC file for a single run. It is checked with the guided runner's
+    /// rules and shown in the run confirmation; it is not added to the saved programs.
+    func openProgramFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = Self.programFileExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.message = "Choose a G-code or NC program in millimeters"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let data = try? Data(contentsOf: url),
+              let code = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
+            message = "Couldn't read \(url.lastPathComponent)."
+            return
+        }
+        programToConfirm = SavedTestProgram(title: url.lastPathComponent, detail: url.path, code: code, kind: .setup)
+    }
 
     /// One program of a guided job (a G-code project). Returns false (and sets `message`) if refused.
     @discardableResult func runJob(_ name: String, lines: [String]) -> Bool {

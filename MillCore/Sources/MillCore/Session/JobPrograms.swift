@@ -14,17 +14,23 @@ public enum JobProgramCheck {
 
     static let codes: Set<String> = ["G0", "G1", "G2", "G3", "G4", "G10", "G17", "G21", "G40", "G38.2", "G38.3", "G53",
                                      "G54", "G55", "G56", "G57", "G58", "G59", "G90", "G91", "G91.1", "G92.1", "G94",
-                                     "M3", "M4", "M5", "M9"]
+                                     "M2", "M3", "M4", "M5", "M9", "M30"]
 
     public static func clean(_ lines: [String], settings: MillSettings, envelope: MillEnvelope) -> Result<Program, MillRefusal> {
         let maxRPM = settings.values[30] ?? 8000
         var cleaned: [String] = []
         for (index, raw) in lines.enumerated() {
             let n = index + 1
-            let line = raw.replacingOccurrences(of: #"\(.*?\)|;.*"#, with: "", options: .regularExpression)
+            var line = raw.replacingOccurrences(of: #"\(.*?\)|;.*"#, with: "", options: .regularExpression)
                 .replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\t", with: "")
                 .trimmingCharacters(in: .whitespaces).uppercased()
-            if line.isEmpty { continue }
+            // Files from other CAM: `%` tape markers, program numbers and line numbers carry no motion.
+            if line.isEmpty || line.allSatisfy({ $0 == "%" }) || line.wholeMatch(of: /O\d+/) != nil { continue }
+            let numbered = line.firstMatch(of: /^N\d+/).map { String(line[$0.range.upperBound...]) }
+            if let numbered {
+                if numbered.isEmpty { continue }
+                line = numbered
+            }
             if line == "$H" { cleaned.append(line); continue }
             // GRBL answers `$#` only when idle: G4 P0 waits for the moves to finish first.
             if line == "$#" { cleaned += ["G4P0", line]; continue }

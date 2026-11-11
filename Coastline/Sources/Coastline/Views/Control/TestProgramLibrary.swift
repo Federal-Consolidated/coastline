@@ -22,9 +22,10 @@ struct TestProgramsMenu: View {
                 .disabled(program.homesFirst ? !mill.canHome : !mill.canRun)
             }
             if !mill.programs.programs.isEmpty { Divider() }
+            Button("Open G-code File…") { mill.openProgramFile() }
             Button("Manage Programs…") { mill.showProgramLibrary = true }
         }
-        .help("Saved motion checks and setup programs; add, edit or favorite programs in Manage Programs")
+        .help("Saved motion checks and setup programs, or open a G-code / NC file to run once")
     }
 }
 
