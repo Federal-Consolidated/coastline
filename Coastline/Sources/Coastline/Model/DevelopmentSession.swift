@@ -11,6 +11,7 @@ private struct DevelopmentSession: Codable {
     var page: String
     var stage: Int
     var viewSide: Int
+    var prepStage: Int
     var selectedSetup: UUID?
     var playhead: Double
     var inspector: Bool
@@ -35,7 +36,7 @@ extension AppModel {
         project.results = savedResults
         let c = renderer.destinationCamera
         var session = DevelopmentSession(project: project, projectPath: projectURL?.path, dirty: projectDirty,
-            page: page.rawValue, stage: stage.rawValue, viewSide: viewSide,
+            page: page.rawValue, stage: stage.rawValue, viewSide: viewSide, prepStage: prepStage,
             selectedSetup: selectedLibraryStep, playhead: playhead, inspector: showInspector,
             cameraTarget: c.target, cameraDistance: c.distance, cameraYaw: c.yaw, cameraPitch: c.pitch,
             orthographic: c.orthographic)
@@ -53,6 +54,7 @@ extension AppModel {
     func restoreDevelopmentSession() async {
         guard let url = developmentSessionURL, !restoredDevelopmentSession else { return }
         restoredDevelopmentSession = true
+        showStart = false
         await loadMachine()
         do {
             if FileManager.default.fileExists(atPath: url.path) {
@@ -66,8 +68,8 @@ extension AppModel {
                 projectURL = session.projectPath.map { URL(fileURLWithPath: $0) }
                 projectDirty = session.dirty
                 enter(JobStage(rawValue: session.stage) ?? .partStock)
-                if session.viewSide != viewSide {
-                    show(side: session.viewSide)
+                if session.viewSide != viewSide || session.prepStage != prepStage {
+                    show(side: session.viewSide, stage: session.prepStage)
                 }
                 if !timeline.entries.isEmpty { seek(session.playhead) }
                 selectedLibraryStep = session.selectedSetup
@@ -93,9 +95,11 @@ extension AppModel {
                 status = restoredResults ? "Debug · session restored" : "Debug · session restored · Regenerate toolpaths for this machine"
             } else {
                 await restoreSession()
+                showStart = part == nil
             }
         } catch {
             errorMessage = "Couldn't restore the debug session: \(error)\n\n" + preserveFailedSession(at: url)
+            showStart = part == nil
         }
         if let page = ProcessInfo.processInfo.environment["COASTLINE_DEV_PAGE"].flatMap(SidebarItem.init(rawValue:)) {
             self.page = page

@@ -51,7 +51,8 @@ private func previewMeshes(_ fixture: Fixture, mesh: MeshData?, app: AppModel, d
         }
         result = [model]
     } else {
-        result = fixture.sceneMeshes(device: device)
+        let kit = app.fixtureMeshes(fixture.kind, device: device)
+        result = kit.isEmpty ? fixture.sceneMeshes(device: device) : kit
     }
     if includeStock, let profile = fixture.planning {
         let s = profile.stockSize

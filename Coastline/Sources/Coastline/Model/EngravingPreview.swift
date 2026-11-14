@@ -8,7 +8,7 @@ extension AppModel {
     func layoutEngravingPreview() {
         let scene = renderer.scene
         scene.remove(id: "engrave.preview")
-        guard !showingStockOnly, viewSide >= 0, let size = displayStockSize else { return }
+        guard !showingMillDown, !showingStockOnly, viewSide >= 0, let size = displayStockSize else { return }
         let texts = operations.filter { $0.kind == .engrave && $0.enabled }.compactMap(\.engraving).filter { $0.side == viewSide || !twoSided }
         guard !texts.isEmpty else { return }
         let o = workOrigin(stockSize: size)
@@ -16,10 +16,12 @@ extension AppModel {
         let purple = SceneColor.highlight
         var segs: [LineSegment] = []
         for e in texts {
+            for dy in copyOffsets(for: setup) {  // one per batched copy (just 0 without batching)
             for loop in e.polylines(tolerance: 0.05) {
                 for (a, b) in zip(loop, loop.dropFirst()) {
-                    segs.append(LineSegment(SIMD3<Float>(SIMD3(a.x, a.y, z) + o), SIMD3<Float>(SIMD3(b.x, b.y, z) + o), color: purple))
+                    segs.append(LineSegment(SIMD3<Float>(SIMD3(a.x, a.y + dy, z) + o), SIMD3<Float>(SIMD3(b.x, b.y + dy, z) + o), color: purple))
                 }
+            }
             }
         }
         if let l = SceneLines(device: renderer.device, id: "engrave.preview", segments: segs) { scene.setLines(l) }

@@ -39,8 +39,10 @@ extension AppModel {
 
     /// The step's instructions, short and in order (the guided job has the long form).
     func instructions(for step: JobStep) -> [String] {
+        if !setup.planFromFixtureLibrary, setup.holding != .custom { return kitInstructions(for: step) }
         let material = stock?.material
         switch step.kind {
+        case .prepSetup: return kitInstructions(for: step)
         case .program where (step.program ?? 0) >= 2000:
             return [
                 "**By hand, at the machine:** this animation only shows the order. The sender can't feel the stock here, so you jog.",

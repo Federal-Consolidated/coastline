@@ -1,9 +1,13 @@
 import Foundation
 
 let suites: [(String, [TestCase])] = [
+    ("YAMLSubset", yamlTests),
+    ("Project", projectTests),
     ("GCode", gcodeTests),
+    ("Guided", guidedTests),
     ("Manual", manualTests),
     ("Firmware", firmwareTests),
+    ("Writer", writerTests),
     ("GRBL", grblTests),
     ("Mock", mockTests),
     ("SessionCore", sessionCoreTests),

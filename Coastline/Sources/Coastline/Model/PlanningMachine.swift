@@ -145,12 +145,19 @@ extension AppModel {
             components[id] = part.group
             roles[id] = part.role
         }
+        let fixtureParts: [FixturePart]
+        if kitParts.isEmpty {
+            let engine = try connectedEngine()
+            fixtureParts = try await engine.fixtureKit()
+        } else { fixtureParts = kitParts }
         try Task.checkCancellation()
 
         // Invalidate before replacing the assignment: old results must never acquire the
         // new profile's identity in an autosave or background completion.
         clearToolpathResults()
         analysisTask?.cancel()
+        prepRevealTask?.cancel()
+        tourTask?.cancel()
         toolChangeTask?.cancel()
         toolChangeStop = nil
         flipTask?.cancel()
@@ -170,7 +177,11 @@ extension AppModel {
         collisionPrefixes = [:]
         opCache.removeAll()
         opCacheOrder.removeAll()
+        prepProgramCache = nil
+        clampFieldCache = nil
+        cClampFrameCache = nil
         toolChangeSpotCache = nil
+        kitShiftCache = nil
         referencePlan = nil
         travelIssue = nil
         planCandidates = []
@@ -188,6 +199,7 @@ extension AppModel {
         machineModel = model
         machineSceneComponents = components
         machineSceneRoles = roles
+        kitParts = fixtureParts
         for mesh in meshes { renderer.scene.setMesh(mesh) }
         machineLoaded = true
         planningMachineProblem = geometry.map { $0.supportsVettedFixtureMounting } == false

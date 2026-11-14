@@ -125,10 +125,11 @@ struct FixtureInspector: View {
             } else {
             InventoryPreviewSection(
                 name: fixture.name,
-                key: "\(fixture.id)-\(fixture.kind)-\(fixture.clampAxis)-\(fixture.height)-\(String(describing: fixture.gripRange))-\(app.machineLoaded)",
-                note: "A representative model."
+                key: "\(fixture.id)-\(fixture.kind)-\(fixture.clampAxis)-\(fixture.height)-\(String(describing: fixture.gripRange))-\(app.machineLoaded)-\(app.kitParts.count)",
+                note: "Clamp kit geometry where available; otherwise a representative model."
             ) { [fixture] device in
-                fixture.sceneMeshes(device: device)
+                let kit = app.fixtureMeshes(fixture.kind, device: device)
+                return kit.isEmpty ? fixture.sceneMeshes(device: device) : kit
             }
             }
             Section("Fixture") {
