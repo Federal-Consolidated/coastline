@@ -28,6 +28,15 @@ in the same guided flow.
 - From the generated results, **Export Selected Code** saves individual probing, setup, cutting and air-cut files. **Run on Machine** opens the built-in guided runner with stock prep and part setups in order; each program still requires its Run button. Contour-map surface following and reference-bore host macros require exporting to a compatible sender.
 - **Projects:** one list for planned projects (made in Coastline from CAD) and G-code projects (guided jobs around G-code that already exists). Import takes a shared `.zip`, a `.coastline` file, an older `.dd` or `.crproj` job, a job folder or G-code files; Export saves a project as one `.zip` to share.
 
+On the `xioaniumi` branch, Coastline also keeps the original CR-1 workflow next to all of the above:
+
+- **Clamp kit and bed holding:** the universal clamp kit, flat on the bed, prep on the bed then the kit, or shoulders milled at the ends; squaring and milling down oversized stock; batching several copies along a bar.
+- **Guided `.crproj` export** for CRWrite, next to the built-in runner.
+- **Side tools:** a printable soft nest for the part (File ▸ Print a Nest…), the Quality ↔ Time tuner with tool wear and cost, and the simulated-vs-CAD deviation map.
+- **Examples and first cut:** four example parts with saved projects, and the first-cut checklist for the CR-1 (Projects ▸ First Cut).
+
+Every feature, with its files and tests, is in [docs/FEATURES.md](docs/FEATURES.md); how the two branches trade features is in [docs/SYNC.md](docs/SYNC.md).
+
 ## Stock, tool and material libraries
 
 Use **Import Library…** on Stock, Tools or Materials to preview a `.coastlib` file
