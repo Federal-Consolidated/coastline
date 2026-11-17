@@ -48,6 +48,8 @@ def test_simulated_machine_end_to_end(qt):
         assert mill.offsetUndo == "Zero X Y"
         mill.undoOffset()
         assert wait(qt, lambda: mill.offsetUndo == "")
+        # The go-to form starts from the shown work position: wait until it shows the undone offset.
+        assert wait(qt, lambda: mill.state["work"][0] not in ("0", "-0"), 10), mill.state["work"]
         assert wait(qt, lambda: mill.state["gates"]["run"] == "")
         mill.requestGoTo("position")
         mill.setGoToField("z", -5)
