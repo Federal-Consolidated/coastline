@@ -1,0 +1,20 @@
+"""Every screen on a real generated job, headless: the workspace stages, playback, measuring, the
+jog panel, the record dialog, the Projects, Machine, Control and inventory pages. Fails on any QML
+error."""
+
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+APP = Path(__file__).resolve().parents[1]
+SCRIPT = 'import os, sys, faulthandler\nfaulthandler.dump_traceback_later(900, exit=True)\nos.environ[\'COASTLINE_SCRIPT\']=\'1\'\nfrom pathlib import Path\nfrom coastline_app import paths\nfrom coastline_app.application import create_app\nfrom coastline_app.core.plan.setup import Workholding\nfrom coastline_app.model.tasks import spawn, Sleep\nfrom PySide6.QtCore import QObject\napp = create_app(sys.argv[:1])\nwarnings = []\napp.qml.warnings.connect(lambda ws: warnings.extend(w.toString() for w in ws))\nws = app.backend\ninv = app.root.inventory\nshot = os.environ.get("SHOT")\ndef grab(name):\n    if not shot: return\n    win = app.qml.rootObjects()[0]\n    img = win.grabWindow()\n    img.save(f"/tmp/ui_{name}.png")\ndef run():\n    yield from ws.load_machine()\n    yield from ws.import_part(paths.SAMPLES_DIR / "pendant.step")\n    for s in ("partStock", "stock"):\n        ws.enterStage(s); yield Sleep(0.4); grab(s)\n    c = ws.guided_stock_choices(inv.inventory); ws.use_guided_stock(c[0].stock, inv.inventory)\n    def custom(s):\n        s.holding = Workholding.CUSTOM; s.plan_from_fixture_library = False\n    ws.change_setup(custom)\n    yield from ws.run_analysis()\n    ws.enterStage("planning"); yield Sleep(0.4); grab("planning0")\n    yield from ws.find_plans(inv.inventory)\n    yield Sleep(0.3); grab("planning")\n    ws.use_plan(next(c for c in ws.plan_options if c.name == ws.recommended_plan))\n    yield from ws.generate_toolpaths(inv.inventory)\n    print("programs", len(ws.programs), ws.errorMessage)\n    for s in ("setups", "machining", "review", "planning"):\n        ws.enterStage(s); yield Sleep(0.5); grab(s)\n    ws.enterStage("machining"); yield Sleep(0.3)\n    ws.togglePlay(); yield Sleep(1.0); ws.togglePlay(); grab("playing")\n    ws.measuring = True; yield Sleep(0.2); ws.measuring = False\n    ws.setFlag("jogOpen", True); yield Sleep(0.3); grab("jog"); ws.setFlag("jogOpen", False)\n    ws.recordJob(); yield Sleep(0.4); grab("record"); app.root.journal.cancelDraft()\n    app.root.page = "projects"; yield Sleep(0.5); grab("projects")\n    jobs = app.root.jobs\n    if jobs.entries:\n        jobs.selectJob(str(jobs.entries[0].folder))\n        page = app.qml.rootObjects()[0].findChild(QObject, "pageLoader").property("item")\n        page.select("job:" + str(jobs.entries[0].folder))\n        yield Sleep(0.5)\n        d = jobs.detail()\n        prog = next((st["program"] for su in d["setups"] for st in su["steps"] if st["program"]), None)\n        if prog: jobs.showProgram(prog)\n        yield Sleep(2.0); grab("job")\n        jobs.startRun(True); yield Sleep(0.5); grab("runner")\n        jobs.nextStep(); yield Sleep(0.3); jobs.nextStep(); yield Sleep(0.5); grab("runner2")\n        jobs.endRun()\n    for p in ["machine", "control", "stock", "tools"]:\n        app.root.page = p; yield Sleep(3.0 if p == "machine" else 0.4); grab(p)\n    win = app.qml.rootObjects()[0]\n    from PySide6.QtCore import QMetaObject\n    app.qt.quit()\ndef fail(e):\n    import traceback; traceback.print_exception(e); app.qt.quit()\nspawn(run(), "ui", on_error=fail)\napp.qt.exec()\nfor w in warnings: print("QML:", w)\nprint("warnings", len(warnings))\nos._exit(1 if warnings else 0)\n'
+
+
+def test_every_screen_on_a_real_job(tmp_path):
+    env = dict(os.environ, COASTLINE_SCRIPT="1", COASTLINE_DATA_DIR=str(tmp_path), COASTLINE_CACHE_DIR=str(tmp_path / "cache"),
+               QT_QPA_PLATFORM="offscreen", QT_QUICK_BACKEND="rhi", QSG_RHI_BACKEND="null")
+    result = subprocess.run([sys.executable, "-u", "-c", SCRIPT], cwd=APP, env=env, capture_output=True, text=True, timeout=900)
+    out = result.stdout + result.stderr
+    assert result.returncode == 0 and re.search(r"programs [1-9]", out) and "warnings 0" in out, out[-4000:]

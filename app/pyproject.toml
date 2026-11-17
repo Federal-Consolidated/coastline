@@ -1,0 +1,31 @@
+[project]
+name = "coastline-app"
+version = "0.1.0"
+description = "Coastline desktop app (Qt Quick, Windows and macOS)"
+# Same interpreter line as engine/ so both can later share one bundled Python.
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "pyside6-essentials>=6.8",
+  "numpy>=1.26",
+  "pyserial>=3.5",
+  # Apple's SF Symbols, drawn by macOS itself (they may only be used on Apple systems).
+  "pyobjc-framework-Cocoa>=10; sys_platform == 'darwin'",
+]
+
+[project.scripts]
+coastline = "coastline_app.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "pybind11>=2.12", "setuptools>=70"]
+# Only for scripts/bake_shaders.py: Qt's `qsb` shader tool ships in the add-ons wheel.
+shaders = ["pyside6-addons>=6.8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["coastline_app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

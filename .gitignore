@@ -10,7 +10,11 @@ engine/.venv/
 engine/build/
 __pycache__/
 engine/.pytest_cache/
-engine/coastline_engine/_native*.so
+# app (Qt)
+app/.venv/
+app/.pytest_cache/
+app/coastline_app/_kernels*
+engine/coastline_engine/_native*
 /build/
 *.zip
 # Vendor tool models (not redistributable)

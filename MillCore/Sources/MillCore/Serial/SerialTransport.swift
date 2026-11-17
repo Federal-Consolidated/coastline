@@ -16,10 +16,18 @@ public protocol SerialTransport: AnyObject, Sendable {
 public struct MillDevice: Hashable, Sendable, Identifiable {
     public var path: String
     public var serialNumber: String
+    /// The USB vendor and product ID, `2341:0043` (empty when not known), for diagnostics.
+    public var usbID: String
     public var id: String { path + "#" + serialNumber }
 
-    public init(path: String, serialNumber: String) {
+    public init(path: String, serialNumber: String, usbID: String = "") {
         self.path = path
         self.serialNumber = serialNumber
+        self.usbID = usbID
+    }
+
+    /// One line for the console: where it is, which USB device and its serial number.
+    public var diagnostics: String {
+        "\(path)" + (usbID.isEmpty ? "" : " · USB \(usbID)") + (serialNumber.isEmpty || serialNumber == path ? " · no serial number" : " · serial \(serialNumber)")
     }
 }

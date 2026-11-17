@@ -28,7 +28,7 @@ public final class MillSession: @unchecked Sendable {
     /// app or a lost key-up cannot leave the machine jogging.
     public static let holdTimeout: TimeInterval = 0.4
 
-    /// Plugged-in mills (USB IDs 2341:0043 and 1A86:7523).
+    /// Plugged-in mills (USB IDs 2341:0043, 2341:003E and 1A86:7523).
     public static func availablePorts() -> [MillDevice] { PortFinder.availableMills() }
 
     // Shared with other threads.
@@ -421,6 +421,9 @@ public final class MillSession: @unchecked Sendable {
 
     private func note(_ text: String) { log(.note, text) }
 
+    /// A note in the console from the app (ports found and removed).
+    public func noteInConsole(_ text: String) { log(.note, text) }
+
     // MARK: I/O thread
 
     private enum Phase { case waitingForBanner, bootMessages, probing, ready }
@@ -451,6 +454,12 @@ public final class MillSession: @unchecked Sendable {
         var midpoint = 0.0
         /// An M101 in progress: G4 P0, then `$#` and the check.
         var check: M101.Call?
+        /// An M102 in progress (G4 P0 → `$#` → G10 L2 → `$#`) and the value it writes.
+        var expression: M102.Call?
+        var value = 0.0
+        /// An M106 in progress: G4 P0, then `$#` and the check.
+        var assertion: M106.Call?
+        var inMacro: Bool { macro != nil || check != nil || expression != nil || assertion != nil }
         /// The line sent last was `$H`: wait for the home check before going on.
         var homing = false
     }
@@ -882,7 +891,7 @@ public final class MillSession: @unchecked Sendable {
                 }
                 program.homing = false
             }
-            if program.macro != nil || program.check != nil {
+            if program.inMacro {
                 io.program = program
                 return  // the macro's next line goes out when the last one is answered
             }
@@ -898,6 +907,25 @@ public final class MillSession: @unchecked Sendable {
                     log(.sent, line)
                     write(line, session)
                     io.pending = Pending(line: line, kind: .home, deadline: now + Self.homingLimit + 5)
+                    return
+                }
+                if let call = M102.parse(line) {
+                    // M102: wait for the moves to finish, read the offsets, work out the
+                    // expression, write it, read the offsets again to check it.
+                    program.expression = call
+                    program.macroStep = 0
+                    io.program = program
+                    log(.note, "M102: G\(call.destination.wcs) \(call.destination.axis.rawValue) = \(call.expression).")
+                    sendMacro("G4P0", &io, session, now)
+                    return
+                }
+                if let call = M106.parse(line) {
+                    // M106: wait for the moves to finish, read the offsets, check them.
+                    program.assertion = call
+                    program.macroStep = 0
+                    io.program = program
+                    log(.note, "M106: \(call.text)")
+                    sendMacro("G4P0", &io, session, now)
                     return
                 }
                 if let call = M101.parse(line) {
@@ -1096,6 +1124,8 @@ public final class MillSession: @unchecked Sendable {
     /// One answered line of an M100: G4 P0 → `$#` → G10 L2 → `$#` (check).
     private func macroStep(_ pending: Pending, _ io: inout IOState, _ session: Link, _ now: TimeInterval) {
         if let check = io.program?.check { return checkStep(check, pending, &io, session, now) }
+        if let call = io.program?.expression { return expressionStep(call, pending, &io, session, now) }
+        if let call = io.program?.assertion { return assertionStep(call, pending, &io, session, now) }
         guard var program = io.program, let call = program.macro else { return }
         func fail(_ why: String) {
             io.s.lastError = "M100: \(why)"
@@ -1135,6 +1165,76 @@ public final class MillSession: @unchecked Sendable {
             io.program = program
             io.s.program?.done += 1
         }
+    }
+
+    /// One answered line of an M102: G4 P0 → `$#` → G10 L2 → `$#` (check).
+    private func expressionStep(_ call: M102.Call, _ pending: Pending, _ io: inout IOState, _ session: Link, _ now: TimeInterval) {
+        guard var program = io.program else { return }
+        let target = "G\(call.destination.wcs) \(call.destination.axis.rawValue)"
+        func fail(_ why: String) {
+            io.s.lastError = "M102: \(why)"
+            log(.error, io.s.lastError!)
+            endProgram(&io, .failed(io.s.lastError!))
+            io.queue.append(("M5", .console))
+        }
+        switch program.macroStep {
+        case 0:
+            program.macroStep = 1
+            io.program = program
+            sendMacro("$#", &io, session, now)
+        case 1:
+            let offsets = pending.replies.compactMap(Self.parseOffset)
+            io.s.offsets = offsets
+            switch M102.value(call, offsets) {
+            case .failure(let why): return fail(why.text)
+            case .success(let value):
+                program.value = value
+                program.macroStep = 2
+                io.program = program
+                sendMacro(String(format: "G10L2P%d%@%.3f", call.destination.wcs - 53, call.destination.axis.rawValue, value), &io, session, now)
+            }
+        case 2:
+            program.macroStep = 3
+            io.program = program
+            sendMacro("$#", &io, session, now)
+        default:
+            let offsets = pending.replies.compactMap(Self.parseOffset)
+            io.s.offsets = offsets
+            // `$#` shows 3 decimals: the stored value must round to the one worked out.
+            guard let got = offsets.first(where: { $0.name == "G\(call.destination.wcs)" })?.point[call.destination.axis] else {
+                return fail("the offsets could not be read back.")
+            }
+            guard abs(got - program.value) <= 0.0015 else {
+                return fail(String(format: "%@ is %.3f, expected %.3f.", target, got, program.value))
+            }
+            note(String(format: "M102: %@ = %.3f.", target, got))
+            program.expression = nil
+            io.program = program
+            io.s.program?.done += 1
+        }
+    }
+
+    /// One answered line of an M106: G4 P0 → `$#` → compare.
+    private func assertionStep(_ call: M106.Call, _ pending: Pending, _ io: inout IOState, _ session: Link, _ now: TimeInterval) {
+        guard var program = io.program else { return }
+        if program.macroStep == 0 {
+            program.macroStep = 1
+            io.program = program
+            return sendMacro("$#", &io, session, now)
+        }
+        let offsets = pending.replies.compactMap(Self.parseOffset)
+        io.s.offsets = offsets
+        if let why = M106.problem(call, offsets) {
+            io.s.lastError = "M106: \(why)"
+            log(.error, io.s.lastError!)
+            endProgram(&io, .failed(io.s.lastError!))
+            io.queue.append(("M5", .console))
+            return
+        }
+        note("M106: \(call.text.range(of: "error", options: [.caseInsensitive, .backwards]).map { String(call.text[..<$0.lowerBound]) } ?? call.text) holds.")
+        program.assertion = nil
+        io.program = program
+        io.s.program?.done += 1
     }
 
     /// One answered line of an M101: G4 P0 → `$#` → compare.

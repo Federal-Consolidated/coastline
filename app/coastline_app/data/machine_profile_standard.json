@@ -1,0 +1,69 @@
+{
+  "acceleration" : {
+    "x" : 500,
+    "y" : 500,
+    "z" : 500
+  },
+  "arcTolerance" : 0.002,
+  "colletName" : "ER-11",
+  "colletSeatDepth" : 22.9,
+  "edgeFinderTipDiameter" : 5.08,
+  "estimatedSpindlePower" : 150,
+  "homePosition" : {
+    "x" : -86,
+    "y" : -0.5,
+    "z" : -0.5
+  },
+  "junctionDeviation" : 0.02,
+  "machineEnvelope" : {
+    "x" : [
+      -86,
+      -0.5
+    ],
+    "y" : [
+      -241.5,
+      -0.5
+    ],
+    "z" : [
+      -78.5,
+      -0.5
+    ]
+  },
+  "maxLineLength" : 79,
+  "maxRate" : {
+    "x" : 2540,
+    "y" : 3100,
+    "z" : 3100
+  },
+  "maxShankDiameter" : 8,
+  "maxToolLength" : 76.2,
+  "name" : "Desktop Mill",
+  "physicalEnvelope" : {
+    "x" : 89,
+    "y" : 242,
+    "z" : 79
+  },
+  "plannerBlocks" : 16,
+  "powerOnDistanceModeIsIncremental" : true,
+  "probeFeed" : 20,
+  "probeSpindleRPM" : 1500,
+  "spindleRPM" : [
+    1500,
+    8000
+  ],
+  "spindleRampIntermediateRPM" : 5000,
+  "tSlotCount" : 2,
+  "tSlotNut" : "M4 T-slot nut, 11 × 3.14 × 15.87 mm (Fairway JPPNM04016)",
+  "toolChangeMoves" : [
+    "$H",
+    "G53 G0 Z-1",
+    "G53 G0 Y-58",
+    "G53 G0 X-1",
+    "G53 G0 Z-60"
+  ],
+  "travel" : {
+    "x" : 86.5,
+    "y" : 241.5,
+    "z" : 78.5
+  }
+}

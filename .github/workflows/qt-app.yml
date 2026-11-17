@@ -1,0 +1,63 @@
+# The Qt app (app/) for Windows and macOS: tests, then the packaged app as a build artifact
+# (Windows: Coastline-Setup.exe; macOS: "Coastline Qt.app" zipped). Started by hand only
+# (Actions ▸ Qt app ▸ Run workflow): it publishes no release and leaves the DMG release alone.
+name: Qt app
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    env:
+      UV_PYTHON_PREFERENCE: only-managed  # uv's relocatable CPython: package.py copies it into the app
+      QT_QPA_PLATFORM: offscreen
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Environments
+        run: |
+          (cd engine && uv sync --frozen)
+          (cd app && uv sync --frozen --group dev --group shaders)
+
+      - name: Native kernels and shaders
+        working-directory: app
+        run: |
+          uv run python scripts/build_native.py
+          uv run python ../engine/native/build.py
+          uv run --group shaders python scripts/bake_shaders.py
+
+      - name: Tests
+        working-directory: app
+        run: uv run python -m pytest -q
+
+      - name: Inno Setup
+        if: runner.os == 'Windows'
+        run: choco install innosetup -y --no-progress
+
+      - name: Package
+        working-directory: app
+        run: uv run python scripts/package.py
+
+      - name: Zip the Mac app
+        if: runner.os == 'macOS'
+        run: cd build/qt && ditto -c -k --keepParent "Coastline Qt.app" "Coastline-Qt-mac.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coastline-qt-${{ runner.os }}
+          path: |
+            build/qt/Coastline-Setup.exe
+            build/qt/Coastline-Qt-mac.zip
+          if-no-files-found: error

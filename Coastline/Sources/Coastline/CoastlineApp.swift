@@ -382,6 +382,7 @@ enum Automation {
                 print("page=\(model.page) status=\(model.status) tools=\(inventory.inventory.tools.count) stock=\(inventory.inventory.stock.count) error=\(inventory.lastError ?? "-")")
             case "accent": if let a = AppSettings.Accent(rawValue: arg) { AppSettings.shared.accent = a }
             case "wait": try? await Task.sleep(for: .seconds(Double(arg) ?? 1))
+            case "wsnap": WindowSnapshot.capture(to: URL(fileURLWithPath: arg))
             case "quit":  // a sheet on top would hold the app open
                 try? await Task.sleep(for: .milliseconds(300))
                 NSApplication.shared.terminate(nil)

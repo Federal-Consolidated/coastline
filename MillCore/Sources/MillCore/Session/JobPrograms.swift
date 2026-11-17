@@ -1,7 +1,7 @@
 import Foundation
 
 /// Checks a guided job's program before it runs: the words a job may use (moves, arcs, probing,
-/// work offsets, the spindle, `$H`, `$#`, Coastline's M100 and M101), the spindle limit, and the machine-
+/// work offsets, the spindle, `$H`, `$#`, Coastline's M100, M101, M102 and M106), the spindle limit, and the machine-
 /// coordinate moves against the envelope. Moves in work coordinates are left to the
 /// controller's soft limits: probing changes the work offset while the program runs.
 public enum JobProgramCheck {
@@ -21,6 +21,25 @@ public enum JobProgramCheck {
         var cleaned: [String] = []
         for (index, raw) in lines.enumerated() {
             let n = index + 1
+            // M102 and M106 keep their text: their expressions use parentheses (not comments here)
+            // and M106's message is shown as written. Coastline runs them, not the controller.
+            let host = raw.replacingOccurrences(of: #";.*"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: #"^\s*[Nn]\d+\s*"#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            if host.uppercased().hasPrefix("M102") {
+                guard M102.parse(host) != nil else {
+                    return .failure(.blocked("Line \(n): M102 needs a work offset and an expression, e.g. M102 G55X ((G56X + G57X)/2)."))
+                }
+                cleaned.append(host)
+                continue
+            }
+            if host.uppercased().hasPrefix("M106") {
+                guard M106.parse(host) != nil else {
+                    return .failure(.blocked("Line \(n): M106 needs a work offset, a comparison and a number or offset, e.g. M106 G58X > 3.2 error: bore too small."))
+                }
+                cleaned.append(host)
+                continue
+            }
             var line = raw.replacingOccurrences(of: #"\(.*?\)|;.*"#, with: "", options: .regularExpression)
                 .replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\t", with: "")
                 .trimmingCharacters(in: .whitespaces).uppercased()
@@ -141,5 +160,89 @@ public enum M101 {
                           values.map { String(format: "%.3f", $0) }.joined(separator: ", "), call.tolerance)
         }
         return nil
+    }
+}
+
+/// `M102`: arithmetic over the work offsets, written into one of them.
+/// `M102 G55X ((G56X + G57X)/2)` sets G55 X to the midpoint of G56 X and G57 X. The forms
+/// `M102 G55 X = …` and `M102 WCS G55 X …` are accepted too. Functions: abs, min, max, sqrt,
+/// floor, ceil, round. Coastline runs it, not the controller: G4 P0, `$#`, G10 L2, `$#` (check).
+public enum M102 {
+    public struct Reference: Sendable, Equatable {
+        public var wcs: Int
+        public var axis: Axis
+    }
+
+    public struct Call: Sendable, Equatable {
+        public var destination: Reference
+        /// The expression without spaces.
+        public var expression: String
+    }
+
+    public static func parse(_ line: String) -> Call? {
+        let text = line.trimmingCharacters(in: .whitespaces)
+        guard let m = text.wholeMatch(of: /(?i)M102\s*(?:WCS\s*)?G5([4-9])\s*([XYZ])\s*=?\s*(.+)/),
+              let k = Int(m.output.1), let axis = Axis(letter: Character(m.output.2.uppercased())) else { return nil }
+        let expression = String(m.output.3).filter { !$0.isWhitespace }
+        // The syntax only: any register reads as 1 here.
+        guard !expression.isEmpty, (try? WCSExpression.evaluate(expression, register: { _ in 1 })) != nil else { return nil }
+        return Call(destination: Reference(wcs: 50 + k, axis: axis), expression: expression)
+    }
+
+    /// The work offsets the expression reads.
+    static func references(_ call: Call) -> [Reference] {
+        call.expression.uppercased().matches(of: /G5([4-9])([XYZ])/).compactMap { m in
+            guard let k = Int(m.output.1), let axis = Axis(letter: Character(String(m.output.2))) else { return nil }
+            return Reference(wcs: 50 + k, axis: axis)
+        }
+    }
+
+    /// The value from a `$#` reply, or why there is none.
+    static func value(_ call: Call, _ offsets: [MillOffset]) -> Result<Double, MillRefusal> {
+        let missing = references(call).filter { r in !offsets.contains { $0.name == "G\(r.wcs)" } }
+        if let r = missing.first { return .failure(.blocked("the controller did not report G\(r.wcs).")) }
+        let register: (String) -> Double? = { name in
+            let upper = name.uppercased()
+            guard let axis = Axis(letter: upper.last ?? " ") else { return nil }
+            return offsets.first { $0.name == String(upper.prefix(3)) }?.point[axis]
+        }
+        guard let value = try? WCSExpression.evaluate(call.expression, register: register) else {
+            return .failure(.blocked("the expression \(call.expression) could not be worked out."))
+        }
+        guard value.isFinite else { return .failure(.blocked("\(call.expression) is not a number (a division by zero?).")) }
+        return .success(value)
+    }
+}
+
+/// `M106`: a check on the work offsets that stops the program when it fails.
+/// `M106 G58X > 3.2 error: bore 1 too small - not found`: the message is what the operator reads.
+/// Coastline runs it, not the controller: G4 P0, `$#`, compare.
+public enum M106 {
+    public struct Call: Sendable, Equatable {
+        /// The comparison and its message, as written (without `M106`).
+        public var text: String
+    }
+
+    public static func parse(_ line: String) -> Call? {
+        let text = line.trimmingCharacters(in: .whitespaces)
+        guard text.uppercased().hasPrefix("M106") else { return nil }
+        let rest = String(text.dropFirst(4)).trimmingCharacters(in: .whitespaces)
+        guard (try? M106Check.parse(rest)) != nil else { return nil }
+        return Call(text: rest)
+    }
+
+    /// `nil` when the check passes, else what the operator is told.
+    public static func problem(_ call: Call, _ offsets: [MillOffset]) -> String? {
+        guard let check = try? M106Check.parse(call.text) else { return "the check \(call.text) could not be read." }
+        for register in [check.left.register, check.right.register] where !register.isEmpty {
+            if !offsets.contains(where: { $0.name == register }) { return "the controller did not report \(register)." }
+        }
+        guard let passed = try? check.evaluate(offsets: offsets.map { ($0.name, $0.point) }) else {
+            return "the check \(call.text) could not be worked out."
+        }
+        if passed { return nil }
+        let message = check.errorMessage.trimmingCharacters(in: .whitespaces)
+        let statement = call.text.range(of: "error", options: [.caseInsensitive, .backwards]).map { String(call.text[..<$0.lowerBound]) } ?? call.text
+        return message.isEmpty ? "the check \(statement.trimmingCharacters(in: .whitespaces)) failed." : message
     }
 }

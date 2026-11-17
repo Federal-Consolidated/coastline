@@ -1,0 +1,36 @@
+[
+  {
+    "clampAxis" : "none",
+    "height" : 25.4,
+    "id" : "A2B94A4F-608C-462C-8D61-DDA9AA3A2C70",
+    "isolated" : false,
+    "kind" : "squaringStop",
+    "name" : "Acetal squaring stop",
+    "notes" : "54 × 19 × 25.4 mm acetal brick, bolted across both T-slots (M4x25 + T-slot nuts). Its spindle-side face sits level with the table's edge, so stock always sticks out past it by the cut + 2 mm.",
+    "quantity" : 2
+  },
+  {
+    "clampAxis" : "none",
+    "height" : 12.7,
+    "id" : "07081FE1-612D-440E-A28B-C6CB085916EE",
+    "isolated" : false,
+    "kind" : "riser",
+    "name" : "Riser plate",
+    "notes" : "12.7 mm aluminium plate under flat stock, placed just behind the squaring stop's face so the cut overhangs it.",
+    "quantity" : 1
+  },
+  {
+    "clampAxis" : "none",
+    "gripRange" : [
+      0,
+      76
+    ],
+    "height" : 0,
+    "id" : "4E47FE96-B25F-438C-8B37-BC628EF31794",
+    "isolated" : false,
+    "kind" : "cClamp",
+    "name" : "3\" C-clamp",
+    "notes" : "Screw C-clamp from the maker's kit: 76 mm opening, 50 mm throat. Reaches around the table's back edge to hold flat stock on the riser.",
+    "quantity" : 2
+  }
+]
