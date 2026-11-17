@@ -8,11 +8,14 @@
 #ifndef OutputDir
   #define OutputDir "."
 #endif
+#ifndef AppVersion
+  #define AppVersion "0.1"
+#endif
 
 [Setup]
 AppId={{6C0A5B0E-7E1D-4C2B-9C1B-C0A57114E001}
 AppName=Coastline
-AppVersion=0.1
+AppVersion={#AppVersion}
 AppPublisher=Coastline
 DefaultDirName={localappdata}\Programs\Coastline
 DefaultGroupName=Coastline

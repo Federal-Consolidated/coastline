@@ -7,6 +7,7 @@ macOS, MSVC on Windows (setuptools picks the compiler). native/build.sh does the
 
 from __future__ import annotations
 
+import sysconfig
 import shutil
 import sys
 import tempfile
@@ -36,7 +37,9 @@ def main() -> None:
         cmd.build_temp = str(Path(tmp) / "build")
         cmd.ensure_finalized()
         cmd.run()
-        built = next(Path(tmp).rglob("_native*"))
+        # The extension module itself (.so or .pyd), not MSVC's .lib/.exp by-products.
+        suffix = sysconfig.get_config_var("EXT_SUFFIX") or (".pyd" if sys.platform == "win32" else ".so")
+        built = next(Path(tmp).rglob("_native*" + suffix))
         target = ENGINE / "coastline_engine" / built.name
         shutil.copy2(built, target)
     print(f"built {target.relative_to(ENGINE)}")

@@ -1,10 +1,14 @@
-# Every push to main: build the engine and the app, run the self-tests, make the standalone
-# disk image (scripts/make-dmg.sh) and publish it as a new GitHub release, "Coastline 0.<n>"
-# (n = the number of commits). The newest is always at …/releases/latest.
+# Every push to main: build the Mac app (disk image) and the Windows app (installer) side by
+# side, then publish both as a new GitHub release, "Coastline 0.<n>" (n = the number of
+# commits). The newest is always at …/releases/latest.
 #
-# The app is signed ad hoc only (no Apple Developer ID yet): on another Mac the first launch
-# needs System Settings ▸ Privacy & Security ▸ Open Anyway.
-name: Release DMG
+# The Mac app is the Swift app (scripts/make-dmg.sh); the Windows app is the Qt app in app/
+# (app/scripts/package.py with Inno Setup). A failed Windows build never holds back the Mac
+# release: the release is published with whatever was built, the disk image at least.
+#
+# Neither app is signed by a paid certificate yet: on another Mac the first launch needs
+# System Settings ▸ Privacy & Security ▸ Open Anyway; on Windows, SmartScreen's More info ▸ Run anyway.
+name: Release
 
 on:
   push:
@@ -59,18 +63,95 @@ jobs:
       - name: Disk image
         run: scripts/make-dmg.sh
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: build/Coastline.dmg
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      UV_PYTHON_PREFERENCE: only-managed  # uv's relocatable CPython: package.py copies it into the app
+      QT_QPA_PLATFORM: offscreen
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the build number is the commit count
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Environments
+        run: |
+          (cd engine && uv sync --frozen)
+          (cd app && uv sync --frozen --group dev --group shaders)
+
+      - name: Native kernels and shaders
+        working-directory: app
+        run: |
+          uv run python scripts/build_native.py
+          uv run python ../engine/native/build.py
+          uv run --group shaders python scripts/bake_shaders.py
+
+      - name: Tests
+        working-directory: app
+        run: uv run python -m pytest -q
+
+      - name: Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Installer
+        working-directory: app
+        run: |
+          export COASTLINE_VERSION="0.$(git rev-list --count HEAD)"
+          uv run python scripts/package.py
+          mv ../build/qt/Coastline-Setup.exe ../build/qt/Coastline-Windows-Setup.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: build/qt/Coastline-Windows-Setup.exe
+          if-no-files-found: error
+
+  publish:
+    needs: [dmg, windows]
+    # The Mac disk image is required; the Windows installer is added when it was built.
+    if: always() && needs.dmg.result == 'success' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
       - name: Publish
-        if: github.ref == 'refs/heads/main'  # a run started by hand on another branch only builds
         env:
           GH_TOKEN: ${{ github.token }}
+          WINDOWS: ${{ needs.windows.result }}
         run: |
           N=$(git rev-list --count HEAD)
           {
             echo "Built from $(git rev-parse --short HEAD): $(git log -1 --format=%s)"
             echo
-            echo "Download Coastline.dmg, open it and drag Coastline to Applications."
+            echo "**Mac:** download Coastline.dmg, open it and drag Coastline to Applications."
             echo "Needs macOS 26 on Apple silicon. The app is not notarized yet: on the first launch,"
             echo "open System Settings ▸ Privacy & Security and press Open Anyway."
+            echo
+            if [ -f assets/Coastline-Windows-Setup.exe ]; then
+              echo "**Windows:** download Coastline-Windows-Setup.exe and run it (Windows 10 or 11, 64-bit)."
+              echo "It installs for you only, with Start-menu and desktop shortcuts. The installer is not signed yet:"
+              echo "if SmartScreen stops it, press More info, then Run anyway."
+            else
+              echo "**Windows:** no installer in this release (the Windows build did not finish: $WINDOWS)."
+            fi
           } > notes.md
-          gh release create "v0.$N" build/Coastline.dmg --target "$GITHUB_SHA" \
+          gh release create "v0.$N" assets/* --target "$GITHUB_SHA" \
             --title "Coastline 0.$N" --notes-file notes.md

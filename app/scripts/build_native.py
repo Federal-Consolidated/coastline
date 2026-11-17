@@ -8,6 +8,7 @@ Windows. Rerun after editing native/src/*.cpp.
 
 from __future__ import annotations
 
+import sysconfig
 import shutil
 import sys
 import tempfile
@@ -36,7 +37,9 @@ def main() -> None:
         cmd.build_temp = str(Path(tmp) / "build")
         cmd.ensure_finalized()
         cmd.run()
-        built = next(Path(tmp).rglob("_kernels*"))
+        # The extension module itself (.so or .pyd), not MSVC's .lib/.exp by-products.
+        suffix = sysconfig.get_config_var("EXT_SUFFIX") or (".pyd" if sys.platform == "win32" else ".so")
+        built = next(Path(tmp).rglob("_kernels*" + suffix))
         target = APP / "coastline_app" / built.name
         shutil.copy2(built, target)
     print(f"built {target.relative_to(APP)}")

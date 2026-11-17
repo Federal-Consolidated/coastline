@@ -139,7 +139,9 @@ def main() -> None:
         print(f"made {bundle}")
         iscc = shutil.which("iscc") or r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
         if Path(iscc).exists():
-            subprocess.run([iscc, f"/DSource={bundle}", f"/DOutputDir={OUT}", str(APP / "installer" / "coastline.iss")], check=True)
+            version = os.environ.get("COASTLINE_VERSION", "0.1")  # the release workflow passes 0.<commit count>
+            subprocess.run([iscc, f"/DSource={bundle}", f"/DOutputDir={OUT}", f"/DAppVersion={version}",
+                            str(APP / "installer" / "coastline.iss")], check=True)
             print(f"made {OUT / 'Coastline-Setup.exe'}")
         else:
             print("Inno Setup not found: the folder is ready; install Inno Setup 6 to make the installer.")
