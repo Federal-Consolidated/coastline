@@ -58,6 +58,12 @@ def copy_tree(src: Path, dst: Path, skip=lambda p: False) -> None:
             copy_tree(item, target)
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists():
+                # uv hard-links identical package files from its cache: the app and engine copies of
+                # one file may be the same file already.
+                if os.path.samefile(item, target):
+                    continue
+                target.unlink()
             shutil.copy2(item, target)
 
 
@@ -122,7 +128,7 @@ def main() -> None:
                           capture_output=True, text=True, check=True).stdout
     req_file = OUT / "requirements.txt"
     req_file.write_text(reqs)
-    subprocess.run(["uv", "pip", "install", "--quiet", "--python", str(py_src / ("python.exe" if WINDOWS else "bin/python3.11")),
+    subprocess.run(["uv", "pip", "install", "--quiet", "--link-mode=copy", "--python", str(py_src / ("python.exe" if WINDOWS else "bin/python3.11")),
                     "--target", str(site), "-r", str(req_file)], check=True)
     copy_tree(site_packages(ROOT / "engine" / ".venv"), site, skip_package)
     prune_qt(site / "PySide6")
