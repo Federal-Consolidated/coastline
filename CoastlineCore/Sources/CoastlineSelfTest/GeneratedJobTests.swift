@@ -165,7 +165,8 @@ let generatedJobTests: [TestCase] = [
         try expectThrows { _ = try GeneratedJob.writeNative(input, to: destination) }
         try expect(!FileManager.default.fileExists(atPath: destination.path))
     },
-    TestCase(name: "nativeJobRejectsReferenceBoresWithUnsupportedHostMacros") {
+    TestCase(name: "nativeJobRunsReferenceBoreMacros") {
+        // M102/M106 (the reference-bore checks) run in Coastline's own runner, like M100/M101.
         var input = generatedInput()
         input.programs[0].reference = .bores
         var back = input.programs[0]
@@ -176,12 +177,8 @@ let generatedJobTests: [TestCase] = [
         let scratch = try generatedScratch()
         defer { try? FileManager.default.removeItem(at: scratch) }
         let destination = scratch.appendingPathComponent("Native")
-        do {
-            _ = try GeneratedJob.writeNative(input, to: destination)
-            throw TestFailure(description: "Reference-bore macros must be refused")
-        } catch let error as NSError {
-            try expect(error.localizedDescription.contains("M102") && error.localizedDescription.contains("guided job"), error.localizedDescription)
-        }
-        try expect(!FileManager.default.fileExists(atPath: destination.path))
+        let job = try GeneratedJob.writeNative(input, to: destination)
+        let texts = try job.programs.map { try String(contentsOf: destination.appendingPathComponent($0.file), encoding: .utf8) }
+        try expect(texts.contains { $0.contains("M102") } && texts.contains { $0.contains("M106") }, "the bore programs keep their checks")
     },
 ]

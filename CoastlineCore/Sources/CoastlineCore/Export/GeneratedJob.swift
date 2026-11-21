@@ -62,7 +62,7 @@ public enum GeneratedJob {
         let built = GuidedJobBuilder.build(input, machine: machine)
         let files = codeFiles(input, machine: machine)
         for file in files where file.kind != .airCut {
-            let unsupported = GCodeReader.read(file.text).macros.subtracting([100, 101]).sorted()
+            let unsupported = GCodeReader.read(file.text).macros.subtracting([100, 101, 102, 106]).sorted()
             if !unsupported.isEmpty {
                 let codes = unsupported.map { "M\($0)" }.joined(separator: ", ")
                 throw failure("\(file.title) uses host codes that the built-in runner does not support yet (\(codes)). Export a guided job for a compatible sender.")

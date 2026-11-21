@@ -268,6 +268,36 @@ let sessionTests: [TestCase] = [
         try expect(session.snapshot.lastError?.contains("out of tolerance") == true, session.snapshot.lastError ?? "no error")
     },
 
+    TestCase(name: "jobProgramRunsM102AndM106") {
+        // M102 (arithmetic into a work offset) and M106 (a check that stops the program).
+        let call = try M102.parse("M102 G57X ((G55X + G56X)/2)").unwrapped()
+        try expect(call.destination == .init(wcs: 57, axis: .x) && call.expression == "((G55X+G56X)/2)")
+        try expect(M102.parse("M102 G55 X = abs(G56X - G57X)")?.destination == .init(wcs: 55, axis: .x))
+        try expect(M102.parse("M102 WCS G54 Y G55Y + 1")?.destination == .init(wcs: 54, axis: .y))
+        try expect(M102.parse("M102 G57X") == nil && M102.parse("M102 G57X ((G55X") == nil && M102.parse("M102 G60X 1") == nil)
+        try expect(M106.parse("M106 G58X > 3.2 error: bore 1 too small") != nil && M106.parse("M106 G58X ~ 3") == nil)
+        let envelope = try MillEnvelope.from(realSettings).unwrapped()
+        let checked = try JobProgramCheck.clean(["G21", "M102 G57X ((G55X + G56X)/2) ; midpoint", "N20 M106 G57X < -14 error: Bore not found"],
+                                                settings: realSettings, envelope: envelope).get()
+        try expectEqual(checked.lines, ["G21", "M102 G57X ((G55X + G56X)/2)", "M106 G57X < -14 error: Bore not found"])
+
+        let mock = millMock()
+        mock.setOffset(55, Point3(x: -10, y: 0, z: 0))
+        mock.setOffset(56, Point3(x: -20.002, y: 0, z: 0))
+        let session = try homed(mock)
+        defer { session.disconnect() }
+        try expect(session.runJob("bores", lines: ["G21", "M102 G57X ((G55X + G56X)/2)", "M106 G57X < -14 error: Bore not found", "G0 Z-1"]) == nil)
+        try waitFor(session, "M102/M106 pass") { $0.program?.name == "bores" && $0.program?.outcome == .completed }
+        try expect(abs(mock.offset(57).x + 15.001) < 0.0011, "G57 X \(mock.offset(57).x)")
+        try expect(mock.receivedLines.contains { $0.hasPrefix("G10L2P4X-15.00") } && mock.receivedLines.contains("G0Z-1"))
+        try expect(!mock.receivedLines.contains { $0.hasPrefix("M102") || $0.hasPrefix("M106") }, "the controller never sees them")
+        try expect(session.runJob("bores2", lines: ["G21", "M106 G57X > -14 error: Bore not found", "G0 Z-2"]) == nil)
+        try waitFor(session, "M106 failure") { if case .failed = $0.program?.outcome { return true } else { return false } }
+        usleep(200_000)
+        try expect(!mock.receivedLines.contains("G0Z-2"), "the program stopped at the check")
+        try expect(session.snapshot.lastError == "M106: Bore not found", session.snapshot.lastError ?? "no error")
+    },
+
     TestCase(name: "simulatedMillFollowsGRBL") {
         // G53 is a machine position in G91 too; G10 L20 makes the current position the value;
         // the travel is a soft limit; probes along one axis and direction find the same face (half way along the first).

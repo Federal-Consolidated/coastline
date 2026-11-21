@@ -404,10 +404,9 @@ struct M106Check {
 
     static func parse(_ text: String) throws -> M106Check {
         // Statement is everything before "error" (case-insensitive); message is after the last "error:".
-        guard let errorRange = text.range(of: "error", options: [.caseInsensitive, .backwards]) else {
-            throw MillError(.m106MalformedTest)
-        }
-        let statement = String(text[..<errorRange.lowerBound])
+        // The error clause is optional (a bare comparison is accepted).
+        let errorRange = text.range(of: "error", options: [.caseInsensitive, .backwards])
+        let statement = errorRange.map { String(text[..<$0.lowerBound]) } ?? text
         var message = ""
         if let colon = text.range(of: "error:", options: [.caseInsensitive, .backwards]) {
             message = String(text[colon.upperBound...])

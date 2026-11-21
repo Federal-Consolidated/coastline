@@ -5,8 +5,9 @@ import IOKit.usb
 
 /// Finds plugged-in mills. Port of `MillFinder_osx.cpp`.
 public enum PortFinder {
-    /// USB vendor/product IDs the original accepted: Arduino Uno (2341:0043) and CH340 (1A86:7523).
-    static let acceptedIDs: Set<[Int]> = [[0x2341, 0x0043], [0x1A86, 0x7523]]
+    /// USB vendor/product IDs of the mill's controller: the mill's Arduino boards
+    /// (2341:0043 and 2341:003E) and CH340 adapters (1A86:7523).
+    static let acceptedIDs: Set<[Int]> = [[0x2341, 0x0043], [0x2341, 0x003E], [0x1A86, 0x7523]]
 
     /// Device-path prefixes. The original only accepted `/dev/cu.usbmodem`, which misses CH340
     /// adapters (they appear as `cu.usbserial-*` / `cu.wchusbserial*`). Deliberate fix.
@@ -29,9 +30,11 @@ public enum PortFinder {
             let vendor = intProperty(device, "idVendor")
             let product = intProperty(device, "idProduct")
             guard acceptedIDs.contains([vendor, product]) else { continue }
-            guard let serial = stringProperty(device, kUSBSerialNumberString, searchParents: true),
-                  !serial.isEmpty else { continue }
-            mills.append(MillDevice(path: path, serialNumber: serial))
+            // A serial number helps tell two mills apart but is not required: some boards and
+            // clones report none. The path stands in for it then.
+            let serial = stringProperty(device, kUSBSerialNumberString, searchParents: true) ?? ""
+            mills.append(MillDevice(path: path, serialNumber: serial.isEmpty ? path : serial,
+                                    usbID: String(format: "%04X:%04X", vendor, product)))
         }
         return mills
     }

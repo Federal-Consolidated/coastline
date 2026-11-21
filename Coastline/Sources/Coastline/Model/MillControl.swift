@@ -84,9 +84,12 @@ final class MillControl {
     @ObservationIgnored private var terminateSignal: DispatchSourceSignal?
     @ObservationIgnored private var lastScan = Date.distantPast
     @ObservationIgnored private var holdStartedAt: Date?
-    /// Ports not to connect to by themselves until they are unplugged: connected once already
-    /// (the operator may have disconnected), or the connect failed.
+    /// Ports not to connect to by themselves until they are unplugged: the operator disconnected.
     @ObservationIgnored private var autoSkip: Set<String> = []
+    /// Automatic connects tried per port: a freshly plugged board may not open at once, so a failed
+    /// one is tried again after 1, 2 and 5 s, then left until it is plugged in again.
+    @ObservationIgnored private var autoAttempts: [String: (count: Int, next: Date)] = [:]
+    static let autoRetryDelays: [TimeInterval] = [1, 2, 5]
     @ObservationIgnored private var setupCheck: (id: UUID, code: String, settings: MillSettings, envelope: MillEnvelope,
                                                  result: Result<JobProgramCheck.Program, MillRefusal>)?
 
@@ -467,10 +470,22 @@ final class MillControl {
         guard now.timeIntervalSince(lastScan) >= 1, ProcessInfo.processInfo.environment["COASTLINE_SCRIPT"] == nil,
               ProcessInfo.processInfo.environment["COASTLINE_DEV"] != "1" else { return }
         lastScan = now
-        guard !isOpen else { return }
+        guard !isOpen else {
+            autoAttempts.removeAll()  // connected: a later unplug starts afresh
+            return
+        }
         let found = MillSession.availablePorts()
-        if found != ports { ports = found }
+        if found != ports {
+            // Port diagnostics in the console: which mills appeared and went, with their USB IDs.
+            for device in found where !ports.contains(device) { session.noteInConsole("Port found: \(device.diagnostics)") }
+            for device in ports where !found.contains(device) { session.noteInConsole("Port removed: \(device.path)") }
+            if found.count > 1, portChoice == .automatic {
+                session.noteInConsole("\(found.count) mills are plugged in: choose one under Diagnostics → Port to connect.")
+            }
+            ports = found
+        }
         autoSkip.formIntersection(found.map(\.path))  // unplugged: may connect again when it is back
+        autoAttempts = autoAttempts.filter { path, _ in found.contains { $0.path == path } }
         guard autoConnect else { return }
         let device: MillDevice? = switch portChoice {
         case .automatic: found.count == 1 ? found[0] : nil
@@ -478,7 +493,11 @@ final class MillControl {
         case .simulated: nil
         }
         guard let device, !autoSkip.contains(device.path) else { return }
-        autoSkip.insert(device.path)  // once per plug-in: a failed connect is not tried again and again
+        let attempt = autoAttempts[device.path] ?? (0, .distantPast)
+        guard attempt.count <= Self.autoRetryDelays.count, now >= attempt.next else { return }
+        if attempt.count > 0 { session.noteInConsole("Trying \(device.path) again (\(attempt.count) of \(Self.autoRetryDelays.count)).") }
+        let delay = Self.autoRetryDelays[min(attempt.count, Self.autoRetryDelays.count - 1)]
+        autoAttempts[device.path] = (attempt.count + 1, now.addingTimeInterval(delay))
         connect()
     }
 

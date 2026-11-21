@@ -152,6 +152,8 @@ the welcome sheet, the start sheet and the app tour.
 ### C1. Machine Control
 Connect over USB, home, jog (eight directions, steps or hold, arrow keys), work zero and G54–G59,
 go to, spindle and overrides, feed hold, resume, stop, console. A digital machine to practise on.
+Connecting retries a freshly plugged board after 1, 2 and 5 s; the console lists ports found and
+removed with their USB IDs (boards 2341:0043, 2341:003E, CH340 1A86:7523; a missing serial number is allowed).
 - **Own files:** `MillCore/Sources/MillCore/Session/` (`MillSession`, `GoTo`, `SessionTypes`,
   `JobPrograms`), `MillCore/Sources/MillCore/Mock/MockGRBL.swift`, `MillCore/Sources/MillCore/GRBL/GRBLText.swift`,
   `Coastline/.../Model/MillControl.swift`, `Coastline/.../Views/Control/`.
@@ -166,6 +168,7 @@ Save, edit, delete and favourite reusable test and setup programs (Machine Contr
 ### C3. Native guided runner and G-code jobs
 "Run on Machine" runs the generated job step by step in Coastline itself. G-code and NC files open
 straight into Machine Control.
+The runner also runs the reference-bore macros M102 (offset arithmetic) and M106 (offset check).
 - **Own files:** `CoastlineCore/.../Export/GeneratedJob.swift`, `Program/ProgramJob.swift`,
   `Program/GCodeReader.swift`, `Coastline/.../Views/Jobs/` (`JobsPage`, `JobRunner`, `JobPreview`),
   `Model/JobsModel.swift`, `Model/JobStepGuide.swift`, `Model/GeneratedPrograms.swift`.
@@ -253,3 +256,7 @@ The planner ranks plans with a 10 % tolerance so identical runs pick the same pl
 ### C14. Release workflow
 `.github/workflows/release.yml` builds the engine and the app on every push to `main`, runs the
 self-tests and publishes a disk image as a GitHub release.
+
+### C15. Qt app (Windows and macOS)
+A cross-platform port of the Swift app in `app/` (PySide6, QML screens, QRhi viewport, same engine).
+Only on `main`; status per file in `app/PORTING.md`. Not on `xioaniumi` yet.
