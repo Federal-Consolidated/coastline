@@ -157,8 +157,6 @@ class MillControl(QObject):
             return s.last_error
         if self.message:
             return self.message
-        if s.status is not None and s.status.probe_tripped:
-            return "Probe contact detected. Release the contact before continuing."
         if s.homing_since is not None:
             return "Homing the machine…"
         if s.link is MillLink.CONNECTED and not s.homed:

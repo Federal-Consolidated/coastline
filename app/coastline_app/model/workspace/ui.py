@@ -314,7 +314,7 @@ class WorkspaceUI(WorkspaceCore):
         k = self.setup.part_scale
         fit = self.scale_to_fit_stock
         return {"file": part.file_name, "kind": part.kind,
-                "size": f"{Length.mm(part.size.x * k)} × {Length.mm(part.size.y * k)} × {Length.mm(part.size.z * k)} mm" + (" (scaled)" if abs(k - 1) > 1e-9 else ""),
+                "size": self.settings.display_units.dimensions(part.size.x * k, part.size.y * k, part.size.z * k) + (" (scaled)" if abs(k - 1) > 1e-9 else ""),
                 "scale": k * 100, "fitScale": fit * 100 if fit is not None else 0, "warnings": list(part.warnings),
                 "faces": part.face_count, "exact": part.exact}
 
@@ -328,7 +328,7 @@ class WorkspaceUI(WorkspaceCore):
         out = []
         for s in inv.stock:
             m = s.material
-            out.append({"id": s.id, "title": f"{m.name if m is not None else '?'} · {s.size_description}", "owned": not s.is_suggestion,
+            out.append({"id": s.id, "title": f"{m.name if m is not None else '?'} · {s.size_description_in(self.settings.display_units)}", "owned": not s.is_suggestion,
                         "selected": s.id == self.stock_id})
         out.sort(key=lambda d: (not d["owned"],))
         return out
@@ -340,7 +340,7 @@ class WorkspaceUI(WorkspaceCore):
         for i, c in enumerate(self.guided_stock_choices(self.inventory)[:3]):
             s = c.stock
             n = c.matching_fixtures
-            out.append({"id": s.id, "title": f"{s.material.name if s.material is not None else 'Stock'} · {s.size_description}",
+            out.append({"id": s.id, "title": f"{s.material.name if s.material is not None else 'Stock'} · {s.size_description_in(self.settings.display_units)}",
                         "detail": f"{n} workholding option matches this stock" if n > 0 else "Fits the part · choose workholding next",
                         "recommended": i == 0, "selected": s.id == self.stock_id})
         return out
@@ -366,12 +366,12 @@ class WorkspaceUI(WorkspaceCore):
         cur = next((o for o in options if list(o.axes) == list(self.setup.stock_axes or [])), None)
         owned = self.stock_lookup(stock.id)
         fits_text = "The part fits inside the stock" if cur is not None and cur.workable else (f"Doesn't fit: {cur.reason}" if cur is not None and cur.reason else "Doesn't fit")
-        return {"size": f"{Length.mm(raw[0])} × {Length.mm(raw[1])} × {Length.mm(raw[2])} mm as bought",
+        return {"size": self.settings.display_units.dimensions(*raw) + " as bought",
                 "fits": bool(cur is not None and cur.workable), "fitsText": fits_text, "owned": owned is not None and owned.quantity > 0,
                 "orientation": cur.summary if cur is not None else "How it sits",
                 "orientations": [{"axes": list(o.axes), "summary": o.summary, "workable": o.workable,
                                   "selected": list(o.axes) == list(self.setup.stock_axes or [])} for o in options],
-                "standardFits": [{"id": s.id, "title": f"{s.material.name if s.material else 'Stock'} · {s.size_description}"}
+                "standardFits": [{"id": s.id, "title": f"{s.material.name if s.material else 'Stock'} · {s.size_description_in(self.settings.display_units)}"}
                                  for s in self.standard_stock_that_fits()] if (cur is None or not cur.workable) else [],
                 "canPlan": self.stage_status("stock").state == "done"}
 
@@ -430,10 +430,11 @@ class WorkspaceUI(WorkspaceCore):
     def sides(self) -> dict:
         a = self.analysis
         split = self.split_z
+        units = self.settings.display_units
         excess = self.one_sided_through_excess
         t = self.tabs
         c = self.setup.custom_fixture
-        return {"twoSided": self.twoSided, "backHasShape": bool(a is not None and self.back_has_shape(a)), "split": Length.mm(split) if split is not None else "",
+        return {"twoSided": self.twoSided, "backHasShape": bool(a is not None and self.back_has_shape(a)), "split": f"{units.format(split)} {units.symbol}" if split is not None else "",
                 "holdWithTabs": self.holdWithTabs, "throughExcess": excess if excess is not None else -1, "tabsCount": t.count,
                 "tabsWidth": t.width, "tabsHeight": t.height, "web": self.webThickness, "library": self.setup.plan_from_fixture_library,
                 "custom": {"name": c.name, "height": c.height, "faceProtrusion": c.face_protrusion, "notes": c.notes},
@@ -626,7 +627,7 @@ class WorkspaceUI(WorkspaceCore):
                     gaps.append({"finding": g.finding, "title": g.title, "summary": g.text, "notSupported": g.category == Category.NOT_SUPPORTED,
                                  "selected": self.selected_finding_id == g.finding})
         return {"part": self.part.file_name if self.part is not None else "No part",
-                "stock": f"{stock.material.name if stock is not None and stock.material is not None else 'Stock'} · {stock.size_description}" if stock is not None else "Choose stock",
+                "stock": f"{stock.material.name if stock is not None and stock.material is not None else 'Stock'} · {stock.size_description_in(self.settings.display_units)}" if stock is not None else "Choose stock",
                 "workholding": holding, "usableTools": len(OperationPlanner.usable_tools(inv, machine=self.machine)),
                 "blocker": blocker or "", "blockerSetups": bool(blocker) and ("Setups" in blocker or "workholding" in blocker.lower()),
                 "buildBlocker": build_blocker or "", "buildBlockerSetups": bool(build_blocker) and "Setups" in build_blocker,

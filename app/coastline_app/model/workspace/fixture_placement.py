@@ -169,9 +169,13 @@ class FixturePlacementMixin:
                         draft.selected_component = mechanism.controls[0].component_id
                 elif centre_unconfigured and not p.grip_definition_reviewed and p.workspace_placed is not True and self.placement_stock_size is not None:
                     size = self.placement_stock_size
-                    lo, hi = geometry.bounds(p)
-                    delta = np.array([0, 0, -size[2] / 2]) - (np.asarray(lo) + np.asarray(hi)) / 2
-                    p = p.moved(Vec3(*map(float, delta)))
+                    table = draft.fixture.assembly.reference_table_origin if draft.fixture.assembly else None
+                    if table is not None:
+                        p.datum = Vec3(table.x + draft.fixture.height + size[0] / 2, table.y, table.z + p.face_past_table)
+                    else:
+                        lo, hi = geometry.bounds(p)
+                        delta = np.array([0, 0, -size[2] / 2]) - (np.asarray(lo) + np.asarray(hi)) / 2
+                        p = p.moved(Vec3(*map(float, delta)))
             p.workspace_placed = True
             draft.fixture.planning = p
             draft.error = None

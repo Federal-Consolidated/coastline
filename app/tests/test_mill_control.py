@@ -25,6 +25,31 @@ def wait(qt, until, seconds=15.0):
     return False
 
 
+def test_probe_edges_preserve_machine_notice(qt):
+    from coastline_app.core.machine.profile import MachineProfile
+    from coastline_app.mill.geometry import LengthUnit
+    from coastline_app.mill.session_types import MillLink
+    from coastline_app.mill.status import RealTimeStatus
+    from coastline_app.model.mill_control import MillControl
+    from coastline_app.model.settings import AppSettings
+
+    mill = MillControl(AppSettings(), MachineProfile.standard())
+    try:
+        mill.snapshot.link = MillLink.CONNECTED
+        for alarm in (None, "Controller alarm"):
+            mill.snapshot.last_alarm = alarm
+            for contact in (False, True, False):
+                pins = "P000" if contact else "0000"
+                mill.snapshot.status = RealTimeStatus.parse(
+                    f"<Idle|M:0,0,0|B:15,127|L:0|{pins}>", 54, LengthUnit.MILLIMETERS, 21, 90)
+                mill._publish()
+                assert mill.state["notice"] == (alarm or "Home the machine before jogging.")
+                assert mill.state["probeTripped"] is contact
+                assert mill.state["probe"] == ("Probe: Contact" if contact else "Probe: Open")
+    finally:
+        mill.shutdown()
+
+
 def test_simulated_machine_end_to_end(qt):
     from coastline_app.core.machine.profile import MachineProfile
     from coastline_app.model.mill_control import MillControl

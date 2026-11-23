@@ -170,6 +170,7 @@ class WorkspaceCore(QObject):
         self.inventory_model = inventory
         self.journal = journal
         self.settings = settings
+        settings.unitsChanged.connect(self.touch)
         self.mill = mill
         self.scene = Scene(self)
         self.scene.group_for_id = group_for_id
@@ -857,7 +858,7 @@ class WorkspaceCore(QObject):
         if part is None or stock is None:
             return []
         lo, hi = self.setup.rotated_part_bounds(part.bounds_min, part.bounds_max)
-        return stock_options(stock, np.asarray(hi) - np.asarray(lo), self.setup.stock_axes)
+        return stock_options(stock, np.asarray(hi) - np.asarray(lo), self.setup.stock_axes, self.settings.display_units)
 
     def best_stock_axes(self, item) -> list[int] | None:
         return next((o.axes for o in self.stock_options(item) if o.workable), None)

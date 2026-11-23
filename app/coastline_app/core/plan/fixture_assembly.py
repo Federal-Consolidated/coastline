@@ -89,6 +89,9 @@ class FixtureAssemblyDefinition:
     vise: ViseDefinition | None = None
     is_assembled: bool = True  # exploded/reference CAD may be previewed but not approved for machining
 
+    reference_table_origin: Vec3 | None = None
+    planning_limitation: str | None = None
+
     def __hash__(self) -> int:
         return hash((self.id, self.revision, self.model_sha256))
 
@@ -102,12 +105,18 @@ class FixtureAssemblyDefinition:
             bookends=BookendDefinition.from_json(d["bookends"]) if d.get("bookends") is not None else None,
             clamp_pair=codable.from_json(ClampPairDefinition, d["clampPair"]) if d.get("clampPair") is not None else None,
             vise=codable.from_json(ViseDefinition, d["vise"]) if d.get("vise") is not None else None,
-            is_assembled=bool(d.get("isAssembled", True)))
+            is_assembled=bool(d.get("isAssembled", True)),
+            planning_limitation=d.get("planningLimitation"),
+            reference_table_origin=codable.from_json(Vec3, d["referenceTableOrigin"]) if d.get("referenceTableOrigin") is not None else None)
 
     def to_json(self) -> dict:
         out = {"schemaVersion": self.schema_version, "id": self.id, "revision": self.revision,
                "modelSHA256": self.model_sha256, "components": codable.to_json(self.components),
                "isAssembled": self.is_assembled}
+        if self.planning_limitation is not None:
+            out["planningLimitation"] = self.planning_limitation
+        if self.reference_table_origin is not None:
+            out["referenceTableOrigin"] = codable.to_json(self.reference_table_origin)
         if self.bookends is not None:
             out["bookends"] = self.bookends.to_json()
         if self.clamp_pair is not None:
@@ -118,6 +127,8 @@ class FixtureAssemblyDefinition:
 
     @property
     def planning_issues(self) -> list[str]:
+        if self.planning_limitation is not None:
+            return [self.planning_limitation]
         return [] if self.is_assembled else [
             "This CAD is an exploded/reference view. An assembled fixture definition is required before planning cuts."]
 
@@ -130,6 +141,8 @@ class FixtureAssemblyDefinition:
             issues.append("The assembly needs an ID and positive revision.")
         if not re.fullmatch(r"[0-9a-fA-F]{64}", self.model_sha256):
             issues.append("The assembly needs the exact CAD SHA-256.")
+        if self.reference_table_origin is not None and not all(math.isfinite(v) and abs(v) <= 1e6 for v in self.reference_table_origin):
+            issues.append("Invalid fixture table origin.")
         if not self.components or len(self.components) > 256:
             issues.append("The assembly must have 1–256 components.")
         ids = {c.id for c in self.components}

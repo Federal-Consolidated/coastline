@@ -20,7 +20,11 @@ class _Entry:
     definition: str
 
 
+UNIVERSAL_PAIR = "fixtures/universal-clamps/assembly.step"
+UNIVERSAL_PAIR_NOTES = "Fusion X-table reference pair. The 2 × 2 in stock overlaps the modeled upper jaws by 3.81 mm, and mounting hardware intersects the table."
+
 ENTRIES = [
+    _Entry("2617d8b2a8265cc9de357be02f960474e711570d7423c442dd135baab6ced2b1", UNIVERSAL_PAIR, "fixtures/universal-clamps/definition.json"),
     _Entry("cc141eb5ee58f00fb420ab2272d84bb448de1758a691a8f1dcd6947a87dca9e3", "fixtures/bookends/assembly.step", "fixtures/bookends/definition.json"),
     _Entry("06df20ac25bc5ab5268f1cc4cf124da6e7e32c7f25f91cd8525b316a0bdc83c1", "fixtures/quick-release/fixture.step", "fixtures/quick-release/definition.json"),
     _Entry("95144b1255821d8162ce28efeecd827796a4694456376d21365980d67f7ceea6", "fixtures/quick-release/assembly.step", "fixtures/quick-release/assembly-definition.json"),
@@ -106,6 +110,20 @@ class VettedFixtureLibrary:
             fixture = copy.deepcopy(original)
             if fixture.name == "CR-1 Universal Clamp" and fixture.kind is FixtureKind.UNIVERSAL_CLAMP:
                 fixture.name = "Universal Clamp"
+            if (fixture.kind is FixtureKind.UNIVERSAL_CLAMP and fixture.model_path == "fixtures/universal_clamp_v96.step"
+                    and fixture.assembly is None):
+                pair = copy.deepcopy(fixture)
+                pair.model_path, pair.planning = UNIVERSAL_PAIR, None
+                if pair.name == "Universal Clamp":
+                    pair.name = "Universal Clamp Pair"
+                if pair.notes == "Bolts to the T-slots, clamps in X and is electrically isolated, so conductive probing works. [MAN §4.4]":
+                    pair.notes = UNIVERSAL_PAIR_NOTES
+                try:
+                    bound = VettedFixtureLibrary.prepared(pair, resources)
+                    if bound.assembly is not None and bound.assembly.id == "universal-clamp-pair":
+                        fixture = bound
+                except (OSError, ValueError, AssemblyError):
+                    pass
             if fixture.assembly is not None and fixture.assembly.id == "quick-release-jig-plate" and fixture.assembly.revision < 2:
                 fixture.model_path, fixture.assembly, fixture.planning = ASSEMBLED_QUICK_RELEASE, None, None
             if fixture.kind is FixtureKind.T_SLOT_NUTS and fixture.model_path is None and "M4" in fixture.name:

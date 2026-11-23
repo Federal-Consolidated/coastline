@@ -12,7 +12,7 @@ from ..codable import Range, jfield
 from ..geometry import Vec3
 from ..ids import new_id
 from ..materials import Material, MaterialLibrary
-from ..units import Length
+from ..units import DisplayUnits, Length
 
 
 # ---------------------------------------------------------------- tools
@@ -254,9 +254,12 @@ class StockItem:
 
     @property
     def size_description(self) -> str:
+        return self.size_description_in(DisplayUnits.METRIC)
+
+    def size_description_in(self, units: DisplayUnits) -> str:
         if self.shape is StockShape.ROUND_BAR:
-            return f"⌀{Length.mm(self.size_x)} × {Length.mm(self.size_y)} mm"
-        return f"{Length.mm(self.size_x)} × {Length.mm(self.size_y)} × {Length.mm(self.size_z)} mm"
+            return "⌀" + units.dimensions(self.size_x, self.size_y)
+        return units.dimensions(self.size_x, self.size_y, self.size_z)
 
     @property
     def is_suggestion(self) -> bool:

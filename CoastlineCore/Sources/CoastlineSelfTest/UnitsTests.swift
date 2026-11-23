@@ -21,6 +21,15 @@ let unitsTests: [TestCase] = [
         try expectEqual(DisplayUnits.metric.displayedValue(6.35), 6.35)
         try expectEqual(DisplayUnits.metric.symbol(for: "mm"), "mm")
     },
+    TestCase(name: "stockSizesAndOrientationFollowDisplayUnits") {
+        var stock = StockItem(materialID: "al-6061", sizeX: 25.4, sizeY: 50.8, sizeZ: 12.7)
+        try expectEqual(stock.sizeDescription(in: .imperial), "1 × 2 × 0.5 in")
+        try expectEqual(stock.sizeDescription, "25.4 × 50.8 × 12.7 mm")
+        let options = StockOrientation.options(stock: stock, part: SIMD3(1, 1, 76.2), units: .imperial)
+        try expect(options.contains { $0.reason == "only 0.5 in deep: the part needs 3" })
+        stock.shape = .roundBar
+        try expectEqual(stock.sizeDescription(in: .imperial), "⌀1 × 2 in")
+    },
     TestCase(name: "displayFormattingAndPreferenceRoundTrip") {
         try expectEqual(DisplayUnits.imperial.format(6.35), "0.25")
         try expectEqual(DisplayUnits.metric.format(6.35), "6.35")

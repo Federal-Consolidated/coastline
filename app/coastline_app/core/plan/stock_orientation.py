@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ..units import Length
+from ..units import DisplayUnits
 
 
 @dataclass
@@ -26,7 +26,8 @@ class StockOption:
         return tuple(self.axes)
 
 
-def stock_options(stock, part, preferred_axes: list[int] | None = None) -> list[StockOption]:
+def stock_options(stock, part, preferred_axes: list[int] | None = None,
+                  units: DisplayUnits = DisplayUnits.METRIC) -> list[StockOption]:
     """`part`: the part's size in the work frame."""
     e = [stock.envelope.x, stock.envelope.y, stock.envelope.z]
     perms = [[1, 0, 2], [0, 1, 2], [2, 0, 1], [0, 2, 1], [2, 1, 0], [1, 2, 0]]
@@ -43,8 +44,8 @@ def stock_options(stock, part, preferred_axes: list[int] | None = None) -> list[
             continue
         seen.add(key)
         missing = next((k for k in range(3) if raw[k] + 1e-6 < part[k]), None)
-        reason = None if missing is None else f"only {Length.mm(raw[missing])} mm {['tall', 'long', 'deep'][missing]}: the part needs {Length.mm(part[missing])}"
-        dims = f"{Length.mm(raw[0])} up · {Length.mm(raw[1])} along · {Length.mm(raw[2])} deep"
+        reason = None if missing is None else f"only {units.format(raw[missing])} {units.symbol} {['tall', 'long', 'deep'][missing]}: the part needs {units.format(part[missing])}"
+        dims = f"{units.format(raw[0])} up · {units.format(raw[1])} along · {units.format(raw[2])} deep ({units.symbol})"
         out.append(StockOption(p, raw, reason is None, reason, max(raw[2] - part[2], 0) * raw[0] * raw[1],
                                f"{dims}: {('no, ' + reason) if reason else 'contains the part'}", p[1] == ext))
     # Workable first; then the extrusion along Y; then the least material beyond the part.

@@ -16,7 +16,7 @@ struct OwnedStockSuggestions: View {
                 Button { model.useGuidedStock(item, inventory: inventory.inventory) } label: {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("\(item.material?.name ?? "Stock") · \(item.sizeDescription)")
+                            Text("\(item.material?.name ?? "Stock") · \(item.sizeDescription(in: AppSettings.shared.units))")
                                 .font(.callout.weight(.medium))
                             let count = model.matchingFixtureCount(for: item, inventory: inventory.inventory)
                             Text(count > 0 ? "\(count) workholding option matches this stock"
@@ -44,7 +44,7 @@ struct JobPlanInspector: View {
         Form {
             Section("The job") {
                 LabeledContent("Part", value: model.part?.fileName ?? "No part")
-                LabeledContent("Stock", value: model.stock.map { "\($0.material?.name ?? "Stock") · \($0.sizeDescription)" } ?? "Choose stock")
+                LabeledContent("Stock", value: model.stock.map { "\($0.material?.name ?? "Stock") · \($0.sizeDescription(in: AppSettings.shared.units))" } ?? "Choose stock")
                 LabeledContent("Workholding") {
                     Button(workholdingName) { model.enter(.setups) }
                         .buttonStyle(.link)

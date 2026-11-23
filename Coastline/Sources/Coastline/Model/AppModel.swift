@@ -1137,7 +1137,7 @@ final class AppModel {
     func stockOptions(_ item: StockItem? = nil) -> [StockOrientation.Option] {
         guard let part, let stock = item ?? stock else { return [] }
         let (lo, hi) = setup.rotatedPartBounds(min: part.boundsMin, max: part.boundsMax)
-        return StockOrientation.options(stock: stock, part: hi - lo, preferredAxes: setup.stockAxes)
+        return StockOrientation.options(stock: stock, part: hi - lo, preferredAxes: setup.stockAxes, units: AppSettings.shared.units)
     }
 
     func bestStockAxes(_ item: StockItem) -> [Int]? {

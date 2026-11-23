@@ -81,38 +81,7 @@ PageScaffold {
                 SmallButton { symbol: "terminal"; implicitWidth: 26; help: qsTr("Open the machine console"); onClicked: page.mill.showConsole = true }
             }
         }
-        // The notice row.
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 48
-            color: Theme.panelBackground
-            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.separator }
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 12; anchors.rightMargin: 12
-                spacing: 10
-                Row {
-                    Layout.preferredWidth: 125
-                    spacing: 5
-                    Sym { name: "scope"; size: 10; color: page.s.probeTripped ? Theme.warning : Theme.secondaryLabel; anchors.verticalCenter: parent.verticalCenter }
-                    Text { text: page.s.probe || ""; color: page.s.probeTripped ? Theme.warning : Theme.secondaryLabel; font.pixelSize: 10 }
-                    MouseArea { id: probeHover; width: 120; height: 16; hoverEnabled: true }
-                    ToolTipHelp { text: qsTr("The probe input reports contact, not whether the cable is plugged in."); shown: probeHover.containsMouse }
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: (page.s.notice || "") === "" ? qsTr("Machine status and setup messages appear here.") : page.s.notice
-                    color: (page.s.notice || "") === "" ? Theme.secondaryLabel : Theme.warning
-                    font.pixelSize: 12
-                    wrapMode: Text.WordWrap
-                    maximumLineCount: 2
-                    elide: Text.ElideRight
-                }
-                SmallButton { title: page.s.homing ? qsTr("Homing…") : qsTr("Home"); symbol: "house"; enabled: page.mill.canHome
-                    help: page.s.simulated ? qsTr("Home the digital machine") : qsTr("Home the machine before jogging or setting work zero"); onClicked: page.mill.requestHome() }
-                SmallButton { visible: page.s.needsReset === true; title: qsTr("Reset"); symbol: "arrow.counterclockwise"; onClicked: page.mill.softReset() }
-            }
-        }
+        MachineNoticeRow { Layout.fillWidth: true; mill: page.mill }
         // A program's progress.
         Rectangle {
             id: prog

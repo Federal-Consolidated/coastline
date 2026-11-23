@@ -23,7 +23,7 @@ public enum StockOrientation {
     }
 
     /// - Parameter part: the part's size in the work frame.
-    public static func options(stock: StockItem, part: SIMD3<Double>, preferredAxes: [Int]? = nil) -> [Option] {
+    public static func options(stock: StockItem, part: SIMD3<Double>, preferredAxes: [Int]? = nil, units: DisplayUnits = .metric) -> [Option] {
         let e = [stock.envelope.x, stock.envelope.y, stock.envelope.z]
         var perms: [[Int]] = [[1, 0, 2], [0, 1, 2], [2, 0, 1], [0, 2, 1], [2, 1, 0], [1, 2, 0]]
         // Equal stock dimensions produce equivalent permutations. Keep the current one as
@@ -42,8 +42,8 @@ public enum StockOrientation {
             // Containment is independent of workholding. A finished stock face needs no
             // machining allowance; grip and cutter clearance are assessed in Setups.
             let missing = (0..<3).first { raw[$0] + 1e-6 < part[$0] }
-            let reason = missing.map { "only \(Length.mm(raw[$0])) mm \(["tall", "long", "deep"][$0]): the part needs \(Length.mm(part[$0]))" }
-            let dims = "\(Length.mm(raw.x)) up · \(Length.mm(raw.y)) along · \(Length.mm(raw.z)) deep"
+            let reason = missing.map { "only \(units.format(raw[$0])) \(units.symbol) \(["tall", "long", "deep"][$0]): the part needs \(units.format(part[$0]))" }
+            let dims = "\(units.format(raw.x)) up · \(units.format(raw.y)) along · \(units.format(raw.z)) deep (\(units.symbol))"
             out.append(Option(axes: p, raw: raw, workable: reason == nil, reason: reason,
                               alongExtrusion: p[1] == ext, removal: max(raw.z - part.z, 0) * raw.x * raw.y,
                               summary: "\(dims): \(reason.map { "no, " + $0 } ?? "contains the part")"))

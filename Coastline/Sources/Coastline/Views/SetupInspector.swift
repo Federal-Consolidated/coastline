@@ -57,12 +57,13 @@ struct SetupInspector: View {
 
     var body: some View {
         @Bindable var model = model
+        let units = AppSettings.shared.units
         Form {
             if scope == .partStock || scope == .part, let part = model.part {
                 Section("Part") {
                     LabeledContent("File", value: part.fileName)
                     let k = model.setup.partScale
-                    LabeledContent("Size", value: "\(Length.mm(part.size.x * k)) × \(Length.mm(part.size.y * k)) × \(Length.mm(part.size.z * k)) mm" + (abs(k - 1) > 1e-9 ? " (scaled)" : ""))
+                    LabeledContent("Size", value: units.dimensions(part.size.x * k, part.size.y * k, part.size.z * k) + (abs(k - 1) > 1e-9 ? " (scaled)" : ""))
                     HStack {
                         Text("Scale")
                         InfoTip(text: "Machines the part smaller (or bigger) than modelled, the same in every direction, e.g. to fit the stock you have. 100 % is as designed.")
@@ -114,13 +115,13 @@ struct SetupInspector: View {
                     let standard = inventory.inventory.stock.filter(\.isSuggestion)
                     Section("Your Stock") {
                         ForEach(owned) { s in
-                            Text("\(s.material?.name ?? "?") · \(s.sizeDescription)").tag(Optional(s.id))
+                            Text("\(s.material?.name ?? "?") · \(s.sizeDescription(in: AppSettings.shared.units))").tag(Optional(s.id))
                         }
                     }
                     if !standard.isEmpty {
                         Section("Standard Sizes to Buy (Not Owned)") {
                             ForEach(standard) { s in
-                                Text("\(s.material?.name ?? "?") · \(s.sizeDescription)").tag(Optional(s.id))
+                                Text("\(s.material?.name ?? "?") · \(s.sizeDescription(in: AppSettings.shared.units))").tag(Optional(s.id))
                             }
                         }
                     }
@@ -159,7 +160,7 @@ struct SetupInspector: View {
                 }
                 if let stock = model.stock {
                     let raw = model.setup.rawStockSize(stock)
-                    LabeledContent("Size", value: "\(Length.mm(raw.x)) × \(Length.mm(raw.y)) × \(Length.mm(raw.z)) mm as bought")
+                    LabeledContent("Size", value: units.dimensions(raw.x, raw.y, raw.z) + " as bought")
                     let fit = model.stockOptions().first { $0.axes == model.setup.stockAxes }
                     Label(fit?.workable == true ? "The part fits inside the stock" : (fit?.reason.map { "Doesn't fit: \($0)" } ?? "Doesn't fit"),
                           systemImage: fit?.workable == true ? "checkmark.circle.fill" : "xmark.octagon.fill")
@@ -221,13 +222,13 @@ struct SetupInspector: View {
                             NumberField(title: "Tab width", value: $model.tabs.width)
                             NumberField(title: "Tab height", value: $model.tabs.height)
                             Text(excess > 0.05
-                                 ? "The bar is \(Length.mm(excess)) mm thicker than the part: the part goes to the back of the bar and the extra comes off the face (Placement follows when you generate)."
+                                 ? "The bar is \(units.format(excess)) \(units.symbol) thicker than the part: the part goes to the back of the bar and the extra comes off the face (Placement follows when you generate)."
                                  : "The bar is as thick as the part: the outline cuts right through it.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     if model.twoSided, let split = model.splitZ {
-                        LabeledContent("Split at", value: "Z\(Length.mm(split)) mm (the widest section)")
+                        LabeledContent("Split at", value: "Z\(units.format(split)) \(units.symbol) (the widest section)")
                         Picker("Hold the part with", selection: $model.holdWithTabs) {
                             Text("Tabs").tag(true)
                             Text("Web").tag(false)
@@ -357,7 +358,7 @@ private struct StandardStockSuggestions: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Standard sizes this part fits in").font(.callout.weight(.semibold))
                 ForEach(fits) { s in
-                    Button("\(s.material?.name ?? "Stock") · \(s.sizeDescription)", systemImage: "cart") { model.useStock(s) }
+                    Button("\(s.material?.name ?? "Stock") · \(s.sizeDescription(in: AppSettings.shared.units))", systemImage: "cart") { model.useStock(s) }
                         .plainGlassButton()
                         .help(s.notes.replacingOccurrences(of: "Not in your inventory: a standard size. ", with: ""))
                 }

@@ -12,11 +12,17 @@ struct ControlPage: View {
         VStack(spacing: 0) {
             statusBar
             HStack(spacing: 10) {
-                Label(probeState, systemImage: "scope")
-                    .font(.caption)
-                    .foregroundStyle(s.status?.probeTripped == true ? Theme.warning : Color.secondary)
-                    .frame(width: 125, alignment: .leading)
-                    .help("The probe input reports contact, not whether the cable is plugged in.")
+                VStack(alignment: .leading, spacing: 2) {
+                    Label(probeState, systemImage: "scope")
+                        .foregroundStyle(s.status?.probeTripped == true ? Theme.warning : Color.secondary)
+                    Text("Release to continue.")
+                        .foregroundStyle(Theme.warning)
+                        .opacity(s.status?.probeTripped == true ? 1 : 0)
+                        .accessibilityHidden(s.status?.probeTripped != true)
+                }
+                .font(.caption)
+                .frame(width: 125, height: 36, alignment: .leading)
+                .help("The probe input reports contact, not whether the cable is plugged in.")
                 ScrollView(.vertical) {
                     Text(notice ?? "Machine status and setup messages appear here.")
                         .font(.callout)
@@ -124,7 +130,6 @@ struct ControlPage: View {
         if case .settings(let why)? = s.gates.home { return why }
         if let error = s.lastError { return error }
         if let message = mill.message { return message }
-        if s.status?.probeTripped == true { return "Probe contact detected. Release the contact before continuing." }
         if s.homingSince != nil { return "Homing the machine…" }
         if s.link == .connected, !s.homed { return "Home the machine before jogging." }
         if let why = s.gates.jog, s.isOpen, mill.heldJog == nil { return why.text }

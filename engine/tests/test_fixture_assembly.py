@@ -79,3 +79,16 @@ def test_clean_quick_release_package_contains_only_fixture_hardware():
     # The source assembly's X table (385 mm along Y) was explicitly removed at
     # package authoring; the new path 0/0 is hardware, not that old reference body.
     assert all(meta["bounds_max"][1] - meta["bounds_min"][1] < 385 for meta, _ in parts)
+
+
+def test_universal_pair_keeps_both_complete_clamps_at_the_fusion_positions():
+    bundle = ROOT / "resources/fixtures/universal-clamps"
+    definition = json.loads((bundle / "definition.json").read_text())
+    parts = load_fixture_assembly(bundle / "assembly.step", definition)
+    assert len(parts) == 32
+    for index, centre_y in enumerate((-317.6, -165.2)):
+        clamp = [m for m, _ in parts if m["component_id"] == f"clamp-{index + 1}"]
+        assert len(clamp) == 16
+        jaw = next(m for m in clamp if m["entity_path"] == f"0/{index}/0")
+        assert jaw["bounds_min"][0] == pytest.approx(15.865136, abs=0.01)
+        assert (jaw["bounds_min"][1] + jaw["bounds_max"][1]) / 2 == pytest.approx(centre_y, abs=0.01)

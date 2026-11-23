@@ -47,13 +47,16 @@ public struct FixtureAssemblyDefinition: Codable, Hashable, Sendable {
     public var bookends: BookendSetup.Definition? = nil
     public var clampPair: ClampPairSetup.Definition? = nil
     public var vise: ViseSetup.Definition? = nil
+    /// Table top, travel centre and front edge in the source CAD coordinates (mm).
+    public var referenceTableOrigin: Vec3? = nil
+    public var planningLimitation: String? = nil
     /// Exploded/reference CAD may be previewed but cannot be approved for machining.
     public var isAssembled = true
     public init(id: String, revision: Int, modelSHA256: String, components: [Component]) {
         self.id = id; self.revision = revision; self.modelSHA256 = modelSHA256; self.components = components
     }
 
-    private enum CodingKeys: String, CodingKey { case schemaVersion, id, revision, modelSHA256, components, bookends, clampPair, vise, isAssembled }
+    private enum CodingKeys: String, CodingKey { case schemaVersion, id, revision, modelSHA256, components, bookends, clampPair, vise, isAssembled, referenceTableOrigin, planningLimitation }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
@@ -63,11 +66,14 @@ public struct FixtureAssemblyDefinition: Codable, Hashable, Sendable {
         bookends = try c.decodeIfPresent(BookendSetup.Definition.self, forKey: .bookends)
         clampPair = try c.decodeIfPresent(ClampPairSetup.Definition.self, forKey: .clampPair)
         vise = try c.decodeIfPresent(ViseSetup.Definition.self, forKey: .vise)
+        referenceTableOrigin = try c.decodeIfPresent(Vec3.self, forKey: .referenceTableOrigin)
+        planningLimitation = try c.decodeIfPresent(String.self, forKey: .planningLimitation)
         isAssembled = try c.decodeIfPresent(Bool.self, forKey: .isAssembled) ?? true
     }
 
     public var planningIssues: [String] {
-        isAssembled ? [] : ["This CAD is an exploded/reference view. An assembled fixture definition is required before planning cuts."]
+        if let planningLimitation { return [planningLimitation] }
+        return isAssembled ? [] : ["This CAD is an exploded/reference view. An assembled fixture definition is required before planning cuts."]
     }
 
     public var validationIssues: [String] {
@@ -75,6 +81,7 @@ public struct FixtureAssemblyDefinition: Codable, Hashable, Sendable {
         if schemaVersion != 1 { issues.append("Unsupported fixture assembly format \(schemaVersion).") }
         if id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || revision < 1 { issues.append("The assembly needs an ID and positive revision.") }
         if modelSHA256.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) == nil { issues.append("The assembly needs the exact CAD SHA-256.") }
+        if let o = referenceTableOrigin, ![o.x, o.y, o.z].allSatisfy({ $0.isFinite && abs($0) <= 1_000_000 }) { issues.append("Invalid fixture table origin.") }
         if components.isEmpty || components.count > 256 { issues.append("The assembly must have 1–256 components.") }
         let ids = Set(components.map(\.id))
         if ids.count != components.count || ids.contains("") { issues.append("Component IDs must be unique and nonempty.") }

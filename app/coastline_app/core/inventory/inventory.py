@@ -160,10 +160,10 @@ class Inventory:
             Accessory.make('ER-11 collet 1/8"', AccessoryKind.COLLET, size=3.175, notes="Used by the maker's cutcodes."),
             Accessory.make('ER-11 collet 1/4"', AccessoryKind.COLLET, size=6.35, notes="Used by the maker's cutcodes."),
         ]
+        from .vetted_fixtures import UNIVERSAL_PAIR, UNIVERSAL_PAIR_NOTES
         inv.fixtures = [
-            Fixture.make("Universal Clamp", FixtureKind.UNIVERSAL_CLAMP, clamp_axis=ClampAxis.X, height=0, isolated=True,
-                         model_path="fixtures/universal_clamp_v96.step",
-                         notes="Bolts to the T-slots, clamps in X and is electrically isolated, so conductive probing works. [MAN §4.4]"),
+            Fixture.make("Universal Clamp Pair", FixtureKind.UNIVERSAL_CLAMP, clamp_axis=ClampAxis.X, height=0, isolated=True,
+                         model_path=UNIVERSAL_PAIR, notes=UNIVERSAL_PAIR_NOTES),
             Fixture.make("Quick Release Jig Plate", FixtureKind.JIG_PLATE, model_path="fixtures/quick_release_jig_plate.step",
                          notes="Jig Plate Rev D (metric). M5 shoulder bolts, insulating pad and washer."),
             Fixture.make("M4 T-slot nuts", FixtureKind.T_SLOT_NUTS, quantity=4,

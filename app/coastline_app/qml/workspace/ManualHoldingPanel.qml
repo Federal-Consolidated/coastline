@@ -103,7 +103,7 @@ Panel {
     Card {
         visible: panel.sd.twoSided || panel.sd.throughExcess >= 0
         title: qsTr("Sides")
-        ValueRow { visible: panel.sd.twoSided && panel.sd.split !== ""; label: qsTr("Split at"); value: "Z" + panel.sd.split + qsTr(" mm (the widest section)") }
+        ValueRow { visible: panel.sd.twoSided && panel.sd.split !== ""; label: qsTr("Split at"); value: "Z" + panel.sd.split + qsTr(" (the widest section)") }
         Segmented {
             options: panel.sd.twoSided ? [{value: true, title: qsTr("Tabs")}, {value: false, title: qsTr("Web")}]
                                        : [{value: true, title: qsTr("Cut through, on tabs")}, {value: false, title: qsTr("Leave it on the bar")}]

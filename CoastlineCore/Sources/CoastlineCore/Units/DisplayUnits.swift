@@ -33,6 +33,10 @@ public enum DisplayUnits: String, CaseIterable, Codable, Identifiable, Sendable 
         displayed * scale(for: unit)
     }
 
+    public func dimensions(_ lengths: Double...) -> String {
+        lengths.map { format($0) }.joined(separator: " × ") + " " + symbol
+    }
+
     public func format(_ millimeters: Double, maxDecimals: Int? = nil) -> String {
         displayedValue(millimeters).formatted(.number.precision(.fractionLength(0 ... (maxDecimals ?? coordinateDecimals)))
             .grouping(.never).locale(Length.locale))

@@ -75,6 +75,9 @@ class DisplayUnits(Enum):
     def stored_value(self, displayed: float, unit: str = "mm") -> float:
         return displayed * self._scale(unit)
 
+    def dimensions(self, *lengths: float) -> str:
+        return " × ".join(self.format(length) for length in lengths) + " " + self.symbol
+
     def format(self, millimeters: float, max_decimals: int | None = None) -> str:
         return format_number(self.displayed_value(millimeters),
                              self.coordinate_decimals if max_decimals is None else max_decimals)
