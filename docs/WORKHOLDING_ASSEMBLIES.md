@@ -35,7 +35,7 @@ Original source files are unchanged. Reviewed copies and evidence live under `re
 - [Bookends](../resources/fixtures/bookends/README.md): exact original assembly, with explicit entity-to-component assignments and a mechanical definition. No physical hardware removed.
 - [Quick Release Jig Plate](../resources/fixtures/quick-release/README.md): the first copy was an exploded view. Since 2026-11-08 `quick-release/assembly.step` is the assembled model from the user's Fusion machine file (34 solids, one component). It holds nests on its pins, so it is not chosen automatically until a nest is modelled.
 - C-clamps (`c-clamps/`) and the 2" vise (`vise/`): exported from the user's Fusion machine file, one solid per part in machine coordinates. Their definitions carry a `clampPair` or `vise` section that fits them to any stock that fits (`FixtureMechanism.swift`).
-- Universal Clamp: the available STEP is a single body; no independent screw or jaw is invented.
+- Universal Clamp Pair (in `universal-clamps/`) comes from the Fixtures group on the X table in CNC v9. The reference preserves both complete clamps, 16 solids each, with their centers 152.4 mm apart. The 50.8 mm bar overlaps the upper jaws by 3.81 mm, and the mounting hardware intersects the table. The library shows the pair for placement review.
 - The single 3" C-clamp file (`c_clamp.step`) is superseded by the reviewed pair.
 
 Exact source fingerprints identify the known assets; user names and fixture IDs are preserved. The exact legacy built-in name `CR-1 Universal Clamp` becomes `Universal Clamp`. Custom names are unchanged. Rebinding the reviewed assets clears old free-piece transforms and grip approval because their former placement does not establish the new mechanical state.

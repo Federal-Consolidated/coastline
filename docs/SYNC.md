@@ -59,5 +59,6 @@ starts after it.
 
 | Date (UTC) | Branch updated | From | Reviewed up to | Taken | Left out, and why |
 |---|---|---|---|---|---|
+| 2026-11-25 | `xioaniumi` | `main` | `2d78190` | `2d78190`: the universal clamp pair in the fixture library (with its STEP assembly), sizes in the chosen units, the steady probe message. The clamp kit's own stock options follow the units too | The same commit's Qt app files in `app/` (not on this branch) |
 | 2026-11-21 | `xioaniumi` | `main` | `4c07c02` | From `b073b68` the Swift parts only: mill auto-connect retries (1, 2, 5 s), port diagnostics in the console, Arduino 2341:003E and boards without a serial number, M102/M106 in the built-in runner, `wsnap` automation | The Qt app in `app/`, the Windows release build and its packaging fixes (`833c6d0`, `741a2a2`, `6e150e5`, `4c07c02`): a separate app; this branch stays on the Swift app for now |
 | 2026-11-14 | `xioaniumi` | `main` | `410a714` (v0.10) | Everything from v0.2 to v0.10: the branch starts from `main` at v0.10 | The removal in v0.6: the clamp kit workflow is kept, alongside the fixture library |

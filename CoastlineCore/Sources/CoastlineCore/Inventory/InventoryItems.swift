@@ -107,9 +107,13 @@ public struct StockItem: Identifiable, Hashable, Sendable, Codable {
     public var weight: Double? { material.map { volume / 1000 * $0.density } }
 
     public var sizeDescription: String {
+        sizeDescription(in: .metric)
+    }
+
+    public func sizeDescription(in units: DisplayUnits) -> String {
         shape == .roundBar
-            ? "⌀\(Length.mm(sizeX)) × \(Length.mm(sizeY)) mm"
-            : "\(Length.mm(sizeX)) × \(Length.mm(sizeY)) × \(Length.mm(sizeZ)) mm"
+            ? "⌀" + units.dimensions(sizeX, sizeY)
+            : units.dimensions(sizeX, sizeY, sizeZ)
     }
 }
 

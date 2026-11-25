@@ -94,6 +94,23 @@ let fixtureMechanismTests: [TestCase] = [
         try expect(abs(held.height - 12) < 1e-3)
         try expect(try FixtureMechanism.automatic(Fixture(name: "Plate", kind: .jigPlate), table: table, stock: block) == nil)
     },
+    TestCase(name: "universalClampPairReplacesOnlyTheBundledPlaceholder") {
+        var old = Fixture(name: "Shop pair", kind: .universalClamp, quantity: 3, modelPath: "fixtures/universal_clamp_v96.step", notes: "My hardware")
+        var stale = FixturePlanningProfile(); stale.gripDefinitionReviewed = true; old.planning = stale
+        var custom = old; custom.id = UUID(); custom.modelPath = nil
+        var inv = Inventory(); inv.fixtures = [old, custom]
+        try expect(VettedFixtureLibrary.migrate(&inv, resources: resources))
+        let pair = inv.fixtures[0]
+        try expectEqual(pair.id, old.id)
+        try expectEqual(pair.name, old.name)
+        try expectEqual(pair.quantity, old.quantity)
+        try expectEqual(pair.notes, old.notes)
+        try expectEqual(pair.assembly, try bundled("universal-clamps/definition.json"))
+        try expectEqual(pair.assembly?.components.map { $0.modelEntities.count }, [16, 16])
+        try expect(pair.planning == nil && pair.assembly?.planningIssues.isEmpty == false)
+        try expectEqual(inv.fixtures[1], custom)
+        try expect(!VettedFixtureLibrary.migrate(&inv, resources: resources))
+    },
     TestCase(name: "libraryCClampsAndTheExplodedJigPlateGetTheirReviewedModels") {
         var exploded = Fixture(name: "Quick Release Jig Plate", kind: .jigPlate, modelPath: "fixtures/quick-release/fixture.step")
         exploded.assembly = try bundled("quick-release/definition.json")

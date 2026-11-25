@@ -175,6 +175,8 @@ The runner also runs the reference-bore macros M102 (offset arithmetic) and M106
 - **Tests:** `scripts/selftest.sh GeneratedJob`, `scripts/selftest.sh Program`.
 
 ### C4. Fixture library planning
+Includes the universal clamp pair as a library assembly (`resources/fixtures/universal-clamps/`; not yet
+plannable, see its `planningLimitation`). It sits beside the clamp kit (K1), which keeps its own model and planner.
 Fixtures as STEP assemblies with mechanisms, grip patches and a datum. The planner picks owned
 fixtures per setup, checks reach and clearance, and assigns every cut to a setup.
 - **Own files:** `CoastlineCore/.../Plan/FixtureAssemblyDefinition.swift`, `FixtureMechanism.swift`,

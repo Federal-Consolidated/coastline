@@ -1458,7 +1458,7 @@ final class AppModel {
         let rough = 6.35  // the 1/4" end mill that roughs
         return StockOrientation.options(stock: stock, part: hi - lo, twoSided: twoSided, topAllowance: setup.topAllowance,
                                         softJaw: setup.clampSoftJaw, toolDiameter: rough, requiresClampFrame: forClampKit,
-                                        preferredAxes: setup.stockAxes)
+                                        preferredAxes: setup.stockAxes, units: AppSettings.shared.units)
     }
 
     func bestStockAxes(_ item: StockItem) -> [Int]? {

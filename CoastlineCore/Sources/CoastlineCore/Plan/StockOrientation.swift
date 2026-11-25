@@ -30,7 +30,7 @@ public enum StockOrientation {
     }
 
     /// - Parameter part: the part's size in the work frame.
-    public static func options(stock: StockItem, part: SIMD3<Double>, preferredAxes: [Int]? = nil) -> [Option] {
+    public static func options(stock: StockItem, part: SIMD3<Double>, preferredAxes: [Int]? = nil, units: DisplayUnits = .metric) -> [Option] {
         let e = [stock.envelope.x, stock.envelope.y, stock.envelope.z]
         var perms: [[Int]] = [[1, 0, 2], [0, 1, 2], [2, 0, 1], [0, 2, 1], [2, 1, 0], [1, 2, 0]]
         // Equal stock dimensions produce equivalent permutations. Keep the current one as
@@ -49,8 +49,8 @@ public enum StockOrientation {
             // Containment is independent of workholding. A finished stock face needs no
             // machining allowance; grip and cutter clearance are assessed in Setups.
             let missing = (0..<3).first { raw[$0] + 1e-6 < part[$0] }
-            let reason = missing.map { "only \(Length.mm(raw[$0])) mm \(["tall", "long", "deep"][$0]): the part needs \(Length.mm(part[$0]))" }
-            let dims = "\(Length.mm(raw.x)) up · \(Length.mm(raw.y)) along · \(Length.mm(raw.z)) deep"
+            let reason = missing.map { "only \(units.format(raw[$0])) \(units.symbol) \(["tall", "long", "deep"][$0]): the part needs \(units.format(part[$0]))" }
+            let dims = "\(units.format(raw.x)) up · \(units.format(raw.y)) along · \(units.format(raw.z)) deep (\(units.symbol))"
             out.append(Option(axes: p, raw: raw, workable: reason == nil, reason: reason,
                               alongExtrusion: p[1] == ext, removal: max(raw.z - part.z, 0) * raw.x * raw.y,
                               summary: "\(dims): \(reason.map { "no, " + $0 } ?? "contains the part")"))
@@ -72,7 +72,7 @@ extension StockOrientation {
     /// - Parameters: part: the part's size in the work frame; twoSided: machined from both sides.
     public static func options(stock: StockItem, part: SIMD3<Double>, twoSided: Bool, topAllowance: Double,
                                softJaw: Bool, toolDiameter: Double, requiresClampFrame: Bool = true,
-                               preferredAxes: [Int]? = nil) -> [Option] {
+                               preferredAxes: [Int]? = nil, units: DisplayUnits = .metric) -> [Option] {
         let e = [stock.envelope.x, stock.envelope.y, stock.envelope.z]
         var perms: [[Int]] = [[1, 0, 2], [0, 1, 2], [2, 0, 1], [0, 2, 1], [2, 1, 0], [1, 2, 0]]
         // Equal stock dimensions produce equivalent permutations. Keep the current one as
@@ -102,17 +102,17 @@ extension StockOrientation {
                 // Containment is independent of workholding. A finished stock face needs no
                 // machining allowance; grip and cutter clearance are assessed in Holding.
                 let missing = (0..<3).first { raw[$0] + 1e-6 < part[$0] }
-                let reason = missing.map { "only \(Length.mm(raw[$0])) mm \(["tall", "long", "deep"][$0]): the part needs \(Length.mm(part[$0]))" }
-                let dims = "\(Length.mm(raw.x)) up · \(Length.mm(raw.y)) along · \(Length.mm(raw.z)) deep"
+                let reason = missing.map { "only \(units.format(raw[$0])) \(units.symbol) \(["tall", "long", "deep"][$0]): the part needs \(units.format(part[$0]))" }
+                let dims = "\(units.format(raw.x)) up · \(units.format(raw.y)) along · \(units.format(raw.z)) deep (\(units.symbol))"
                 out.append(Option(axes: p, raw: raw, workable: reason == nil, reason: reason,
                                   alongExtrusion: p[1] == ext, removal: max(raw.z - part.z, 0) * raw.x * raw.y,
                                   summary: "\(dims): \(reason.map { "no, " + $0 } ?? "contains the part")"))
                 continue
             }
             var reason: String?
-            if raw.z + 1e-6 < needZ { reason = "only \(Length.mm(raw.z)) mm deep: the part needs \(Length.mm(needZ))" }
-            else if raw.y < needY { reason = "only \(Length.mm(raw.y)) mm long: the part needs \(Length.mm(needY))" }
-            else if raw.x < needX { reason = "only \(Length.mm(raw.x)) mm tall: the part and the jaws need \(Length.mm(needX))" }
+            if raw.z + 1e-6 < needZ { reason = "only \(units.format(raw.z)) \(units.symbol) deep: the part needs \(units.format(needZ))" }
+            else if raw.y < needY { reason = "only \(units.format(raw.y)) \(units.symbol) long: the part needs \(units.format(needY))" }
+            else if raw.x < needX { reason = "only \(units.format(raw.x)) \(units.symbol) tall: the part and the jaws need \(units.format(needX))" }
             var prep: Double?
             var softOff = false
             if reason == nil, UniversalClamp.seat(stockHeight: raw.x, softJaw: softJaw).kind == .tooTall {
@@ -124,7 +124,7 @@ extension StockOrientation {
                     // As it is when the screws alone hold it, else down to the tallest they hold.
                     prep = raw.x <= bare.upperBound ? nil : (bare.upperBound - 0.5).rounded(.down)
                 } else {
-                    reason = "the clamp kit holds \(Length.mm(bare.upperBound)) mm; the part and its frame need \(Length.mm(needX))"
+                    reason = "the clamp kit holds \(units.format(bare.upperBound)) \(units.symbol); the part and its frame need \(units.format(needX))"
                 }
             }
             // Held by shoulders instead: the jaws grip only the two ends, so the part needs just
@@ -141,15 +141,15 @@ extension StockOrientation {
             let length = min(raw.y, max(needY, 0))
             var removal = (raw.x - height) * length * raw.z + max(raw.z - needZ, 0) * height * length
             if viaShoulders, let sh = Shoulders.fit(raw: raw, part: part) { removal = 2 * sh.length * (raw.x - sh.height) * raw.z }
-            let dims = "\(Length.mm(raw.x)) up · \(Length.mm(raw.y)) along · \(Length.mm(raw.z)) deep"
+            let dims = "\(units.format(raw.x)) up · \(units.format(raw.y)) along · \(units.format(raw.z)) deep (\(units.symbol))"
             let summary: String
             let jaws = (softOff ? ", soft jaws off" : "") + (p[1] == ext ? "" : " (extrusion across: sawn faces in the jaws)")
             if let r = reason { summary = "\(dims): no, \(r)" }
             else if viaShoulders, let sh = Shoulders.fit(raw: raw, part: part) {
-                summary = sh.height < raw.x - 0.01 ? "\(dims): shoulders at both ends (\(Length.mm(sh.height)) mm), the kit grips those"
+                summary = sh.height < raw.x - 0.01 ? "\(dims): shoulders at both ends (\(units.format(sh.height)) \(units.symbol)), the kit grips those"
                     : "\(dims): the kit grips the two ends only"
             }
-            else if let h = prep { summary = "\(dims): mill to \(Length.mm(h)) mm tall first\(jaws)" }
+            else if let h = prep { summary = "\(dims): mill to \(units.format(h)) \(units.symbol) tall first\(jaws)" }
             else { summary = "\(dims): fits the clamp kit as it is\(jaws)" }
             var o = Option(axes: p, raw: raw, workable: reason == nil, reason: reason, prepHeight: prep, softJawOff: softOff,
                            alongExtrusion: p[1] == ext, removal: removal, summary: summary)

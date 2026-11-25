@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "universal-clamp-pair",
+  "revision": 1,
+  "modelSHA256": "2617d8b2a8265cc9de357be02f960474e711570d7423c442dd135baab6ced2b1",
+  "isAssembled": true,
+  "referenceTableOrigin": {
+    "x": 15.86513635655,
+    "y": -241.4,
+    "z": 129.8435941251
+  },
+  "components": [
+    {
+      "id": "clamp-1",
+      "name": "Universal clamp 1",
+      "role": "physical",
+      "modelEntities": [
+        "0/0/0",
+        "0/0/1",
+        "0/0/2",
+        "0/0/3",
+        "0/0/4",
+        "0/0/5",
+        "0/0/6",
+        "0/0/7",
+        "0/0/8",
+        "0/0/9",
+        "0/0/10",
+        "0/0/11",
+        "0/0/12",
+        "0/0/13",
+        "0/0/14",
+        "0/0/15"
+      ]
+    },
+    {
+      "id": "clamp-2",
+      "name": "Universal clamp 2",
+      "role": "physical",
+      "modelEntities": [
+        "0/1/0",
+        "0/1/1",
+        "0/1/2",
+        "0/1/3",
+        "0/1/4",
+        "0/1/5",
+        "0/1/6",
+        "0/1/7",
+        "0/1/8",
+        "0/1/9",
+        "0/1/10",
+        "0/1/11",
+        "0/1/12",
+        "0/1/13",
+        "0/1/14",
+        "0/1/15"
+      ]
+    }
+  ],
+  "planningLimitation": "Fusion reference placement. The mounting hardware intersects the X table, and the 2 \u00d7 2 in bar overlaps the upper jaws by 3.81 mm."
+}

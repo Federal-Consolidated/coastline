@@ -111,8 +111,12 @@ extension AppModel {
                 draft.fixture.height = mechanism.height
                 if draft.selectedComponent == nil { draft.selectedComponent = mechanism.controls.first?.componentID }
             } else if centreUnconfigured, !p.gripDefinitionReviewed, p.workspacePlaced != true, let size = placementStockSize {
-                let b = geometry.bounds(profile: p), delta = SIMD3(0, 0, -size.z / 2) - (b.min + b.max) / 2
-                p = p.moved(inWork: Vec3(delta.x, delta.y, delta.z))
+                if let table = draft.fixture.assembly?.referenceTableOrigin {
+                    p.datum = Vec3(table.x + draft.fixture.height + size.x / 2, table.y, table.z + p.facePastTable)
+                } else {
+                    let b = geometry.bounds(profile: p), delta = SIMD3(0, 0, -size.z / 2) - (b.min + b.max) / 2
+                    p = p.moved(inWork: Vec3(delta.x, delta.y, delta.z))
+                }
             }
             p.workspacePlaced = true
             draft.fixture.planning = p; draft.error = nil; draft.loading = false

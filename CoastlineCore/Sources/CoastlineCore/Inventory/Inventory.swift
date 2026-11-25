@@ -137,9 +137,9 @@ extension Inventory {
             Accessory(name: "ER-11 collet 1/4\"", kind: .collet, size: 6.35, notes: "Used by the maker's cutcodes."),
         ]
         inv.fixtures = [
-            Fixture(name: "Universal Clamp", kind: .universalClamp, quantity: 1, clampAxis: .x,
-                    height: 0, isolated: true, modelPath: "fixtures/universal_clamp_v96.step",
-                    notes: "Bolts to the T-slots, clamps in X and is electrically isolated, so conductive probing works. [MAN §4.4]"),
+            Fixture(name: "Universal Clamp Pair", kind: .universalClamp, quantity: 1, clampAxis: .x,
+                    height: 0, isolated: true, modelPath: VettedFixtureLibrary.universalPair,
+                    notes: VettedFixtureLibrary.universalPairNotes),
             Fixture(name: "Quick Release Jig Plate", kind: .jigPlate, quantity: 1,
                     modelPath: "fixtures/quick_release_jig_plate.step",
                     notes: "Jig Plate Rev D (metric). M5 shoulder bolts, insulating pad and washer."),

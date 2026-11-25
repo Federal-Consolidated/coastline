@@ -9,7 +9,11 @@ public enum VettedFixtureLibrary {
         var model: String
         var definition: String
     }
+    static let universalPair = "fixtures/universal-clamps/assembly.step"
+    static let universalPairNotes = "Fusion X-table reference pair. The 2 × 2 in stock overlaps the modeled upper jaws by 3.81 mm, and mounting hardware intersects the table."
     private static let entries = [
+        Entry(source: "2617d8b2a8265cc9de357be02f960474e711570d7423c442dd135baab6ced2b1",
+              model: universalPair, definition: "fixtures/universal-clamps/definition.json"),
         Entry(source: "cc141eb5ee58f00fb420ab2272d84bb448de1758a691a8f1dcd6947a87dca9e3",
               model: "fixtures/bookends/assembly.step", definition: "fixtures/bookends/definition.json"),
         Entry(source: "06df20ac25bc5ab5268f1cc4cf124da6e7e32c7f25f91cd8525b316a0bdc83c1",
@@ -75,6 +79,14 @@ public enum VettedFixtureLibrary {
             var fixture = inventory.fixtures[index]
             if fixture.name == "CR-1 Universal Clamp", fixture.kind == .universalClamp {
                 fixture.name = "Universal Clamp"
+            }
+            if fixture.kind == .universalClamp, fixture.modelPath == "fixtures/universal_clamp_v96.step", fixture.assembly == nil {
+                var pair = fixture
+                pair.modelPath = universalPair
+                pair.planning = nil
+                if pair.name == "Universal Clamp" { pair.name = "Universal Clamp Pair" }
+                if pair.notes == "Bolts to the T-slots, clamps in X and is electrically isolated, so conductive probing works. [MAN §4.4]" { pair.notes = universalPairNotes }
+                if let bound = try? prepared(pair, resources: resources), bound.assembly?.id == "universal-clamp-pair" { fixture = bound }
             }
             if fixture.assembly?.id == "quick-release-jig-plate", (fixture.assembly?.revision ?? 2) < 2 {
                 fixture.modelPath = assembledQuickRelease; fixture.assembly = nil; fixture.planning = nil
