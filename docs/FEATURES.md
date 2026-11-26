@@ -197,6 +197,75 @@ can plan the whole job to save tools, and corrects its life estimates from what 
   `wearbit T-001 0.8`, `showbit T-001`, `bitlabels path.pdf`.
 - **Tests:** `scripts/selftest.sh Consumables`.
 
+### K11. Tool Check: test cuts on a test block (planned, not built)
+A plan, not code yet. It builds on K10 (bit IDs, `ToolUnit.load`, `ToolLifeLearning`), the
+journal's measurements and photos, the clamp kit, and the guided job / built-in runner.
+
+**Why.** K10's wear is an estimate from cutting time. A short test cut measures each bit, so the
+estimate can be corrected per bit and the life model learns from measurements, not only from
+"marked worn" reports.
+
+**Phase 1. The test block**
+- A stock item flagged as a test block (`StockItem.testBlock`), e.g. 6061, 50 × 50 × 15 mm, held
+  in the clamp kit.
+- Its face is a grid of test cells sized to the largest tool tested. Coastline remembers the used
+  cells (`TestBlock.usedCells`); when the face is full it plans a facing pass and starts a new
+  grid, and tracks the block's thickness until it is too thin for the kit.
+
+**Phase 2. The test pattern (per bit, about 2–3 minutes)**
+- **Slot:** one full-width slot, 0.5 D deep, 3 D long. Its width is the bit's cutting diameter.
+- **Boss:** a 10 × 10 mm square boss, roughed with 0.2 mm left, then one finishing pass at the
+  standard finishing feeds. A dull edge is pushed away from the wall, so the boss comes out
+  oversize: the most sensitive sign on a desktop mill.
+- **Floor patch:** a small floor-finished area for the finish and burrs.
+- Ball mills: a small 3D patch at a set cusp instead of the boss. Drills: one hole, checked with
+  a pin gauge.
+- Feeds come from the feeds engine, never worn-bit mode or Save tools, so every test of a bit is
+  cut the same way. Every program passes `Safety`; the first test of the block is an air cut.
+- "Check the bits for this job" makes one program set for every bit the job uses, with the tool
+  changes, as a guided job.
+
+**Phase 3. Recording and reading the result**
+- A Tool Check sheet per bit: slot width, boss X and Y (several readings, averaged), finish 1–5,
+  burrs yes/no, squeal yes/no, an optional close-up photo of the cutting edge.
+- Each bit's first test is its baseline (`ToolUnit.baseline`). Later tests are compared with it,
+  which cancels the machine's own deflection and the caliper's bias: boss growth, slot shrinkage,
+  finish drop and new burrs.
+- From those, a measured wear estimate with a confidence based on the measuring tool's resolution
+  (`MeasuringTool.resolution`: a micrometer counts more than calipers).
+- The bit's `load` is corrected towards it, and `ToolLifeLearning` gets an observation weighted
+  by that confidence (more than a journal hint).
+- A plain verdict: good for finishing / roughing only / retire, with the reasons ("the boss grew
+  0.03 mm since new and the floor shows burrs").
+
+**Phase 4. When it is offered**
+- Tools ▸ a bit ▸ Test Cut.
+- Machining ▸ Bits: "Check the bits for this job" before an important job.
+- Suggested when the forecast puts a bit in Dulling or later, or when the bit has cut a lot since
+  its last test.
+
+**Phase 5. Measuring by probing (later, optional)**
+- The CR-1 can probe conductive stock electrically (M4 S1500, insulated clamp kit). With that
+  working, the bit, spinning slowly in reverse, probes a precision dowel pin from both sides: the
+  span minus the pin is the bit's real cutting diameter, with no calipers.
+- It needs electrical probing verified on the machine first.
+
+**Limits to keep in view**
+- Calipers read to about 0.02 mm, and a bit loses only a few hundredths of diameter over its life.
+  The slot alone is a weak signal; the boss growth together with finish and burrs is the stronger
+  one. A micrometer helps a lot.
+- Each test costs a few minutes and well under 1 % of a bit's life.
+
+**Where it would live**
+- Core: `Inventory/ToolCheck.swift` (new: test block grid, pattern, reading the results),
+  `Inventory/Consumables.swift` (baseline, measured wear, weighted learning), `InventoryItems`
+  (`StockItem.testBlock`).
+- Engine: the slot, boss and floor patch from the existing 2.5D operations; no new engine code.
+- App: the Tool Check sheet, Test Cut in Tools ▸ Bits, the button in Machining ▸ Bits, the
+  guided job for a check run.
+- Tests to add: cell grid and refacing, pattern safety, baseline comparison, the wear estimate and
+  its confidence, learning weights.
+
 ---
 
 ## Line C: control, fixture library and machine profiles
