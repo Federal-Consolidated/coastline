@@ -266,6 +266,78 @@ estimate can be corrected per bit and the life model learns from measurements, n
 - Tests to add: cell grid and refacing, pattern safety, baseline comparison, the wear estimate and
   its confidence, learning weights.
 
+### K12. Sharp snapshots, exact readouts and export (planned, not built)
+A plan, not code yet. It builds on the playback simulation (`Sim/Heightmap.swift`, about 250 000
+cells: ~0.09 mm on a 50 × 40 mm block, ~0.22 mm on a 150 × 80 mm bar), the multi-setup model
+(`Sim/StockModel.swift`, `Sim/DexelSim.swift`, 0.2–0.5 mm), the deviation map (K7), the saved
+results (`Model/SavedResults.swift`) and the engine's 2.5D regions and OCCT.
+
+**Why.** Finishing cusps are around 8 µm and the deviation map's green band is ±20 µm, both far
+below the simulation's cell size. Checking a state closely needs either a much finer simulation
+or exact answers from the toolpath itself.
+
+**Phase 1. Sharp snapshot**
+- With playback paused, "Sharpen" re-simulates up to the playhead at 10–20 µm in the background
+  (progress, cancel) and shows the result until playback moves on.
+- Whole part, the visible area, or a box the user drags; a small box can go to a few µm.
+- Kept fast by culling: the coarse simulation already knows the final surface, so every move
+  whose tool envelope stays above it (plus a margin) is skipped. Most roughing moves are cut away
+  later, so most of the work disappears. Tiled and multithreaded; Metal compute if CPU is not
+  enough.
+- The deviation map (K7) runs on the sharp version when there is one, so its ±20 µm colours mean
+  what they say.
+
+**Phase 2. Exact readouts**
+- Exact probe: the Measure tool gives the remaining material height and the distance to the part
+  at the clicked point, evaluated from the moves themselves (the lowest tool envelope over that
+  point), not from a grid.
+- Exact section: a line drawn across the part gives the material profile along it, with cusp
+  heights, step heights between levels and the gap to the CAD, in µm.
+- Cheap (only the moves near the point or line), so no waiting.
+
+**Phase 3. Snapshots saved in the project, on the timeline**
+- Each snapshot is stored in the `.coastline` file with its region, resolution, playhead time,
+  name and note, as heights in whole µm relative to the coarse simulation, LZFSE-compressed like
+  the saved moves.
+- It is tied to the toolpath signature it was made from. After regenerating or changing the
+  operations it shows as out of date (greyed), with "Sharpen Again", and is never shown as true.
+- A limit on snapshot space per project (setting); the oldest are dropped first. Snapshots are a
+  cache: dropping one loses nothing that can't be made again.
+- On the timeline: a marker at each snapshot's moment (different marks for whole-part and region
+  snapshots, greyed when out of date). Click jumps the playhead there and shows the sharp state at
+  once; hover shows name, resolution and date. A list beside the timeline renames, notes, exports
+  and deletes.
+
+**Phase 4. Export**
+- Mesh: STL, 3MF, OBJ and Rhino `.3dm` (rhino3dm is already in the engine) of a snapshot as a
+  closed solid, in part or machine coordinates. For checking in Rhino or Fusion, or designing a
+  soft jaw or nest around a half-machined part.
+- STEP: where every cut so far is 2.5D (facing, pockets, contours, holes), the engine builds the
+  stock minus the exact cleared regions per level as a real OCCT solid, with true planes and
+  cylinders. After 3D finishing an exact solid is not practical (subtracting the swept volume of
+  tens of thousands of moves is slow and fragile): those areas go in as a fine mesh next to the
+  exact 2.5D faces, and the app says so.
+
+**Phase 5. Compare and automatic snapshots**
+- Compare two snapshots: only what changed between them, coloured by depth (what program 3
+  removed, whether rest finishing really cleared a corner).
+- Optional automatic snapshots after each program or setup, made in the background, so the
+  timeline always has sharp checkpoints at the important moments.
+
+**Phase 6. Multi-setup jobs**
+- The same for side B, side setups and prep, from the multi-setup model at fine resolution.
+
+**Where it would live**
+- Core: `Sim/SharpSnapshot.swift` (new: tiled fine heightmap with culling, exact point and line
+  evaluation, quantized storage), `Sim/Heightmap.swift` (shared cutter envelope).
+- Engine: an RPC that builds the 2.5D STEP from the cleared regions; mesh and `.3dm` writers
+  (`cam/nest.py` already writes STL).
+- App: Sharpen in the playback bar, the snapshot markers and list on the timeline, the exact probe
+  in Measure, the section tool, Export in the snapshot list; `SavedResults` stores snapshots.
+- Tests to add: culling gives the same surface as the full fine run, exact probe against an
+  analytic cut (flat, ball, bull), the out-of-date check after regenerating, the storage round
+  trip, a 2.5D STEP that OCCT reads back as a valid solid.
+
 ---
 
 ## Line C: control, fixture library and machine profiles
