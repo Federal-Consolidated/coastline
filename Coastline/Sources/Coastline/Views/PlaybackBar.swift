@@ -73,7 +73,6 @@ struct PlaybackBar: View {
                 .accessibilityLabel(model.isPlaying ? "Pause" : "Play this step")
                 transport("forward.frame.fill", "Next Move", "→") { model.step(1) }
                 if level < 4 { transport("forward.end.fill", "Next Operation", "⌥→") { model.jumpOperation(1) } }
-                SharpenMenu(compact: level >= 4)
             }
             Text(level >= 5 ? AppModel.clock(model.playhead) : "\(AppModel.clock(model.playhead)) / \(AppModel.clock(model.timeline.duration))")
                 .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
@@ -143,6 +142,7 @@ struct PlaybackBar: View {
                 .accessibilityValue(String(format: "X %.3f, Y %.3f, Z %.3f millimetres", q.x, q.y, q.z) + (problem.map { ". \($0)" } ?? ""))
             }
             Spacer(minLength: 8)
+            SharpenMenu(compact: level >= 4)
             // What's shown, on the right (in one menu when the bar is very narrow).
             if level >= 5 {
                 Menu {

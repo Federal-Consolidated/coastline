@@ -448,6 +448,8 @@ final class AppModel {
     /// 0…1 while a snapshot is being made (−1: a step without a measure of progress).
     var sharpProgress: Double?
     var sharpPhase = ""
+    /// The Sharpen options panel (playback bar).
+    var sharpPanelOpen = false
     var exactSection: ExactSection?
     @ObservationIgnored var sharpTask: Task<Void, Never>?
     @ObservationIgnored var sharpCancel: Counter?

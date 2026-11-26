@@ -432,6 +432,12 @@ enum Automation {
             case "exportsnap":  // "exportsnap /tmp/s.stl": the latest snapshot
                 if let r = model.sharpSnapshots.last { let ok = await model.exportSnapshot(r.id, to: URL(fileURLWithPath: arg)); print("exportsnap \(ok) \(model.status)") }
             case "hidesnap": model.hideSharp()
+            case "sharppanel": model.sharpPanelOpen = arg != "off"
+            case "windows":  // the app's windows (popovers are windows of their own)
+                print("windows " + NSApp.windows.filter(\.isVisible).map { "\(type(of: $0)) \(Int($0.frame.width))x\(Int($0.frame.height))" }.joined(separator: ", "))
+                if let pop = NSApp.windows.first(where: { $0.isVisible && "\(type(of: $0))".contains("Popover") }) {
+                    WindowSnapshot.capture(window: pop, to: URL(fileURLWithPath: arg))
+                }
             case "exportclean":  // "exportclean /tmp/s.step": the latest snapshot as clean CAD
                 if let r = model.sharpSnapshots.last { let t0 = Date(); let ok = await model.exportSnapshot(r.id, to: URL(fileURLWithPath: arg), clean: true); print("exportclean \(ok) \(String(format: "%.1f", Date().timeIntervalSince(t0))) s · \(model.status) \(model.errorMessage ?? "")") }
             case "measured":  // the measure points' readouts
@@ -785,7 +791,10 @@ enum WindowSnapshot {
             print("wsnap: no window")
             return
         }
-        let window = main.attachedSheet ?? main  // a sheet on top (start, welcome) is what's on screen
+        capture(window: main.attachedSheet ?? main, to: url)  // a sheet on top (start, welcome) is what's on screen
+    }
+
+    static func capture(window: NSWindow, to url: URL) {
         let rep: NSBitmapImageRep
         // kCGWindowListOptionIncludingWindow = 1 << 3, kCGWindowImageBoundsIgnoreFraming = 1 << 0
         if let createImage, let image = createImage(.null, 1 << 3, UInt32(window.windowNumber), 1 << 0)?.takeRetainedValue(),
