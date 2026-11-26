@@ -902,8 +902,13 @@ def _lead_out(tp: Toolpath, pts, z, R, op: Op, keep_clear=None):
 # ---------------------------------------------------------------- floors
 
 
-def floors(op: Op, floor_list, tp: Toolpath) -> Toolpath:
-    """Finishes flat up-facing faces with inward offset rings (climb, CCW)."""
+def floors(op: Op, floor_list, tp: Toolpath, part: g.PartGeometry | None = None) -> Toolpath:
+    """Finishes flat up-facing faces with inward offset rings (climb, CCW).
+
+    With the part: only its material above a floor is a wall. Where a floor's edge drops away
+    (the top face's outline, a hole's rim), the tool may run past the edge by up to 90 % of its
+    radius, so strips and necks narrower than the tool (between holes, at the ends of a face)
+    are finished too, not left at the roughing's allowance."""
     narrow: dict = {}
     too_deep = 0
     for fl in floor_list:
@@ -918,7 +923,7 @@ def floors(op: Op, floor_list, tp: Toolpath) -> Toolpath:
             too_deep += 1
             continue
         rings = []
-        cur = g.offset(fl["paths"], -op.r, arc_tol=0.002)
+        cur = _floor_centres(op, fl["paths"], z, part)
         while cur:
             rings.append(cur)
             cur = g.offset(cur, -op.stepover, arc_tol=0.002)
@@ -942,6 +947,22 @@ def floors(op: Op, floor_list, tp: Toolpath) -> Toolpath:
     if too_deep:
         tp.warnings.append(f"{too_deep} floor{'s' if too_deep != 1 else ''} below Z{shank_bottom(op):.2f} left: " + shank_warning(op, shank_bottom(op)))
     return tp
+
+
+def _floor_centres(op: Op, paths, z: float, part) -> list:
+    """Where the tool's centre may go to finish a floor at z: the floor less a tool radius from
+    every wall (the part's material above z: a flat end at z cuts only what's above it), past
+    its edges elsewhere by 0.9 r."""
+    inside = g.offset(paths, -op.r, arc_tol=0.002)
+    # No room for the tool between its edges (a counterbore, a slot): left alone as before,
+    # with its warning (the area may not be cleared above it yet).
+    if part is None or not inside:
+        return inside
+    walls = part.shadow(z + 0.01)
+    reach = g.offset(paths, 0.9 * op.r, arc_tol=0.002)
+    if not walls:
+        return reach
+    return _difference(reach, g.offset(walls, op.r, arc_tol=0.002))
 
 
 # ---------------------------------------------------------------- holes

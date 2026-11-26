@@ -18,7 +18,7 @@ adds. Both workflows run side by side there: a job uses the clamp kit unless it 
 fixture library (`Setup.planFromFixtureLibrary`) or held in a custom fixture. How the two branches
 trade features is in [SYNC.md](SYNC.md).
 
-Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 122 passed.
+Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 124 passed.
 The app builds and generates the Motor Mount example (shoulders + clamp kit) with every program
 passing the safety check.
 
@@ -349,8 +349,15 @@ single points and sections exactly from the toolpath.
       invalid, else kept as fused.
     - Motor mount, end of the main setup: 164 faces (90 planes, 73 cylinders, the cone), a valid
       solid and a valid Rhino polysurface (trims within 0.5 µm), 99 % of the surface within 2 µm
-      of the simulation, 0.7 s. The fine lines left on its top face are real: islands 0.1 mm
-      proud of the finished top that the simulated toolpaths leave between the bore and the holes.
+      of the simulation, 0.7 s. The islands 0.1 mm proud of its top face that this showed were
+      real, and fixed in floor finishing (below): the export after that has 105 faces.
+  - **Floor finishing past drop-off edges** (engine `ops.floors`, `_floor_centres`): only the
+    part's material above a floor (its shadow) is a wall; where a floor's edge drops away (the
+    top face's outline, a hole's rim) the tool runs past it by up to 0.9 of its radius. Strips
+    narrower than the tool (4.5 mm at the motor mount's ends, beside its outer holes) used to be
+    left at the roughing's 0.1 mm allowance; now no cell of the motor mount's top stands proud
+    (5 µm at most). Floors with no room for the tool between their edges (counterbores) stay
+    skipped with their warning: they may not be cleared above yet.
   - **Clean CAD, NURBS (.3dm)** (engine, `clean_3dm.py` and the openNURBS module `_opennurbs`):
     the same solid as one joined Rhino polysurface.
     - The shape is converted to NURBS throughout. Each face gives its B-spline surface; each edge,
@@ -396,7 +403,7 @@ single points and sections exactly from the toolpath.
 - **Tests:** `scripts/selftest.sh SharpSnapshot`, `engine/tests/test_clean_cad.py` (planes and arcs
   for a pocket and step, one NURBS surface for a dish, valid solids within 1 % of the volume, a
   circle fitted as one circle; the exact part with its leftover: a plate in its slot with the hole
-  drilled on into the bar comes out valid, no face under 0.02 mm wide, a valid `.3dm`), `engine/tests/test_clean_3dm.py` (a box with a pocket and the dish as
+  drilled on into the bar comes out valid, no face under 0.02 mm wide, a valid `.3dm`), `engine/tests/test_floors.py` (a 3 mm strip beside a hole finished by a ⌀6 tool, a boss still a radius off; without the part every edge is a wall), `engine/tests/test_clean_3dm.py` (a box with a pocket and the dish as
   closed, valid Rhino polysurfaces; skipped without openNURBS) and `engine/tests/test_mesh_export.py` (3MF and
   `.3dm` read back with units and counts; a STEP block merges its flat faces into a closed, valid
   solid):

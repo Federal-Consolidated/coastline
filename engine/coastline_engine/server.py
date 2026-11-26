@@ -396,7 +396,7 @@ def _generate(params, blobs):
                 skin_top = float(params["tabs"].get("skin_top")) if params["tabs"].get("skin_top") is not None else None
             O.contour(op, geo, smin, tp, z_top=op.z_top, lift=lift, skin_top=skin_top, stock_max=smax)
         elif k == "floor":
-            O.floors(op, feats["floors"], tp)
+            O.floors(op, feats["floors"], tp, part=geo)
         elif k == "drill":
             hs = [h for h in feats["holes"] if abs(h["diameter"] - op.tool_d) <= 0.05]
             O.drill(op, hs, tp, float(raw["tool"].get("angle") or 118))
