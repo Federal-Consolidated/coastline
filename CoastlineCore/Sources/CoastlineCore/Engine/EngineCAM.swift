@@ -246,4 +246,24 @@ extension EngineClient {
         return MeshExport(triangles: r.result["triangles"] as? Int ?? triangles.count, faces: r.result["faces"] as? Int,
                           solid: r.result["solid"] as? Bool)
     }
+
+    public struct CleanExport: Sendable {
+        public var faces: Int
+        public var valid: Bool
+        public var levels: Int
+        public var patches: Int
+        public var kinds: [String: Int]
+    }
+
+    /// Clean CAD from a snapshot's heights (rows × cols, cell (0,0) centred at origin): a STEP solid
+    /// with planes, line/arc walls and B-spline surfaces (`clean_cad`).
+    public func exportClean(path: String, name: String, heights: [Float], cols: Int, rows: Int, origin: SIMD2<Double>,
+                            cell: Double, top: Double, bottom: Double) throws -> CleanExport {
+        let r = try call("export_clean", ["path": path, "name": name, "x0": origin.x, "y0": origin.y, "cell": cell,
+                                          "cols": cols, "rows": rows, "top": top, "bottom": bottom],
+                         blobs: [heights.withUnsafeBufferPointer { Data(buffer: $0) }])
+        return CleanExport(faces: r.result["faces"] as? Int ?? 0, valid: r.result["valid"] as? Bool ?? false,
+                           levels: r.result["levels"] as? Int ?? 0, patches: r.result["patches"] as? Int ?? 0,
+                           kinds: r.result["kinds"] as? [String: Int] ?? [:])
+    }
 }

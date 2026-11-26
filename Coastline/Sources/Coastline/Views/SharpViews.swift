@@ -35,55 +35,32 @@ struct SharpenMenu: View {
             let shown = model.shownSnapshot != nil
             let title = shown ? "Sharp" : "Sharpen"
             let symbol = shown ? "checkmark.seal.fill" : "sparkle.magnifyingglass"
-            // One control, styled as Play: clicking it sharpens the whole stock (or, when a
-            // snapshot is shown, goes back); its arrow opens the options, snapshots and export.
-            Menu {
-                Section("Make a sharp snapshot here") {
-                    Button("Whole Stock", systemImage: "square.grid.3x3.fill") { model.sharpen() }
-                    Button("Around Measure Point A (5 mm, 2.5 µm)", systemImage: "scope") {
-                        if let p = model.measurePoints.first, let w = model.simWorkPoint(p) { model.sharpen(around: w) }
-                    }
-                    .disabled(model.measurePoints.first.map { !$0.onSim } ?? true)
-                }
-                if let id = model.shownSnapshot {
-                    Section("The snapshot shown") {
-                        Button("Back to the Playback Grid", systemImage: "arrow.uturn.backward") { model.hideSharp() }
-                        ExportMenu(id: id)
-                    }
-                }
-                let mine = model.sharpSnapshots.filter { $0.side == model.viewSide }
-                if !mine.isEmpty {
-                    Section("Snapshots of this side") {
-                        ForEach(mine) { rec in
-                            Menu {
-                                Button("Show", systemImage: "eye") { model.showSnapshot(rec.id) }
-                                    .disabled(!model.snapshotIsCurrent(rec))
-                                ExportMenu(id: rec.id)
-                                Divider()
-                                Button("Delete", systemImage: "trash", role: .destructive) { model.deleteSnapshot(rec.id) }
-                            } label: {
-                                Text(rec.name + (model.snapshotIsCurrent(rec) ? "" : " · out of date"))
-                                Text("\(rec.resolutionText) · \(rec.cols.formatted()) × \(rec.rows.formatted()) cells")
-                            }
-                        }
-                    }
-                }
-                if model.sharpSnapshots.contains(where: { $0.side != model.viewSide }) {
-                    Text("Other setups' snapshots show on their own timelines.")
-                }
-            } label: {
-                if compact {
-                    BarIconLabel(symbol: symbol)
-                } else {
-                    Label(title, systemImage: symbol).font(.callout.weight(.semibold))
-                }
-            } primaryAction: {
+            // One Liquid Glass button like the transport's: the main part sharpens the whole stock
+            // (or, when a snapshot is shown, goes back); its arrow opens the options and export.
+            Button {
                 if shown { model.hideSharp() } else { model.sharpen() }
+            } label: {
+                HStack(spacing: 8) {
+                    if compact {
+                        BarIconLabel(symbol: symbol)
+                    } else {
+                        Label(title, systemImage: symbol).font(.callout.weight(.semibold)).frame(height: 18)
+                    }
+                    Rectangle().fill(Color.primary.opacity(0.35)).frame(width: 1, height: 16)
+                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).frame(width: 12, height: 18)
+                }
             }
-            .menuStyle(.button)
             .buttonStyle(.glass)
-            .tint(Theme.accent)
-            .foregroundStyle(.white)
+            .tint(shown ? Theme.accent : .clear)
+            .foregroundStyle(shown ? Color.white : Color.primary)
+            .overlay(alignment: .trailing) {
+                // The arrow's part of the capsule opens the menu.
+                Menu { optionsMenu(shown: shown) } label: { Color.clear.frame(width: 34, height: 30).contentShape(Rectangle()) }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .accessibilityLabel("Sharpen options, snapshots and export")
+            }
             .fixedSize()
             .help(shown
                   ? "Showing a sharp snapshot. Click to go back to the playback grid; the arrow has export and your snapshots."
@@ -196,6 +173,44 @@ struct ExportMenu: View {
             }
         } label: {
             Label("Export", systemImage: "square.and.arrow.up")
+        }
+    }
+}
+
+extension SharpenMenu {
+    @ViewBuilder func optionsMenu(shown: Bool) -> some View {
+        Section("Make a sharp snapshot here") {
+            Button("Whole Stock", systemImage: "square.grid.3x3.fill") { model.sharpen() }
+            Button("Around Measure Point A (5 mm, 2.5 µm)", systemImage: "scope") {
+                if let p = model.measurePoints.first, let w = model.simWorkPoint(p) { model.sharpen(around: w) }
+            }
+            .disabled(model.measurePoints.first.map { !$0.onSim } ?? true)
+        }
+        if let id = model.shownSnapshot {
+            Section("The snapshot shown") {
+                Button("Back to the Playback Grid", systemImage: "arrow.uturn.backward") { model.hideSharp() }
+                ExportMenu(id: id)
+            }
+        }
+        let mine = model.sharpSnapshots.filter { $0.side == model.viewSide }
+        if !mine.isEmpty {
+            Section("Snapshots of this side") {
+                ForEach(mine) { rec in
+                    Menu {
+                        Button("Show", systemImage: "eye") { model.showSnapshot(rec.id) }
+                            .disabled(!model.snapshotIsCurrent(rec))
+                        ExportMenu(id: rec.id)
+                        Divider()
+                        Button("Delete", systemImage: "trash", role: .destructive) { model.deleteSnapshot(rec.id) }
+                    } label: {
+                        Text(rec.name + (model.snapshotIsCurrent(rec) ? "" : " · out of date"))
+                        Text("\(rec.resolutionText) · \(rec.cols.formatted()) × \(rec.rows.formatted()) cells")
+                    }
+                }
+            }
+        }
+        if model.sharpSnapshots.contains(where: { $0.side != model.viewSide }) {
+            Text("Other setups' snapshots show on their own timelines.")
         }
     }
 }

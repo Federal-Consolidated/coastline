@@ -7,6 +7,7 @@ Add new engine features by adding a handler here.
 from __future__ import annotations
 
 import itertools
+import json
 import os
 from pathlib import Path
 
@@ -199,6 +200,21 @@ def _export_mesh(params, blobs):
     v = np.frombuffer(blobs[0], dtype="<f4").reshape(-1, 3).astype(np.float64)
     t = np.frombuffer(blobs[1], dtype="<u4").reshape(-1, 3).astype(np.int64)
     r = mesh_export.export(str(params["format"]), str(params["path"]), v, t, str(params.get("name", "Coastline snapshot")))
+    return r, []
+
+
+def _export_clean(params, blobs):
+    """params: {path, name, x0, y0 (cell (0,0) centre), cell, cols, rows, top, bottom}; blob: heights
+    float32 rows × cols → a clean B-rep STEP (levels as planes and line/arc walls, 3D areas as
+    B-spline surfaces) and what went into it."""
+    from . import clean_cad
+
+    h = np.frombuffer(blobs[0], dtype="<f4").reshape(int(params["rows"]), int(params["cols"]))
+    dump = os.environ.get("COASTLINE_CLEAN_DUMP")
+    if dump:  # the heights as received, for working on clean_cad offline
+        np.savez(dump, h=h, params=json.dumps(params))
+    r = clean_cad.write_step(str(params["path"]), h, (float(params["x0"]), float(params["y0"])), float(params["cell"]),
+                             float(params["top"]), float(params["bottom"]), str(params.get("name", "Coastline snapshot")))
     return r, []
 
 
@@ -445,6 +461,7 @@ def _recognise(params, blobs):
 HANDLERS = {
     "nest": _nest,
     "export_mesh": _export_mesh,
+    "export_clean": _export_clean,
     "recognise": _recognise,
     "ping": _ping,
     "import_part": _import_part,

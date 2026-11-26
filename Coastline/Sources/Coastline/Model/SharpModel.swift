@@ -291,16 +291,18 @@ extension AppModel {
 
     /// The export formats: file extension, menu title, the most triangles it gets.
     static let exportFormats: [(ext: String, title: String, budget: Int)] = [
-        ("3dm", "Rhino (.3dm)", 3_000_000), ("step", "STEP (flat areas merged)", 400_000), ("3mf", "3MF", 3_000_000),
+        ("clean", "Clean CAD, NURBS (.step)", 1_200_000), ("3dm", "Rhino mesh (.3dm)", 3_000_000),
+        ("step", "STEP mesh (flat areas merged)", 400_000), ("3mf", "3MF", 3_000_000),
         ("stl", "STL", 3_000_000), ("obj", "OBJ", 3_000_000),
     ]
 
     /// Writes a snapshot as a closed mesh in work coordinates (mm). STL and OBJ here; Rhino,
     /// 3MF and STEP by the engine (STEP: flat areas merged into single faces).
     @discardableResult
-    func exportSnapshot(_ id: UUID, to url: URL) async -> Bool {
+    func exportSnapshot(_ id: UUID, to url: URL, clean: Bool = false) async -> Bool {
         guard let rec = sharpSnapshots.first(where: { $0.id == id }), let hm = sharpCache[id] ?? rec.heightmap else { return false }
-        let ext = url.pathExtension.lowercased() == "stp" ? "step" : url.pathExtension.lowercased()
+        let fileExt = url.pathExtension.lowercased() == "stp" ? "step" : url.pathExtension.lowercased()
+        let ext = clean ? "clean" : fileExt
         let budget = Self.exportFormats.first { $0.ext == ext }?.budget ?? 3_000_000
         let stride = max(Int((Double(hm.cols * hm.rows) * 2 / Double(budget)).squareRoot().rounded(.up)), 1)
         let every = stride > 1 ? " (every \(stride) cells, \((hm.cell * Double(stride) * 1000).formatted(.number.precision(.fractionLength(0)))) µm)" : ""
@@ -312,6 +314,14 @@ extension AppModel {
         let m = await Task.detached(priority: .userInitiated) { SharpSim.mesh(hm, stride: stride) }.value
         do {
             switch ext {
+            case "clean":
+                // Heights only, at most ~1.2 million cells: levels, outlines and surfaces are fitted.
+                let d = Self.downsample(hm, stride: stride)
+                let engine = try await liveEngine()
+                let r = try await engine.exportClean(path: url.path, name: name, heights: d.heights, cols: d.cols, rows: d.rows,
+                                                     origin: d.origin, cell: d.cell, top: d.top, bottom: d.bottom)
+                let kinds = r.kinds.sorted { $0.value > $1.value }.map { "\($0.value) \($0.key == "BSplineSurface" ? "NURBS" : $0.key.lowercased())" }.joined(separator: ", ")
+                status = "Exported \(url.lastPathComponent): clean CAD, \(r.faces) faces (\(kinds)), \(r.levels) levels, \(r.patches) curved \(r.patches == 1 ? "area" : "areas")\(r.valid ? ", a valid solid" : " (check it: not a fully valid solid)"); fitted from \((d.cell * 1000).formatted(.number.precision(.fractionLength(0)))) µm cells."
             case "stl", "obj":
                 let data = await Task.detached(priority: .userInitiated) { ext == "obj" ? SharpSim.obj(m, name: name) : SharpSim.stl(m, name: name) }.value
                 try data.write(to: url, options: .atomic)
@@ -334,11 +344,12 @@ extension AppModel {
 
     func exportSnapshotWithPanel(_ id: UUID, format: String) {
         guard let rec = sharpSnapshots.first(where: { $0.id == id }) else { return }
+        let ext = format == "clean" ? "step" : format
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: format) ?? .data]
-        panel.nameFieldStringValue = rec.name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-") + "." + format
+        panel.allowedContentTypes = [UTType(filenameExtension: ext) ?? .data]
+        panel.nameFieldStringValue = rec.name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-") + "." + ext
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        Task { await exportSnapshot(id, to: url) }
+        Task { await exportSnapshot(id, to: url, clean: format == "clean") }
     }
 
     // MARK: Exact readouts

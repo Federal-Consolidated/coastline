@@ -522,9 +522,9 @@ struct JobStrip: View {
     private func openChapter(_ ch: JobChapter, _ group: [JobStep], _ n: Int) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
-                Text("\(n)").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white)
-                    .frame(width: badge, height: badge).background(Circle().fill(Theme.accent))
-                Text(ch.title).font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
+                Text("\(n)").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.black)
+                    .frame(width: badge, height: badge).background(Circle().fill(Color.white.opacity(0.92)))
+                Text(ch.title).font(.caption.weight(.semibold)).foregroundStyle(.primary)
                 Text("\(group.count) step\(group.count == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)

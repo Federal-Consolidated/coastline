@@ -432,6 +432,8 @@ enum Automation {
             case "exportsnap":  // "exportsnap /tmp/s.stl": the latest snapshot
                 if let r = model.sharpSnapshots.last { let ok = await model.exportSnapshot(r.id, to: URL(fileURLWithPath: arg)); print("exportsnap \(ok) \(model.status)") }
             case "hidesnap": model.hideSharp()
+            case "exportclean":  // "exportclean /tmp/s.step": the latest snapshot as clean CAD
+                if let r = model.sharpSnapshots.last { let t0 = Date(); let ok = await model.exportSnapshot(r.id, to: URL(fileURLWithPath: arg), clean: true); print("exportclean \(ok) \(String(format: "%.1f", Date().timeIntervalSince(t0))) s · \(model.status) \(model.errorMessage ?? "")") }
             case "measured":  // the measure points' readouts
                 for p in model.measurePoints { print("measured onSim \(p.onSim) exact \(p.exactHeight.map { String(format: "%.4f", $0) } ?? "-") grid \(p.gridHeight.map { String(format: "%.4f", $0) } ?? "-") leftOnPart \(p.leftOnPart.map { "\(Int(($0 * 1000).rounded())) µm" } ?? "-")") }
             case "showsnap": if let r = model.sharpSnapshots.last { model.showSnapshot(r.id); try? await Task.sleep(for: .milliseconds(500)); print("showsnap \(model.shownSnapshot != nil)") }

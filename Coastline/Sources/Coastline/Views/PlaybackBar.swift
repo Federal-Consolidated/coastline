@@ -48,7 +48,7 @@ struct PlaybackBar: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .glassEffect(.regular, in: .rect(cornerRadius: 20))
+            .glassEffect(.regular.tint(Color.black.opacity(0.32)), in: .rect(cornerRadius: 20))  // readable over a light scene
         }
         .controlSize(.regular)
     }
@@ -73,6 +73,7 @@ struct PlaybackBar: View {
                 .accessibilityLabel(model.isPlaying ? "Pause" : "Play this step")
                 transport("forward.frame.fill", "Next Move", "→") { model.step(1) }
                 if level < 4 { transport("forward.end.fill", "Next Operation", "⌥→") { model.jumpOperation(1) } }
+                SharpenMenu(compact: level >= 4)
             }
             Text(level >= 5 ? AppModel.clock(model.playhead) : "\(AppModel.clock(model.playhead)) / \(AppModel.clock(model.timeline.duration))")
                 .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
@@ -90,10 +91,10 @@ struct PlaybackBar: View {
             }
             .menuStyle(.button)
             .buttonStyle(.glass)
+            .foregroundStyle(.primary)
             .fixedSize()
             .help("Playback speed: 1× is real time, as long as the cut takes at the machine")
             .accessibilityLabel("Playback speed \(Int(model.playSpeed)) times")
-            SharpenMenu(compact: level >= 4)
             if level < 3 {
                 Menu {
                     Section("Colour the toolpath lines by") {
@@ -111,6 +112,7 @@ struct PlaybackBar: View {
                 }
                 .menuStyle(.button)
                 .buttonStyle(.glass)
+                .foregroundStyle(.primary)
                 .fixedSize()
                 .help("How the toolpath lines are coloured: by move type (cutting, in and out, plunging, rapids), feed rate, depth, operation or tool")
                 .accessibilityLabel("Colour the toolpaths by \(model.colorMode.title)")
@@ -233,10 +235,10 @@ struct ChapterTimeline: View {
         let progress: Double? = span.map { s in min(max((model.playhead - s.lowerBound) / max(s.upperBound - s.lowerBound, 1e-6), 0), 1) }
         return ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 4)
-                .fill(active ? Theme.accent : Color.secondary.opacity(byHand ? 0.22 : 0.4))
+                .fill(active ? Color.primary.opacity(0.32) : Color.secondary.opacity(byHand ? 0.3 : 0.5))
                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(byHand ? Color.secondary.opacity(0.7) : .clear, style: StrokeStyle(lineWidth: 1, dash: [3, 2])))
             if active, let progress, !byHand {
-                Circle().fill(.white).shadow(radius: 2).frame(width: 14, height: 14)
+                Circle().fill(.white).overlay(Circle().strokeBorder(Color.black.opacity(0.45), lineWidth: 1)).shadow(radius: 2).frame(width: 14, height: 14)
                     .offset(x: CGFloat(progress) * max(width - 14, 0))
             }
             if let span, !byHand { SnapshotMarks(span: span, width: width) }
