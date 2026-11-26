@@ -317,15 +317,17 @@ single points and sections exactly from the toolpath.
   - **Clean CAD, NURBS (.step)** (engine, `clean_cad.py`, RPC `export_clean`): a B-rep solid, not
     a mesh. From the snapshot's heights (at most ~1.2 million cells):
     - the flat levels the cuts left are found;
-    - micron cusps and specks under 0.2 mm² are cleaned away;
+    - micron cusps, specks under 1 mm² and levels closer than 0.05 mm are cleaned away;
     - each level's outline is traced, and fitted with lines and least-squares arcs (a whole
       circle becomes one circle);
     - the outlines are cut out of the stock block as prisms, one cut at a time, each checked;
     - sloped 3D areas get a light cubic B-spline surface (about 30 × 30 points, extended past
       the area's edge), and the area's footprint is split by it.
 
-    Tested from the app: the signet pendant gave 277 faces (142 planes, 127 cylinders, 8 NURBS),
-    a valid solid, in 7.7 s; the motor mount gave 270 faces with 17 NURBS, valid, in 5.6 s.
+    Tested from the app: the signet pendant gives 158 faces (62 planes, 88 cylinders, 8 NURBS), a
+    valid solid, in 5 s; the motor mount mid-way through boring its holes (23 raw depths) gives
+    226 faces, valid, in 6.2 s. Coplanar faces are merged with their edges when OCCT manages,
+    else faces only; engine errors reach the app with their own message.
     Rhino, Fusion and other CAD programs open it as a NURBS polysurface. Rhino's free file
     library can't build joined solids, so there is no clean `.3dm`: the STEP opens directly in
     Rhino. Bull-nose fillets along wall feet are left out (as steps); `COASTLINE_CLEAN_DUMP=path`

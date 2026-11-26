@@ -6,10 +6,12 @@ import Foundation
 ///   u32 big-endian JSON length · JSON header · blobs (lengths listed in header["blobs"])
 /// Blobs carry little-endian float32/uint32 arrays (meshes, toolpaths).
 public actor EngineClient {
-    public struct EngineError: Error, CustomStringConvertible {
+    public struct EngineError: LocalizedError, CustomStringConvertible {
         public let type: String
         public let message: String
         public var description: String { "\(type): \(message)" }
+        /// What the app shows: the engine's own message, not "error 1".
+        public var errorDescription: String? { message.isEmpty ? type : message }
         public init(type: String, message: String) { (self.type, self.message) = (type, message) }
     }
 

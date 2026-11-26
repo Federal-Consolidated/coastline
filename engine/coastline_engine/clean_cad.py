@@ -23,7 +23,7 @@ import numpy as np
 
 # MARK: Classifying the cells
 
-def find_levels(h: np.ndarray, top: float, cell: float, flat_tol: float, min_area: float) -> list[float]:
+def find_levels(h: np.ndarray, top: float, cell: float, flat_tol: float, min_area: float, gap: float = 0.05) -> list[float]:
     """The flat depths, deepest last; the top is always one."""
     pad = np.pad(h, 1, mode="edge")
     d = np.maximum.reduce([abs(pad[1:-1, 1:-1] - pad[:-2, 1:-1]), abs(pad[1:-1, 1:-1] - pad[2:, 1:-1]),
@@ -39,7 +39,7 @@ def find_levels(h: np.ndarray, top: float, cell: float, flat_tol: float, min_are
             if counts[i] < min_cells:
                 break
             z = float(vals[i])
-            if all(abs(z - l) > flat_tol for l in levels):
+            if all(abs(z - l) > max(gap, flat_tol) for l in levels):
                 levels.append(z)
     return sorted(levels, reverse=True)
 
@@ -419,7 +419,7 @@ def _surface_cutter(eff: np.ndarray, inside: np.ndarray, rows: slice, cols: slic
 
 
 def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: float, bottom: float,
-          flat_tol: float = 0.01, min_area: float = 0.2) -> tuple[object, dict]:
+          flat_tol: float = 0.01, min_area: float = 1.0, gap: float = 0.05) -> tuple[object, dict]:
     """The cleaned solid and what went into it. heights[row, col], cell centres at
     origin + (col, row) · cell."""
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
@@ -434,7 +434,7 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
     rows, cols = h.shape
     x0, y0 = origin
     corner_x, corner_y = x0 - cell / 2, y0 - cell / 2
-    levels = find_levels(h, top, cell, flat_tol, min_area)
+    levels = find_levels(h, top, cell, flat_tol, min_area, gap)
     eff, sloped = classify(h, levels, flat_tol)
     # Small or thin sloped patches snap to their nearest level (clean, simple geometry).
     min_cells = max(min_area / (cell * cell), 9)
@@ -525,13 +525,25 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
         shape, current = cut.Shape(), after
     if not BRepCheck_Analyzer(shape).IsValid():
         from OCP.ShapeFix import ShapeFix_Shape
-        fix = ShapeFix_Shape(shape)
-        fix.Perform()
-        shape = fix.Shape()
-    unify = ShapeUpgrade_UnifySameDomain(shape, True, True, False)
-    unify.Build()
-    if BRepCheck_Analyzer(unify.Shape()).IsValid() or not BRepCheck_Analyzer(shape).IsValid():
-        shape = unify.Shape()
+        try:
+            fix = ShapeFix_Shape(shape)
+            fix.Perform()
+            shape = fix.Shape()
+        except Exception:
+            pass
+    import os
+    if os.environ.get("COASTLINE_CLEAN_RAW"):  # for experiments: the shape before merging
+        return shape, {"levels": len(levels), "patches": len(patches), "tools": len(tools), "skipped": skipped}
+    # Merging coplanar faces can fail on an odd shape (OCCT raises): the solid is kept as it is.
+    for unify_edges in (True, False):  # edges too when OCCT manages, else faces only
+        try:
+            unify = ShapeUpgrade_UnifySameDomain(shape, unify_edges, True, False)
+            unify.Build()
+            if BRepCheck_Analyzer(unify.Shape()).IsValid() or not BRepCheck_Analyzer(shape).IsValid():
+                shape = unify.Shape()
+            break
+        except Exception:
+            continue
     return shape, {"levels": len(levels), "patches": len(patches), "tools": len(tools), "skipped": skipped}
 
 
