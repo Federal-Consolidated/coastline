@@ -32,52 +32,78 @@ struct SharpenMenu: View {
             .accessibilityElement(children: .combine)
             .accessibilityLabel(p < 0 ? "Sharpening: \(model.sharpPhase)" : "Sharpening, \(Int((p * 100).rounded())) percent")
         } else {
-            Menu {
-                Section("Make a sharp snapshot here") {
-                    Button("Whole Stock", systemImage: "square.grid.3x3.fill") { model.sharpen() }
-                    Button("Around Measure Point A (5 mm, 2.5 µm)", systemImage: "scope") {
-                        if let p = model.measurePoints.first, let w = model.simWorkPoint(p) { model.sharpen(around: w) }
+            let shown = model.shownSnapshot != nil
+            let title = shown ? "Sharp" : "Sharpen"
+            let symbol = shown ? "checkmark.seal.fill" : "sparkle.magnifyingglass"
+            HStack(spacing: 4) {
+                // The action: one click sharpens the whole stock (or, when shown, goes back).
+                Button {
+                    if shown { model.hideSharp() } else { model.sharpen() }
+                } label: {
+                    Group {
+                        if compact {
+                            BarIconLabel(symbol: symbol)
+                        } else {
+                            Label(title, systemImage: symbol)
+                                .font(.callout.weight(.semibold))
+                                .frame(height: 18)
+                        }
                     }
-                    .disabled(model.measurePoints.first.map { !$0.onSim } ?? true)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, compact ? 8 : 14)
+                    .padding(.vertical, 7)
+                    .contentShape(Capsule())
                 }
-                let mine = model.sharpSnapshots.filter { $0.side == model.viewSide }
-                if !mine.isEmpty {
-                    Section("Snapshots of this side") {
-                        ForEach(mine) { rec in
-                            Menu {
-                                Button("Show", systemImage: "eye") { model.showSnapshot(rec.id) }
-                                    .disabled(!model.snapshotIsCurrent(rec))
-                                Button("Export STL…", systemImage: "square.and.arrow.up") { model.exportSnapshotWithPanel(rec.id, format: "stl") }
-                                Button("Export OBJ…", systemImage: "square.and.arrow.up") { model.exportSnapshotWithPanel(rec.id, format: "obj") }
-                                Divider()
-                                Button("Delete", systemImage: "trash", role: .destructive) { model.deleteSnapshot(rec.id) }
-                            } label: {
-                                Text(rec.name + (model.snapshotIsCurrent(rec) ? "" : " · out of date"))
-                                Text("\(rec.resolutionText) · \(rec.cols.formatted()) × \(rec.rows.formatted()) cells")
+                // Drawn here, not by the system style: it stays clearly a button (white on blue,
+                // green while shown) whether or not the window is the active one.
+                .buttonStyle(SharpenButtonStyle(colour: shown ? Color(nsColor: .systemGreen) : Color(nsColor: .systemBlue)))
+                .help(shown
+                      ? "Showing a sharp snapshot. Click to go back to the playback grid (moving the playhead does too)."
+                      : "Re-simulate the whole stock up to the playhead at high resolution (about 10 µm; the playback grid is \(Length.mm(model.heightmap?.cell ?? 0)) mm). The arrow has a detail around a measured point, your snapshots and export.")
+                .accessibilityLabel(shown ? "Sharp snapshot shown, back to the playback grid" : "Sharpen the whole stock")
+                // The options.
+                Menu {
+                    Section("Make a sharp snapshot here") {
+                        Button("Whole Stock", systemImage: "square.grid.3x3.fill") { model.sharpen() }
+                        Button("Around Measure Point A (5 mm, 2.5 µm)", systemImage: "scope") {
+                            if let p = model.measurePoints.first, let w = model.simWorkPoint(p) { model.sharpen(around: w) }
+                        }
+                        .disabled(model.measurePoints.first.map { !$0.onSim } ?? true)
+                    }
+                    if shown { Button("Back to the Playback Grid", systemImage: "arrow.uturn.backward") { model.hideSharp() } }
+                    let mine = model.sharpSnapshots.filter { $0.side == model.viewSide }
+                    if !mine.isEmpty {
+                        Section("Snapshots of this side") {
+                            ForEach(mine) { rec in
+                                Menu {
+                                    Button("Show", systemImage: "eye") { model.showSnapshot(rec.id) }
+                                        .disabled(!model.snapshotIsCurrent(rec))
+                                    Button("Export STL…", systemImage: "square.and.arrow.up") { model.exportSnapshotWithPanel(rec.id, format: "stl") }
+                                    Button("Export OBJ…", systemImage: "square.and.arrow.up") { model.exportSnapshotWithPanel(rec.id, format: "obj") }
+                                    Divider()
+                                    Button("Delete", systemImage: "trash", role: .destructive) { model.deleteSnapshot(rec.id) }
+                                } label: {
+                                    Text(rec.name + (model.snapshotIsCurrent(rec) ? "" : " · out of date"))
+                                    Text("\(rec.resolutionText) · \(rec.cols.formatted()) × \(rec.rows.formatted()) cells")
+                                }
                             }
                         }
                     }
+                    if model.sharpSnapshots.contains(where: { $0.side != model.viewSide }) {
+                        Text("Other setups' snapshots show on their own timelines.")
+                    }
+                } label: {
+                    Image(systemName: "chevron.down").font(.system(size: 11, weight: .bold)).frame(width: 12, height: 18)
                 }
-                if model.sharpSnapshots.contains(where: { $0.side != model.viewSide }) {
-                    Text("Other setups' snapshots show on their own timelines.")
-                }
-            } label: {
-                let title = model.shownSnapshot == nil ? "Sharpen" : "Sharp"
-                let symbol = model.shownSnapshot == nil ? "sparkle.magnifyingglass" : "checkmark.seal.fill"
-                if compact {
-                    Image(systemName: symbol).font(.callout.weight(.semibold)).accessibilityLabel(title)
-                } else {
-                    Label(title, systemImage: symbol).font(.callout.weight(.semibold))
-                }
+                .menuStyle(.button)
+                .menuIndicator(.hidden)
+                .buttonStyle(.glass)
+                .foregroundStyle(.primary)
+                .fixedSize()
+                .help("Sharpen options, this side's snapshots, export")
+                .accessibilityLabel("Sharpen options and snapshots")
             }
-            .menuStyle(.button)
-            .buttonStyle(.glass)
-            .fixedSize()
             .disabled(!model.simulate || model.heightmap == nil)
-            .help(model.shownSnapshot == nil
-                  ? "Re-simulate up to the playhead at high resolution (10 µm over the stock, 2.5 µm around a measured point). The playback grid is about \(Length.mm(model.heightmap?.cell ?? 0)) mm."
-                  : "Showing a sharp snapshot: playing or moving the playhead goes back to the playback grid.")
-            .accessibilityLabel(model.shownSnapshot == nil ? "Sharpen" : "Sharp snapshot shown")
         }
     }
 }
@@ -169,5 +195,18 @@ extension AppModel {
         let inv = (renderer.scene.groupTransform(renderer.scene.mesh("simstock")?.group) * simd_float4x4(translation: SIMD3<Float>(wo))).inverse
         let w = inv * SIMD4(p.world, 1)
         return SIMD2(Double(w.x), Double(w.y))
+    }
+}
+
+/// Sharpen's button: a tinted glass capsule that doesn't fade with the window.
+struct SharpenButtonStyle: ButtonStyle {
+    let colour: Color
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .glassEffect(.regular.tint(colour.opacity(configuration.isPressed ? 0.95 : 0.8)).interactive(), in: .capsule)
+            .opacity(enabled ? 1 : 0.45)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
     }
 }
