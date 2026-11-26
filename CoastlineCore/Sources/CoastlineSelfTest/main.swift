@@ -11,6 +11,7 @@ let suites: [(String, [TestCase])] = [
     ("Materials", materialTests),
     ("Inventory", inventoryTests),
     ("Consumables", consumablesTests),
+    ("SharpSnapshot", sharpSnapshotTests),
     ("ToolCatalog", toolCatalogTests),
     ("StockCatalog", stockCatalogTests),
     ("MaterialResource", materialResourceTests),

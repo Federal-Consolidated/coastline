@@ -40,6 +40,13 @@ enum MachineDisplay: String, CaseIterable, Identifiable {
 struct MeasurePoint: Equatable {
     var world: SIMD3<Float>
     var info: FaceInfo?
+    /// K12: the material height over this point after the moves so far (work Z, mm), exactly
+    /// from the toolpath, and the playback grid's value there.
+    var exactHeight: Double? = nil
+    var gridHeight: Double? = nil
+    /// Where the point is on the part: material left above it (+) or cut into it (−), mm.
+    var leftOnPart: Double? = nil
+    var onSim = false
 }
 
 /// App state: navigation plus the workspace (machine, part, stock, setup, measuring).
@@ -434,6 +441,17 @@ final class AppModel {
     // Measuring
     var measuring = false { didSet { if !measuring { clearMeasurements() } } }
     var measurePoints: [MeasurePoint] = []
+
+    // Sharp snapshots (K12, SharpModel.swift)
+    var sharpSnapshots: [SharpSnapshotRecord] = []
+    var shownSnapshot: UUID?
+    /// 0…1 while a snapshot is being made.
+    var sharpProgress: Double?
+    var exactSection: ExactSection?
+    @ObservationIgnored var sharpTask: Task<Void, Never>?
+    @ObservationIgnored var sharpCancel: Counter?
+    @ObservationIgnored var sharpCache: [UUID: Heightmap] = [:]
+    @ObservationIgnored var sharpSegments: (key: String, segs: [CutSegment])?
 
     // Section
     enum SectionAxis: String, CaseIterable, Identifiable { case x, y, z; var id: Self { self } }
@@ -1277,6 +1295,7 @@ final class AppModel {
     // MARK: Import
 
     func importPart(_ url: URL) async {
+        loadSnapshots([])
         isBusy = true
         status = "Importing \(url.lastPathComponent)…"
         errorMessage = nil
@@ -1554,6 +1573,14 @@ final class AppModel {
         if fixturePlacement != nil { handlePlacementClick(point, size: viewSize); return }
         guard measuring else { selectBedObject(at: point, viewSize: viewSize); return }
         let ray = renderer.ray(at: point, viewSize: viewSize)
+        // On the simulated stock: the exact material height from the toolpath (K12).
+        if simulate, heightmap != nil, let s = simRayHit(origin: ray.origin, direction: ray.direction) {
+            if measurePoints.count >= 2 { measurePoints.removeAll() }
+            measurePoints.append(MeasurePoint(world: s.world, info: nil, onSim: true))
+            refreshMeasureMarkers()
+            probeExact(index: measurePoints.count - 1, work: s.work)
+            return
+        }
         guard let hit = renderer.scene.pick(origin: ray.origin, direction: ray.direction), hit.id == "part" else {
             status = "Click on the part to measure"
             return

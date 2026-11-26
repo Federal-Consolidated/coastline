@@ -356,6 +356,7 @@ extension AppModel {
     }
 
     func resetSimulation() {
+        if shownSnapshot != nil { hideSharp(restore: false) }
         simCatchUp?.cancel()
         simPrecompute?.cancel()
         renderer.scene.remove(id: "simstock")
@@ -491,6 +492,8 @@ extension AppModel {
     /// instead of freezing the scrubber. Saves a checkpoint every 1/40 of the job on the way.
     private func advanceSimulation(to i: Int, partial t: Double) {
         simCatchUp?.cancel()
+        // A sharp snapshot shows only at its own moment.
+        if let id = shownSnapshot, let rec = sharpSnapshots.first(where: { $0.id == id }), abs(playhead - rec.time) > 1e-6 { hideSharp() }
         guard var hm = heightmap else { return }
         let every = max(timeline.entries.count / 40, 200)
         // Scripted runs (snapshots) want the finished state at once.
@@ -527,7 +530,7 @@ extension AppModel {
         }
     }
 
-    private func refreshSimMesh() {
+    func refreshSimMesh() {
         guard var hm = heightmap, let mesh = renderer.scene.mesh("simstock"), let (c0, r0, c1, r1) = hm.takeDirty() else { return }
         heightmap = hm
         let back = simBack

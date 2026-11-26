@@ -399,6 +399,41 @@ enum Automation {
             case "bitlabels":  // "bitlabels /tmp/l.pdf": every active bit's label, written without opening
                 let bits = inventory.inventory.tools.flatMap { t in Consumables.activeUnits(t).map { (t, $0) } }
                 print("bitlabels \(bits.count) \(BitLabels.write(bits, to: URL(fileURLWithPath: arg)))")
+            case "sharpen":  // "sharpen" (whole stock) or "sharpen x y [size]" (work mm): waits until it's made
+                let a = arg.split(separator: " ").compactMap { Double($0) }
+                let t0 = Date()
+                model.sharpen(around: a.count >= 2 ? SIMD2(a[0], a[1]) : nil, size: a.count >= 3 ? a[2] : 5)
+                while model.sharpProgress != nil { try? await Task.sleep(for: .milliseconds(100)) }
+                try? await Task.sleep(for: .milliseconds(300))
+                print("sharpen \(String(format: "%.1f", Date().timeIntervalSince(t0))) s · \(model.status) · shown \(model.shownSnapshot != nil)")
+            case "snapshots":
+                for r in model.sharpSnapshots {
+                    print("snapshot \(r.name) side \(r.side) t \(Int(r.time)) \(r.resolutionText) \(r.cols)x\(r.rows) \(r.heights.count / 1024) KB current \(model.snapshotIsCurrent(r))")
+                }
+            case "exactprobe":  // "exactprobe x y" (work mm): exact height vs the playback grid and the sharp snapshot
+                let a = arg.split(separator: " ").compactMap { Double($0) }
+                if a.count == 2, let hm = model.heightmap {
+                    let segs = await model.cutSegments()
+                    let p = SIMD2(a[0], a[1])
+                    let e = SharpSim.exactHeight(at: p, segments: segs, start: model.simStart?.sample(p) ?? hm.top, bottom: hm.bottom)
+                    let sharp = model.sharpSnapshots.last.flatMap { model.sharpCache[$0.id] ?? $0.heightmap }?.sample(p)
+                    print(String(format: "exactprobe exact %.4f grid %.4f sharp %@ segments %d", e, hm.sample(p), sharp.map { String(format: "%.4f", $0) } ?? "-", segs.count))
+                }
+            case "exactsection":  // "exactsection x|y offset"
+                let a = arg.split(separator: " ")
+                model.sectionAxis = a.first == "x" ? .x : .y
+                model.sectionOffset = a.count > 1 ? Double(a[1]) ?? 0 : 0
+                model.sectionOn = true
+                await model.computeExactSection()
+                if let x = model.exactSection {
+                    print("exactsection \(x.title) points \(x.positions.count) max \(x.exact.max() ?? 0) min \(x.exact.min() ?? 0) left \(x.leftAbovePart.map { "\(Int($0 * 1000)) µm" } ?? "-") into \(x.cutIntoPart.map { "\(Int($0 * 1000)) µm" } ?? "-")")
+                }
+            case "exportsnap":  // "exportsnap /tmp/s.stl": the latest snapshot
+                if let r = model.sharpSnapshots.last { print("exportsnap \(model.exportSnapshot(r.id, to: URL(fileURLWithPath: arg))) \(model.status)") }
+            case "hidesnap": model.hideSharp()
+            case "measured":  // the measure points' readouts
+                for p in model.measurePoints { print("measured onSim \(p.onSim) exact \(p.exactHeight.map { String(format: "%.4f", $0) } ?? "-") grid \(p.gridHeight.map { String(format: "%.4f", $0) } ?? "-") leftOnPart \(p.leftOnPart.map { "\(Int(($0 * 1000).rounded())) µm" } ?? "-")") }
+            case "showsnap": if let r = model.sharpSnapshots.last { model.showSnapshot(r.id); try? await Task.sleep(for: .milliseconds(500)); print("showsnap \(model.shownSnapshot != nil)") }
             case "savetools": model.tuning.toolSaver = arg == "off" ? nil : true  // the tuner's Save tools goal
             case "bits":  // K10: each program's bit and its wear before → after
                 for f in model.wearForecast(arg == "tuned" ? model.tuning : nil) {

@@ -39,7 +39,7 @@ struct PlaybackBar: View {
                         Label(d.maxGouge > d.tolerance ? "gouge \(Length.mm(d.maxGouge)) mm" : "no gouges", systemImage: "circle.fill")
                             .foregroundStyle(d.maxGouge > d.tolerance ? Theme.danger : .secondary)
                         Spacer()
-                        Text("at the playhead · simulation cell ≈ \(Length.mm(model.heightmap?.cell ?? 0)) mm").foregroundStyle(.secondary)
+                        Text("at the playhead · \(model.shownSnapshot == nil ? "simulation" : "sharp snapshot") cell ≈ \(Length.mm(model.deviationGrid?.cell ?? 0)) mm").foregroundStyle(.secondary)
                     }
                     .font(.caption)
                 }
@@ -91,6 +91,7 @@ struct PlaybackBar: View {
             .fixedSize()
             .help("Playback speed: 1× is real time, as long as the cut takes at the machine")
             .accessibilityLabel("Playback speed \(Int(model.playSpeed)) times")
+            SharpenMenu()
             if level < 3 {
                 Menu {
                     Section("Colour the toolpath lines by") {
@@ -219,6 +220,7 @@ struct ChapterTimeline: View {
                 Circle().fill(.white).shadow(radius: 2).frame(width: 14, height: 14)
                     .offset(x: CGFloat(progress) * max(width - 14, 0))
             }
+            if let span, !byHand { SnapshotMarks(span: span, width: width) }
         }
         .frame(width: width, height: active ? 14 : 10)
         .frame(height: 22)

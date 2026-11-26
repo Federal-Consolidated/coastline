@@ -25,6 +25,17 @@ public struct Heightmap: Sendable {
         heights = [Float](repeating: Float(stockMax.z), count: cols * rows)
     }
 
+    /// A grid with a given cell and size (`init(origin:…)` in SharpSnapshot.swift).
+    init(stockMin: SIMD3<Double>, stockMax: SIMD3<Double>, explicitCell c: Double, cols: Int, rows: Int) {
+        cell = c
+        self.cols = cols
+        self.rows = rows
+        origin = SIMD2(stockMin.x + c / 2, stockMin.y + c / 2)
+        top = stockMax.z
+        bottom = stockMin.z
+        heights = [Float](repeating: Float(stockMax.z), count: cols * rows)
+    }
+
     public func height(col: Int, row: Int) -> Float { heights[row * cols + col] }
 
     /// Lowers the material under a tool moving from a to b (straight line, any Z).

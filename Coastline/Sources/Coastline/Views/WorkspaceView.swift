@@ -20,6 +20,7 @@ struct WorkspaceView: View {
         .accessibilityValue(model.part.map { "\($0.fileName), \(model.title(model.stage)) stage" } ?? "No part imported")
         .ignoresSafeArea(.container, edges: .bottom)
         .overlay { SceneLabelsOverlay() }
+        .sheet(item: Binding(get: { model.exactSection }, set: { model.exactSection = $0 })) { ExactSectionSheet(section: $0) }
         .overlay { FindingPinsOverlay() }
         .overlay(alignment: .topLeading) {
             if let prompt = model.gumballPrompt { TypedMoveField(prompt: prompt).offset(x: prompt.point.x + 14, y: prompt.point.y - 18) }
@@ -225,6 +226,11 @@ struct SectionControls: View {
             }
             Text("The cut face is drawn hatched, like a drawing's cross-section.")
                 .font(.caption).foregroundStyle(.secondary)
+            if model.simulate, model.heightmap != nil {
+                Button("Exact Section…", systemImage: "chart.xyaxis.line") { Task { await model.computeExactSection() } }
+                    .disabled(model.sectionAxis == .z)
+                    .help("The material along this section line, worked out exactly from the toolpath up to the playhead, with the part and the playback grid for comparison.")
+            }
         }
     }
 }
@@ -246,8 +252,21 @@ struct MeasureHUD: View {
                         Text(i == 0 ? "A" : "B").font(.caption.weight(.bold))
                             .frame(width: 18, height: 18).background(Color.white.opacity(0.9), in: Circle())
                             .foregroundStyle(.black)
-                        Text(p.info?.summary ?? (model.part?.exact == true ? "Measuring…" : "Point on render mesh"))
-                            .font(.callout)
+                        if p.onSim {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(p.exactHeight.map { "Material at Z \(Length.mm($0)) mm (exact)" } ?? "Working it out from the toolpath…").font(.callout)
+                                if let e = p.exactHeight, let g = p.gridHeight {
+                                    Text("Playback grid: \(Length.mm(g)) mm (\(Int(((g - e) * 1000).rounded())) µm off)").font(.caption).foregroundStyle(.secondary)
+                                }
+                                if let l = p.leftOnPart {
+                                    Text(l >= 0 ? "\(Int((l * 1000).rounded())) µm left above the part" : "\(Int((-l * 1000).rounded())) µm into the part")
+                                        .font(.caption.weight(.semibold)).foregroundStyle(l < -0.02 ? Theme.danger : l <= 0.02 ? Theme.ok : .primary)
+                                }
+                            }
+                        } else {
+                            Text(p.info?.summary ?? (model.part?.exact == true ? "Measuring…" : "Point on render mesh"))
+                                .font(.callout)
+                        }
                     }
                 }
                 if let d = model.measuredDistance, let delta = model.measuredDelta {

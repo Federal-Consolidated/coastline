@@ -27,6 +27,8 @@ struct ProjectFile: Codable, Equatable {
     var resources: JobResourceSnapshot? = nil
     /// Only in saved files (snapshots for undo leave it out).
     var results: SavedResults? = nil
+    /// K12: sharp snapshots of the generated job.
+    var snapshots: [SharpSnapshotRecord]? = nil
 }
 
 extension UTType {
@@ -188,6 +190,7 @@ extension AppModel {
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         var file = projectSnapshot
         file.results = savedResults
+        file.snapshots = savedResults == nil || sharpSnapshots.isEmpty ? nil : savedSnapshots
         try enc.encode(file).write(to: url, options: .atomic)
         // Finder shows the part itself (isometric) as the project's icon. Set after every
         // save: the atomic write replaces the file and its icon with it.
@@ -220,7 +223,9 @@ extension AppModel {
             if let r = p.results, part != nil, (r.machine ?? .legacy) == planningMachineReference {
                 enter(.machining)
                 restore(r)
+                loadSnapshots(p.snapshots ?? [])
             } else {
+                loadSnapshots([])
                 enter(hasPrep ? .prep : .partStock)
                 status = p.results == nil ? "Opened \(url.lastPathComponent)" : "Opened \(url.lastPathComponent) · Regenerate toolpaths for this machine"
             }

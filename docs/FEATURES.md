@@ -11,14 +11,14 @@ Coastline has two lines of work in this repository, each on its own branch:
 - **Line K (clamp kit), branch `xioaniumi`:** everything in line C, plus the original CR-1
   workflow that v0.6 ("Remove the clamp kit, other job formats and side features") took out: the
   clamp kit and bed holding, stock prep, guided `.crproj` export, examples and the side tools
-  (nest, tuner, deviation map, batching), and bit IDs with wear tracking (K10).
+  (nest, tuner, deviation map, batching), bit IDs with wear tracking (K10), and sharp snapshots with exact readouts (K12).
 
 Line K is built on top of line C's latest commit, so GitHub's compare view shows exactly what it
 adds. Both workflows run side by side there: a job uses the clamp kit unless it is planned from the
 fixture library (`Setup.planFromFixtureLibrary`) or held in a custom fixture. How the two branches
 trade features is in [SYNC.md](SYNC.md).
 
-Checks on line K: planning core 258 passed, machine core (MillCore) 123 passed, engine 113 passed.
+Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 113 passed.
 The app builds and generates the Motor Mount example (shoulders + clamp kit) with every program
 passing the safety check.
 
@@ -266,77 +266,67 @@ estimate can be corrected per bit and the life model learns from measurements, n
 - Tests to add: cell grid and refacing, pattern safety, baseline comparison, the wear estimate and
   its confidence, learning weights.
 
-### K12. Sharp snapshots, exact readouts and export (planned, not built)
-A plan, not code yet. It builds on the playback simulation (`Sim/Heightmap.swift`, about 250 000
-cells: ~0.09 mm on a 50 × 40 mm block, ~0.22 mm on a 150 × 80 mm bar), the multi-setup model
-(`Sim/StockModel.swift`, `Sim/DexelSim.swift`, 0.2–0.5 mm), the deviation map (K7), the saved
-results (`Model/SavedResults.swift`) and the engine's 2.5D regions and OCCT.
+### K12. Sharp snapshots, exact readouts and export (phases 1–4 built; STEP, compare and multi-setup planned)
+The playback simulation (`Sim/Heightmap.swift`, about 250 000 cells: ~0.09 mm on a 50 × 40 mm
+block, ~0.2 mm on a 150 × 80 mm bar) is enough to watch material go but far coarser than an 8 µm
+cusp or the deviation map's ±20 µm band. K12 re-simulates at µm level on demand and answers
+single points and sections exactly from the toolpath.
 
-**Why.** Finishing cusps are around 8 µm and the deviation map's green band is ±20 µm, both far
-below the simulation's cell size. Checking a state closely needs either a much finer simulation
-or exact answers from the toolpath itself.
+- **Sharp snapshot (built).** Playback bar ▸ Sharpen ▸ Whole Stock (10 µm, capped at 30 million
+  cells, so ~14–20 µm on a long bar) or Around Measure Point A (5 mm square at 2.5 µm).
+  `SharpSim.sharpen` (core, `Sim/SharpSnapshot.swift`):
+  - starts from the coarse state the side began from;
+  - culls every segment whose lowest tip stays above the coarse final surface around it (plus
+    1.5 coarse cells + 20 µm);
+  - goes from the lowest segment up, in parallel bands of 32 × 32-cell tiles that remember their
+    highest cell, so a segment skips every tile already below it.
 
-**Phase 1. Sharp snapshot**
-- With playback paused, "Sharpen" re-simulates up to the playhead at 10–20 µm in the background
-  (progress, cancel) and shows the result until playback moves on.
-- Whole part, the visible area, or a box the user drags; a small box can go to a few µm.
-- Kept fast by culling: the coarse simulation already knows the final surface, so every move
-  whose tool envelope stays above it (plus a margin) is skipped. Most roughing moves are cut away
-  later, so most of the work disappears. Tiled and multithreaded; Metal compute if CPU is not
-  enough.
-- The deviation map (K7) runs on the sharp version when there is one, so its ±20 µm colours mean
-  what they say.
+  Measured: a 150 × 80 mm bar after 36 min of 2.5D cutting, 30 million cells in 0.9 s; the 3D
+  signet pendant at 14 µm in 1.1 s; a 2.5 µm detail square in 0.1 s. Shown in place of the
+  playback grid (drawn at up to 2.5 million cells; the readouts and export use all of it) until
+  the playhead moves. The deviation map (K7) compares the shown snapshot when there is one.
+- **Exact readouts (built).** `SharpSim.envelope`: the lowest point of a cutter (flat, ball,
+  bull nose) moving along a sloped segment over a point. The height is convex in the move's
+  parameter, so a golden-section search finds it to float precision. With Measure on and the
+  simulation shown, a click on the stock gives:
+  - the exact material height there;
+  - the playback grid's value and how far off it is;
+  - how far it is above or into the part (the part's height from the engine's `height_field`).
 
-**Phase 2. Exact readouts**
-- Exact probe: the Measure tool gives the remaining material height and the distance to the part
-  at the clicked point, evaluated from the moves themselves (the lowest tool envelope over that
-  point), not from a grid.
-- Exact section: a line drawn across the part gives the material profile along it, with cusp
-  heights, step heights between levels and the gap to the CAD, in µm.
-- Cheap (only the moves near the point or line), so no waiting.
-
-**Phase 3. Snapshots saved in the project, on the timeline**
-- Each snapshot is stored in the `.coastline` file with its region, resolution, playhead time,
-  name and note, as heights in whole µm relative to the coarse simulation, LZFSE-compressed like
-  the saved moves.
-- It is tied to the toolpath signature it was made from. After regenerating or changing the
-  operations it shows as out of date (greyed), with "Sharpen Again", and is never shown as true.
-- A limit on snapshot space per project (setting); the oldest are dropped first. Snapshots are a
-  cache: dropping one loses nothing that can't be made again.
-- On the timeline: a marker at each snapshot's moment (different marks for whole-part and region
-  snapshots, greyed when out of date). Click jumps the playhead there and shows the sharp state at
-  once; hover shows name, resolution and date. A list beside the timeline renames, notes, exports
-  and deletes.
-
-**Phase 4. Export**
-- Mesh: STL, 3MF, OBJ and Rhino `.3dm` (rhino3dm is already in the engine) of a snapshot as a
-  closed solid, in part or machine coordinates. For checking in Rhino or Fusion, or designing a
-  soft jaw or nest around a half-machined part.
-- STEP: where every cut so far is 2.5D (facing, pockets, contours, holes), the engine builds the
-  stock minus the exact cleared regions per level as a real OCCT solid, with true planes and
-  cylinders. After 3D finishing an exact solid is not practical (subtracting the swept volume of
-  tens of thousands of moves is slow and fragile): those areas go in as a fine mesh next to the
-  exact 2.5D faces, and the app says so.
-
-**Phase 5. Compare and automatic snapshots**
-- Compare two snapshots: only what changed between them, coloured by depth (what program 3
-  removed, whether rest finishing really cleared a corner).
-- Optional automatic snapshots after each program or setup, made in the background, so the
-  timeline always has sharp checkpoints at the important moments.
-
-**Phase 6. Multi-setup jobs**
-- The same for side B, side setups and prep, from the multi-setup model at fine resolution.
-
-**Where it would live**
-- Core: `Sim/SharpSnapshot.swift` (new: tiled fine heightmap with culling, exact point and line
-  evaluation, quantized storage), `Sim/Heightmap.swift` (shared cutter envelope).
-- Engine: an RPC that builds the 2.5D STEP from the cleared regions; mesh and `.3dm` writers
-  (`cam/nest.py` already writes STL).
-- App: Sharpen in the playback bar, the snapshot markers and list on the timeline, the exact probe
-  in Measure, the section tool, Export in the snapshot list; `SavedResults` stores snapshots.
-- Tests to add: culling gives the same surface as the full fine run, exact probe against an
-  analytic cut (flat, ball, bull), the out-of-date check after regenerating, the storage round
-  trip, a 2.5D STEP that OCCT reads back as a valid solid.
+  Section ▸ Exact Section… gives up to 4000 exact points along the section line (X or Y) with
+  the playback grid and the part, and the most material left above the part and the deepest cut
+  into it (against the part's height range within ±2 samples, as the deviation map does).
+- **Saved in the project, on the timeline (built).** `SharpSnapshotRecord` in the `.coastline`
+  file (`ProjectFile.snapshots`): heights as whole µm, row-delta coded, LZFSE (the pendant's
+  30 million cells: 380 KB). A snapshot is tied to the toolpath signature of its side
+  (`simSignature`); after regenerating it shows as out of date and can't be shown. The newest are
+  kept within 200 MB per project. A diamond on the step's timeline segment (filled: whole stock,
+  outline: detail, grey: out of date) goes to the snapshot and shows it. The Sharpen menu lists
+  this side's snapshots: Show, Export, Delete.
+- **Export (mesh built).** STL (binary) or OBJ of a snapshot as a closed, watertight mesh (top,
+  four walls, bottom fan), in work coordinates (mm, origin at the stock face centre, Z down from
+  the face), at most ~3 million triangles. Rhino, Fusion and PreForm open both, so `.3dm` and 3MF
+  writers weren't needed.
+- **Still planned.**
+  - STEP: an exact 2.5D solid from the engine's cleared regions, with a fine mesh for
+    3D-finished areas.
+  - Comparing two snapshots.
+  - Automatic snapshots after each program or setup.
+  - Multi-setup jobs at fine resolution: side B shows its cuts, but starts from the coarse model
+    of side A, and the back surface stays coarse.
+- **Own files:** `CoastlineCore/.../Sim/SharpSnapshot.swift`, `Coastline/.../Model/SharpModel.swift`,
+  `Views/SharpViews.swift`. **Touches** `Heightmap` (explicit grids, `sample`), `AppModel`
+  (state, the measure click), `Playback` (hiding the snapshot when the playhead moves),
+  `Deviation`, `ProjectDocument`, `PlaybackBar` (Sharpen, timeline marks), `WorkspaceView`
+  (measure readout, Exact Section). Script commands `sharpen [x y size]`, `snapshots`,
+  `showsnap`, `hidesnap`, `exactprobe x y`, `exactsection x|y offset`, `exportsnap path`,
+  `measured`.
+- **Tests:** `scripts/selftest.sh SharpSnapshot`:
+  - ball cusps at their analytic height;
+  - a culled and a full run agree cell for cell;
+  - the exact envelope against brute force on a ramp with a bull nose;
+  - storage to the µm;
+  - watertight export.
 
 ---
 

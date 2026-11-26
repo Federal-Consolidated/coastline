@@ -21,7 +21,7 @@ extension AppModel {
     /// Drawn as a dense field of short dashes on the simulated surface.
     func updateDeviation() async {
         renderer.scene.remove(id: "deviation")
-        guard showDeviation, let hm = heightmap, let part, let stock else { deviationStats = nil; return }
+        guard showDeviation, let hm = deviationGrid, let part, let stock else { deviationStats = nil; return }
         let key = "\(viewSide)-\(hm.cols)x\(hm.rows)-\(part.partID)-\(hm.origin)"
         if partHeights?.key != key {
             do {
@@ -35,7 +35,7 @@ extension AppModel {
                 return
             }
         }
-        guard let ref = partHeights?.heights, ref.count == hm.heights.count, let current = heightmap else { return }
+        guard let ref = partHeights?.heights, ref.count == hm.heights.count, let current = deviationGrid else { return }
         let tol = Self.deviationTolerance
         let origin = SIMD3<Float>(workOrigin(stockSize: setup.stockSize(stock)))
         let stride = max(Int((Double(hm.cols * hm.rows) / 70_000).squareRoot().rounded(.up)), 1)
