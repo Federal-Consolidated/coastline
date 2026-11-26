@@ -266,6 +266,9 @@ final class AppModel {
     var bridgeNote: String?
     /// The job step last chosen (strip, step card or tour) and the playhead it set.
     var selectedStep: (id: String, time: Double)?
+    /// The step just clicked, until the view has got there (the stock may still be moving to its
+    /// clamping, the timeline loading): the strip opens its chapter and marks it at once.
+    var pickedStep: String?
     /// The guided tour is running.
     var touring = false
     /// The instruction card over the 3D view (toggle in the view options).

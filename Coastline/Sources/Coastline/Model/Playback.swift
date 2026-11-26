@@ -100,6 +100,7 @@ extension AppModel {
     func togglePlay() {
         if isPlaying { pause(); return }
         if toolChangeStop != nil { return }  // the tool-change panel is up
+        pickedStep = nil  // playing goes on from where the view is
         // The stock as bought has nothing to play: start at the first clamping.
         if viewSide == -1 && prepStage < 0, !prepResults.isEmpty {
             if let first = jobSteps.first(where: { $0.side == -1 && $0.stage == 0 && $0.kind == .program }) { go(to: first) }
@@ -169,6 +170,7 @@ extension AppModel {
     }
 
     func seek(_ t: Double) {
+        pickedStep = nil  // the playhead decides again
         // You moved the playhead: a tool change in progress is left, and the ones done count again.
         if !internalSeek {
             if toolChangeStop != nil { toolChangeTask?.cancel(); toolChangeStop = nil }

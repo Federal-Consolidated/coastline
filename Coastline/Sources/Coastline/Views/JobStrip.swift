@@ -255,7 +255,10 @@ extension AppModel {
     }
 
     /// The chapter that's open: the one with the step on screen.
-    var openChapter: JobChapter? { currentStep?.chapter ?? jobSteps.first { $0.side == viewSide }?.chapter }
+    var openChapter: JobChapter? {
+        if let id = pickedStep, let s = jobSteps.first(where: { $0.id == id }) { return s.chapter }
+        return currentStep?.chapter ?? jobSteps.first { $0.side == viewSide }?.chapter
+    }
 
     /// A program's toolpaths are all made (while generating they arrive one by one).
     func programReady(_ p: Int) -> Bool {
@@ -325,6 +328,8 @@ extension AppModel {
 
     /// Whether a step is the one on screen.
     func isActive(_ step: JobStep) -> Bool {
+        // A step just clicked is the one, while the view is still getting there.
+        if let id = pickedStep { return step.id == id }
         // The step chosen last wins while the playhead stays where it put it: one step selected,
         // never two (a measuring step sits at the end of the program before it).
         if let sel = selectedStep, abs(playhead - sel.time) < 1e-6 { return step.id == sel.id }
@@ -348,9 +353,11 @@ extension AppModel {
     /// machine) and jumps to its program.
     func go(to step: JobStep) {
         pause()
+        pickedStep = step.id  // the strip follows the click now, the view when it lands
         if step.id.hasPrefix("library."), let holding = libraryWorkholdingPlan?.steps.first(where: { "library.\($0.id)" == step.id }) {
             inspectLibraryStep(holding)
             selectedStep = (step.id, playhead)
+            pickedStep = nil
             return
         }
         let seekTo: () -> Void = { [weak self] in
@@ -364,6 +371,7 @@ extension AppModel {
                 if let p = step.program, let e = self.timeline.entries.first(where: { $0.program == p }) { self.seek(e.tStart) }
             }
             self.selectedStep = (step.id, self.playhead)
+            if self.pickedStep == step.id { self.pickedStep = nil }
         }
         let stage = step.side == -1 ? step.stage : prepStage
         if step.side != viewSide || stage != prepStage {
@@ -405,9 +413,14 @@ struct JobStrip: View {
         return ScrollViewReader { proxy in
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: 6) {
+                    // The open chapter takes the width the closed ones leave (scrolling only
+                    // when its contents need more).
+                    let closedWidth = badge + 2 * inset
+                    let fill = model.isGenerating ? 0
+                        : max(width - 2 * fade - CGFloat(chapters.count - 1) * (closedWidth + 6) - 2 * inset, 0)
                     ForEach(Array(chapters.enumerated()), id: \.element) { n, ch in
                         let group = steps.filter { $0.chapter == ch }
-                        chapterCard(ch, group, n + 1, isOpen: ch == open)
+                        chapterCard(ch, group, n + 1, isOpen: ch == open, fill: fill)
                             .id(ch.id)
                     }
                     if model.isGenerating {
@@ -443,7 +456,7 @@ struct JobStrip: View {
     /// One chapter as an accordion card: the same view open or closed, so its width springs
     /// between the two (`RevealWidth`) while the contents crossfade, clipped to the card. Opening
     /// one grows it as the one that was open shrinks back to its number.
-    private func chapterCard(_ ch: JobChapter, _ group: [JobStep], _ n: Int, isOpen: Bool) -> some View {
+    private func chapterCard(_ ch: JobChapter, _ group: [JobStep], _ n: Int, isOpen: Bool, fill: CGFloat) -> some View {
         let ready = model.chapterReady(group)
         let progress = model.chapterProgress(group)
         let steps = "\(group.count) step\(group.count == 1 ? "" : "s")"
@@ -451,7 +464,7 @@ struct JobStrip: View {
         let help = "Chapter \(n) · \(ch.title) · \(steps)"
             + (ready ? "" : percent.map { " · generating, \($0) % ready" } ?? " · comes when the toolpaths are ready")
         let value = steps + (ready ? "" : percent.map { ", generating, \($0) percent ready" } ?? ", comes when the toolpaths are ready")
-        return RevealWidth(progress: isOpen ? 1 : 0, closed: badge) {
+        return RevealWidth(progress: isOpen ? 1 : 0, closed: badge, fill: fill) {
             ZStack(alignment: .topLeading) {
                 if isOpen {
                     openContent(ch, group, n).transition(.opacity)
@@ -538,17 +551,24 @@ struct JobStrip: View {
     /// An open chapter's contents: its number, title and steps, at their natural width (the card
     /// reveals them as it grows).
     private func openContent(_ ch: JobChapter, _ group: [JobStep], _ n: Int) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        let minutes = group.compactMap(\.minutes).reduce(0, +) + group.filter { $0.kind != .program }.map(\.handMinutes).reduce(0, +)
+        return VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 Text("\(n)").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.black)
                     .frame(width: badge, height: badge).background(Circle().fill(Color.white.opacity(0.92)))
                 Text(ch.title).font(.caption.weight(.semibold)).foregroundStyle(.primary)
                 Text("\(group.count) step\(group.count == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
+                Spacer(minLength: 12)
+                if minutes > 0 {
+                    Text("≈ \(AppModel.duration(minutes * 60))").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        .help("The chapter's machining time plus an estimate for what you do by hand")
+                }
             }
+            .lineLimit(1)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("Chapter \(n), \(ch.title), \(group.count) step\(group.count == 1 ? "" : "s")")
             .accessibilityAddTraits(.isHeader)
-            // One row of steps (the strip scrolls when it's long).
+            // One row of steps: the one on screen stretches over the room left and says what it does.
             HStack(spacing: 3) {
                 ForEach(group) { step in
                     let active = model.isActive(step)
@@ -560,7 +580,7 @@ struct JobStrip: View {
                 }
             }
         }
-        .fixedSize()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func chip(_ step: JobStep, active: Bool, compact: Bool) -> some View {
@@ -579,9 +599,18 @@ struct JobStrip: View {
                      ?? (step.kind == .program ? "being generated…" : step.kind == .flip ? "Side B" : step.kind == .prepSetup ? "Prep" : step.kind == .setup ? (model.twoSided ? "Side A" : "Setup") : "By hand"))
                     .font(.caption).foregroundStyle(active ? Color.white : .secondary).lineLimit(1)
             }
+            .fixedSize()
+            // What the step is, in the room the chapter has (asks for none of its own, so a
+            // narrow strip just leaves it out).
+            Text(step.detail)
+                .font(.caption2).foregroundStyle(active ? Color.white.opacity(0.8) : .secondary)
+                .lineLimit(2)
+                .frame(minWidth: 0, idealWidth: 0, maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 4)
             }
         }
         .padding(.horizontal, compact ? 5 : 8).padding(.vertical, 4)
+        .frame(maxWidth: compact ? nil : .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: outer - inset)
                 .fill(active ? Theme.accent.opacity(0.85) : (manual ? Color.primary.opacity(0.06) : Color.secondary.opacity(0.12)))
@@ -597,6 +626,8 @@ struct JobStrip: View {
 private struct RevealWidth: Layout {
     var progress: CGFloat
     var closed: CGFloat
+    /// The width the open card may take (its contents get at least that).
+    var fill: CGFloat = 0
 
     var animatableData: CGFloat {
         get { progress }
@@ -606,12 +637,12 @@ private struct RevealWidth: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let ideal = subviews.first?.sizeThatFits(.unspecified) ?? .zero
         let t = min(max(progress, 0), 1)
-        return CGSize(width: closed + (max(ideal.width, closed) - closed) * t, height: proposal.height ?? ideal.height)
+        return CGSize(width: closed + (max(ideal.width, fill, closed) - closed) * t, height: proposal.height ?? ideal.height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         guard let s = subviews.first else { return }
         let ideal = s.sizeThatFits(.unspecified)
-        s.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: ideal.width, height: bounds.height))
+        s.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: max(ideal.width, fill), height: bounds.height))
     }
 }
