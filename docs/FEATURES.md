@@ -145,6 +145,81 @@ the welcome sheet, the start sheet and the app tour.
   `Views/FlowSteps.swift`, `scripts/support/make_examples.py`, `scripts/make-example-projects.sh`,
   `scripts/regression.sh`. Script commands `example <id>`, `coupon pom`, `welcome`, `start`.
 
+### K10. Consumables: bit IDs, wear forecast and wear-aware planning (planned, not built)
+A plan, not code yet. It builds on what both lines already have: `Tool.cuttingMinutes` added by
+the Journal, `ToolWear` (Taylor life by material family, `Plan/Tuning.swift`), `ToolLife` with the
+Wear gauge and the Shopping list (`Journal/JobJournal.swift`), and the tuner's "% of its life" per
+job (K6).
+
+**What is missing today**
+- One inventory entry can be a box of several bits that share one wear counter, so nobody knows
+  which bit in the box is worn.
+- Wear is counted as plain minutes and judged in aluminium only. The material actually cut and
+  the pace it ran at are ignored, though ten minutes in steel wear a bit about as much as an hour
+  in aluminium.
+- Nothing checks wear before a job, nothing warns about quality, and the feeds never adapt to a
+  worn bit.
+
+**Phase 1. An ID for each physical bit (or any consumable)**
+- `ToolUnit`: one physical bit inside a `Tool` entry, with a short ID (`T-014`), its own wear,
+  condition, first-use date and notes. `quantity` becomes the count of units; old projects
+  migrate to N fresh units, with the existing minutes on the first one.
+- The same ID scheme covers other consumables (collets, spoilboards, coolant, sanding pads)
+  with a simple use counter.
+- Printable labels with the ID and a QR code, sized for a bit box or tube (reuse K5's print path).
+- Wear is stored as **share of life used**, added per job from the material cut and the pace:
+  `used += minutes / ToolWear.life(tool, material, pace)`. Minutes stay for reference.
+
+**Phase 2. Wear forecast at setup**
+- Each operation's bit shows its wear now and after this job (62 % → 81 %).
+- Under about 85 % it's green. Above that, it recommends a fresh unit and names which ID to load.
+  If the job would pass 100 %, it splits the work: worn unit for roughing, fresh unit for
+  finishing.
+- The guided steps and the tool-change prompts name the unit ID, so the right bit goes in.
+
+**Phase 3. Quality heads-up, in plain words**
+By wear stage (sharp, worn in, dulling, worn out), what a dull edge does to the part:
+- The edge rounds, so it rubs instead of cutting: more heat, burrs, and aluminium welding onto
+  the edge.
+- Cutting forces rise and the bit deflects, so walls come out slightly oversize and floors show
+  steps.
+- The finish gets rougher and chatter is more likely.
+- Small bits (under 3 mm) snap more easily.
+Shown next to the forecast, and in the Journal when a result is recorded.
+
+**Phase 4. Worn-bit mode**
+- Above a set wear level the feeds engine lowers the spindle speed (less heat), cuts lighter
+  (smaller stepover and stepdown, lower forces) and can add a spring pass on finishing walls.
+- It **keeps the chip load per tooth**. Lowering the feed too far makes a dull edge rub and wear
+  even faster.
+- The extra time and cost show in the tuner, so the user can pick "swap the bit" or "run slower".
+
+**Phase 5. Wear-aware planning (set up the job to wear bits less)**
+A tuner goal, "Save tools", beside the quality and time presets, that shapes speeds and toolpaths:
+- Adaptive roughing with constant engagement instead of slotting, and the "deep" style that uses
+  more flute length so wear spreads along the edge instead of the tip (`RoughingStyle.deep`).
+- Climb milling, ramped or helical entries instead of plunges, and arc lead-ins on walls.
+- Cutting speed at the lower end of the window (Taylor: life rises steeply as speed drops), with
+  the chip load kept.
+- Rough with the most worn unit, finish with the freshest; spread work across units of the same
+  tool so they wear evenly.
+- Lighter finishing allowance so the finisher only touches the surface.
+- The tuner compares it with Standard: time +x %, tool cost −y %, bits worn after the job.
+
+**Phase 6. Learning the life numbers**
+The life values are starting guesses. When a unit is marked worn or broken, or the Journal notes a
+rough finish, burrs or chatter, the app compares that with its estimate and corrects the life for
+that tool kind and material, bounded, like `FeedLearning` does for feeds.
+
+**Where it would live**
+- Core: `Inventory/Tool.swift` (units), `Inventory/Consumables.swift` (new), `Plan/Tuning.swift`
+  (`ToolWear`, the "Save tools" goal), `Feeds/FeedsEngine.swift` (worn-bit mode),
+  `Journal/JobJournal.swift` (per-unit wear, learning).
+- App: `Views/Inventory/ToolsPage.swift` (units, labels), the setup and tuner views (forecast,
+  warnings).
+- Tests to add: migration of old inventories, wear per material and pace, the forecast
+  threshold, worn-bit feeds keeping chip load, label output.
+
 ---
 
 ## Line C: control, fixture library and machine profiles
