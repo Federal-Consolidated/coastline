@@ -319,6 +319,7 @@ public enum ResourceLibraryImport {
                 } else if policy == .replaceExisting {
                     tool.quantity = merged.tools[i].quantity; tool.condition = merged.tools[i].condition
                     tool.cuttingMinutes = merged.tools[i].cuttingMinutes; tool.cuttingDistance = merged.tools[i].cuttingDistance
+                    tool.units = merged.tools[i].units; tool.loadedUnitID = merged.tools[i].loadedUnitID
                     merged.tools[i] = tool; action = .replace; detail = "Replace tool definition; keep quantity, condition and usage"
                 } else {
                     tool.id = stableID("tool-copy:" + (try canonicalString(tool)))
@@ -329,6 +330,7 @@ public enum ResourceLibraryImport {
                         var definition = priorCopy
                         definition.quantity = tool.quantity; definition.condition = tool.condition
                         definition.cuttingMinutes = tool.cuttingMinutes; definition.cuttingDistance = tool.cuttingDistance
+                        definition.units = tool.units; definition.loadedUnitID = tool.loadedUnitID
                         guard definition == tool else { throw ImportError.invalid(["The saved copy of \(tool.name) has a different definition. Keep the existing tool or give the edited copy a new ID before importing another copy."]) }
                         action = .keep; detail = "Copy already installed"
                     }

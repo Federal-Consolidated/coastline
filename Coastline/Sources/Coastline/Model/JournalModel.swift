@@ -105,6 +105,7 @@ extension AppModel {
         let used = setup.prepLength ?? setup.stockSize(stock).y
         let left = max(raw.y, raw.z) - used - 3  // the saw kerf and a clean-up
         e.remnantLength = left >= 10 ? (left * 2).rounded(.down) / 2 : nil
+        assignBits(&e)
         return e
     }
 

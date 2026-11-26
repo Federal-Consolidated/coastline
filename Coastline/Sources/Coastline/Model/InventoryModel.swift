@@ -41,6 +41,8 @@ final class InventoryModel {
             if VettedFixtureLibrary.migrate(&inventory, resources: AppModel.repoRoot.appendingPathComponent("resources")) {
                 try InventoryStore.save(inventory, to: fileURL)
             }
+            // Every owned bit gets its ID (K10); usage from before moves onto the first one.
+            if Consumables.normalize(&inventory) { try InventoryStore.save(inventory, to: fileURL) }
         } catch {
             loadFailed = true
             lastError = "\(error)"
@@ -69,6 +71,7 @@ final class InventoryModel {
         guard !loadFailed else { return }
         change(&inventory)
         inventory.stock = inventory.stock.map { inventory.resolvedStock($0) }
+        Consumables.normalize(&inventory)
         scheduleSave()
     }
 

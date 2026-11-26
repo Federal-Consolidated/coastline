@@ -71,7 +71,7 @@ struct ToolsPage: View {
                 case .attention: (model.worstIssue(for: tool, machine: app.machine) ?? .info) > .info
                 }
             }
-            .filter { search.isEmpty || "\($0.name) \($0.vendor) \($0.partNumber) \($0.intendedFor)".localizedCaseInsensitiveContains(search) }
+            .filter { search.isEmpty || "\($0.name) \($0.vendor) \($0.partNumber) \($0.intendedFor) \(($0.units ?? []).map(\.label).joined(separator: " "))".localizedCaseInsensitiveContains(search) }
             .sorted(using: sortOrder)
     }
 
@@ -115,7 +115,7 @@ struct ToolsPage: View {
                 .width(40)
             TableColumn("Wear") { tool in
                 if tool.hasConfirmedPreviewGeometry {
-                    let s = ToolLife.status(tool, material: MaterialLibrary.material(id: "al-6061") ?? MaterialLibrary.all[0])
+                    let s = ToolLife.status(tool, material: MaterialLibrary.material(id: "al-6061") ?? MaterialLibrary.all[0], learning: model.inventory.lifeLearning)
                     HStack(spacing: 4) {
                         Gauge(value: min(s.used, 1)) { Text("Wear") }
                             .gaugeStyle(.accessoryLinearCapacity)
@@ -127,7 +127,8 @@ struct ToolsPage: View {
                                 .foregroundStyle(s.wornOut ? Theme.danger : Theme.warning)
                         }
                     }
-                    .help("\(Int(s.minutes)) of about \(Int(s.lifeMinutes)) cutting minutes (recorded jobs)" + (s.wornOut ? " · worn out" : s.replaceSoon ? " · replace soon" : ""))
+                    .help((Consumables.loadedUnit(tool, learning: model.inventory.lifeLearning).map { "\($0.label), the bit in use: \(Int((s.used * 100).rounded())) % of its life · " } ?? "")
+                          + "\(Int(s.minutes)) of about \(Int(s.lifeMinutes)) cutting minutes in aluminium (recorded jobs)" + (s.wornOut ? " · worn out" : s.replaceSoon ? " · replace soon" : ""))
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Wear")
                     .accessibilityValue("\(Int((s.used * 100).rounded())) percent used" + (s.wornOut ? ", worn out" : s.replaceSoon ? ", replace soon" : ""))
@@ -321,6 +322,9 @@ struct ToolInspector: View {
                 if !tool.source.isEmpty {
                     LabeledContent("Source", value: tool.source).foregroundStyle(.secondary)
                 }
+            }
+            if tool.quantity > 0 || tool.units != nil {
+                BitsInspectorSection(tool: $tool)
             }
             if !tool.requiresSpecificationReview {
                 IssuesSection(issues: model.issues(for: tool, machine: app.machine))

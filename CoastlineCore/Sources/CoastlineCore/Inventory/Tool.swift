@@ -133,6 +133,10 @@ public struct Tool: Identifiable, Hashable, Sendable, Codable {
 
     public var cuttingMinutes: Double
     public var cuttingDistance: Double  // mm
+    /// Each physical bit, with its own ID and wear (K10, `Consumables`). nil: not split yet.
+    public var units: [ToolUnit]? = nil
+    /// The bit in the collet, when the user picked one.
+    public var loadedUnitID: UUID? = nil
 
     public init(id: UUID = UUID(), name: String, kind: Kind, vendor: String = "", partNumber: String = "",
                 productLink: String = "", diameter: Double, shankDiameter: Double, flutes: Int,

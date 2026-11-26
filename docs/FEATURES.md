@@ -11,14 +11,14 @@ Coastline has two lines of work in this repository, each on its own branch:
 - **Line K (clamp kit), branch `xioaniumi`:** everything in line C, plus the original CR-1
   workflow that v0.6 ("Remove the clamp kit, other job formats and side features") took out: the
   clamp kit and bed holding, stock prep, guided `.crproj` export, examples and the side tools
-  (nest, tuner, deviation map, batching).
+  (nest, tuner, deviation map, batching), and bit IDs with wear tracking (K10).
 
 Line K is built on top of line C's latest commit, so GitHub's compare view shows exactly what it
 adds. Both workflows run side by side there: a job uses the clamp kit unless it is planned from the
 fixture library (`Setup.planFromFixtureLibrary`) or held in a custom fixture. How the two branches
 trade features is in [SYNC.md](SYNC.md).
 
-Checks on line K: planning core 250 passed, machine core (MillCore) 122 passed, engine 112 passed.
+Checks on line K: planning core 258 passed, machine core (MillCore) 123 passed, engine 113 passed.
 The app builds and generates the Motor Mount example (shoulders + clamp kit) with every program
 passing the safety check.
 
@@ -145,80 +145,57 @@ the welcome sheet, the start sheet and the app tour.
   `Views/FlowSteps.swift`, `scripts/support/make_examples.py`, `scripts/make-example-projects.sh`,
   `scripts/regression.sh`. Script commands `example <id>`, `coupon pom`, `welcome`, `start`.
 
-### K10. Consumables: bit IDs, wear forecast and wear-aware planning (planned, not built)
-A plan, not code yet. It builds on what both lines already have: `Tool.cuttingMinutes` added by
-the Journal, `ToolWear` (Taylor life by material family, `Plan/Tuning.swift`), `ToolLife` with the
-Wear gauge and the Shopping list (`Journal/JobJournal.swift`), and the tuner's "% of its life" per
-job (K6).
+### K10. Consumables: bit IDs, wear forecast and wear-aware planning
+Every physical bit gets an ID and its own wear; the job shows each bit's wear before and after,
+recommends which bit to load, explains what wear does to the part, cuts gentler with a worn bit,
+can plan the whole job to save tools, and corrects its life estimates from what the user reports.
 
-**What is missing today**
-- One inventory entry can be a box of several bits that share one wear counter, so nobody knows
-  which bit in the box is worn.
-- Wear is counted as plain minutes and judged in aluminium only. The material actually cut and
-  the pace it ran at are ignored, though ten minutes in steel wear a bit about as much as an hour
-  in aluminium.
-- Nothing checks wear before a job, nothing warns about quality, and the feeds never adapt to a
-  worn bit.
-
-**Phase 1. An ID for each physical bit (or any consumable)**
-- `ToolUnit`: one physical bit inside a `Tool` entry, with a short ID (`T-014`), its own wear,
-  condition, first-use date and notes. `quantity` becomes the count of units; old projects
-  migrate to N fresh units, with the existing minutes on the first one.
-- The same ID scheme covers other consumables (collets, spoilboards, coolant, sanding pads)
-  with a simple use counter.
-- Printable labels with the ID and a QR code, sized for a bit box or tube (reuse K5's print path).
-- Wear is stored as **share of life used**, added per job from the material cut and the pace:
-  `used += minutes / ToolWear.life(tool, material, pace)`. Minutes stay for reference.
-
-**Phase 2. Wear forecast at setup**
-- Each operation's bit shows its wear now and after this job (62 % → 81 %).
-- Under about 85 % it's green. Above that, it recommends a fresh unit and names which ID to load.
-  If the job would pass 100 %, it splits the work: worn unit for roughing, fresh unit for
-  finishing.
-- The guided steps and the tool-change prompts name the unit ID, so the right bit goes in.
-
-**Phase 3. Quality heads-up, in plain words**
-By wear stage (sharp, worn in, dulling, worn out), what a dull edge does to the part:
-- The edge rounds, so it rubs instead of cutting: more heat, burrs, and aluminium welding onto
-  the edge.
-- Cutting forces rise and the bit deflects, so walls come out slightly oversize and floors show
-  steps.
-- The finish gets rougher and chatter is more likely.
-- Small bits (under 3 mm) snap more easily.
-Shown next to the forecast, and in the Journal when a result is recorded.
-
-**Phase 4. Worn-bit mode**
-- Above a set wear level the feeds engine lowers the spindle speed (less heat), cuts lighter
-  (smaller stepover and stepdown, lower forces) and can add a spring pass on finishing walls.
-- It **keeps the chip load per tooth**. Lowering the feed too far makes a dull edge rub and wear
-  even faster.
-- The extra time and cost show in the tuner, so the user can pick "swap the bit" or "run slower".
-
-**Phase 5. Wear-aware planning (set up the job to wear bits less)**
-A tuner goal, "Save tools", beside the quality and time presets, that shapes speeds and toolpaths:
-- Adaptive roughing with constant engagement instead of slotting, and the "deep" style that uses
-  more flute length so wear spreads along the edge instead of the tip (`RoughingStyle.deep`).
-- Climb milling, ramped or helical entries instead of plunges, and arc lead-ins on walls.
-- Cutting speed at the lower end of the window (Taylor: life rises steeply as speed drops), with
-  the chip load kept.
-- Rough with the most worn unit, finish with the freshest; spread work across units of the same
-  tool so they wear evenly.
-- Lighter finishing allowance so the finisher only touches the surface.
-- The tuner compares it with Standard: time +x %, tool cost −y %, bits worn after the job.
-
-**Phase 6. Learning the life numbers**
-The life values are starting guesses. When a unit is marked worn or broken, or the Journal notes a
-rough finish, burrs or chatter, the app compares that with its estimate and corrects the life for
-that tool kind and material, bounded, like `FeedLearning` does for feeds.
-
-**Where it would live**
-- Core: `Inventory/Tool.swift` (units), `Inventory/Consumables.swift` (new), `Plan/Tuning.swift`
-  (`ToolWear`, the "Save tools" goal), `Feeds/FeedsEngine.swift` (worn-bit mode),
-  `Journal/JobJournal.swift` (per-unit wear, learning).
-- App: `Views/Inventory/ToolsPage.swift` (units, labels), the setup and tuner views (forecast,
-  warnings).
-- Tests to add: migration of old inventories, wear per material and pace, the forecast
-  threshold, worn-bit feeds keeping chip load, label output.
+- **Bit IDs.** `ToolUnit` (`Tool.units`, `Tool.loadedUnitID`): one per bit of a tool entry, labelled
+  T-001, T-002 … (`Inventory.nextUnitNumber`). `Consumables.normalize` runs on every inventory
+  load and change: it adds units when the quantity rises, removes unused ones (then retires the most
+  worn) when it falls, and moves usage recorded before K10 onto the first bit. Tools ▸ inspector ▸
+  Bits: wear per bit, Use This Bit, Worn Out / Broken: Retire, Print Label(s). The Tools search finds
+  a bit by its ID (a handheld scanner reading the label's QR code types it there).
+- **Wear per bit.** Stored as `load`, the share of the *estimated* life used:
+  `minutes / ToolWear.life(tool, material, pace, toolSaver)` per recorded program, from the job's
+  material, the tuner's pace and Save tools (`JournalEntry.pace`, `.toolSaver`,
+  `ProgramRun.unitID`). Shown wear is `load / learned factor`. `Tool.cuttingMinutes` still adds up,
+  and `ToolLife` (Wear column, Shopping List) now reads the bit in use and counts fresh spares.
+- **Forecast.** `Consumables.forecast`: per program (one tool load) the bit, wear before → after,
+  stage and advice. A program that finishes moves to the freshest bit when its bit would pass
+  `WearPolicy.swapAt` (85 %); one that only roughs keeps a worn bit until it would pass 100 %
+  ("rough with the old, finish with the new"). With no spare it says so. Machining ▸ Bits
+  (`BitForecastSection`), follows the tuner before regenerating; the record sheet pre-fills each
+  program's bit (changeable); the tool-change card names the box label.
+- **What wear does.** `WearStage` (Sharp < 10 % < Worn in < 60 % < Dulling < 85 % < Near its end
+  < 100 % < Worn out) with plain-language effects per tool size and material family (rubbing and
+  heat, built-up edge in aluminium, melting in plastics, work hardening in stainless and titanium,
+  deflection and oversize walls, rougher finish, chatter, small bits snapping).
+- **Worn-bit mode.** `Operation.bitWear` (set while generating: the program's bit from the
+  forecast, else the bit in use). From 60 % `WearAwareFeeds.applyWorn` lowers the spindle (down to
+  80 % when worn out) with the feeds, so the chip per tooth is kept, takes lighter roughing and
+  contour steps, and turns on the spring pass for contours. Operations Coastline adds itself (prep,
+  reference bores and windows, side setups, side B backing) get the same through
+  `AppModel.wearFeeds`.
+- **Save tools.** `Tuning.toolSaver` / `Operation.toolSaver`: spindle 85 % with the chip load kept
+  (Taylor: about 1.9× the life) and deep roughing, so wear spreads along the flutes. A switch in
+  Machining ▸ Bits with its time and tool-cost change against the current settings; the tuner's
+  time, cost and per-tool life follow it.
+- **Learning.** `ToolLifeLearning` (`Inventory.lifeLearning`), per tool kind and tool material,
+  0.3 … 3: retiring a bit as worn out at x % of its estimate pulls the life towards x (first report
+  half weight, later ones less); a rough finish or chatter on a bit past 50 % shortens it 5 %; a
+  fine, clean finish past 90 % lengthens it 3 %. A broken bit teaches nothing.
+- **Labels.** A4 PDF, 3 × 11 labels of 50 × 22 mm: QR code with the ID, the ID large, the tool,
+  diameter, flutes and tool material (`BitLabels`, opened in Preview to print).
+- **Not yet.** A bit is chosen per program (one tool load), not per operation inside a program;
+  the life model is Taylor on cutting time, not engagement or chip load per operation.
+- **Own files:** `CoastlineCore/.../Inventory/Consumables.swift`, `Coastline/.../Model/WearModel.swift`,
+  `Views/BitWearViews.swift`. **Touches** `Tool`, `Inventory`, `Operation.cuttingData`, `Tuning`,
+  `CostModel`, `JobJournal`/`ToolLife`, `JobResourceSnapshot.planningInventory` and the library import
+  (they carry the bits), `InventoryModel`, `Machining` (generation), `TunerModel`, `ToolsPage`,
+  `JournalViews`, `ToolChangeCard`. Script commands `bits [tuned]`, `savetools [off]`,
+  `wearbit T-001 0.8`, `showbit T-001`, `bitlabels path.pdf`.
+- **Tests:** `scripts/selftest.sh Consumables`.
 
 ---
 

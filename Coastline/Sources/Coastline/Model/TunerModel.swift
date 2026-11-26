@@ -33,9 +33,13 @@ extension AppModel {
             let hid = { (u: Tuning) in u.hiddenSide == side && side >= 0 ? Tuning.hiddenCuspFactor : 1 }
             t *= ((a.cusp * hid(a)) / (b.cusp * hid(b))).squareRoot()  // stepover ∝ √cusp
         }
-        if kind == .adaptive, a.roughingStyle != b.roughingStyle, let m = stock?.material {
-            let da = FeedsEngine.compute(tool: tool, material: m, kind: .adaptive, machine: machine, roughing: a.roughingStyle)
-            let db = FeedsEngine.compute(tool: tool, material: m, kind: .adaptive, machine: machine, roughing: b.roughingStyle)
+        // Save tools: the spindle and the feeds run slower; links and rapids (~25 %) don't.
+        let speed = { (u: Tuning) in u.saveTools ? WearAwareFeeds.saverSpeed : 1 }
+        if a.saveTools != b.saveTools { t = t * 0.25 + t * 0.75 * speed(a) / speed(b) }
+        let style = { (u: Tuning) in u.saveTools ? FeedsEngine.RoughingStyle.deep : u.roughingStyle }
+        if kind == .adaptive, style(a) != style(b), let m = stock?.material {
+            let da = FeedsEngine.compute(tool: tool, material: m, kind: .adaptive, machine: machine, roughing: style(a))
+            let db = FeedsEngine.compute(tool: tool, material: m, kind: .adaptive, machine: machine, roughing: style(b))
             // Cutting time ∝ 1 / (feed × depth); links and rapids (~25 %) stay the same.
             let ratio = (da.feed * da.stepdown) / max(db.feed * db.stepdown, 1e-9)
             t = t * 0.25 + t * 0.75 * ratio
@@ -62,7 +66,7 @@ extension AppModel {
         let raw = setup.rawStockSize(stock)
         let setups = 1 + (twoSided ? 1 : 0) + prepPrograms.count
         let cost = costModel.cost(minutes: total, toolMinutes: Array(perTool.values), material: material, pace: t.pace,
-                                  stockVolume: raw.x * raw.y * raw.z, setups: setups)
+                                  stockVolume: raw.x * raw.y * raw.z, setups: setups, toolSaver: t.saveTools)
         return TunerEstimate(minutes: total, toolMinutes: Array(perTool.values).sorted { $0.1 > $1.1 }, cost: cost)
     }
 

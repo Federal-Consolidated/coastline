@@ -288,7 +288,7 @@ extension AppModel {
         }
         for (k, item) in items.enumerated() {
             let op = Operation(kind: item.stage.isEdge ? .adaptive : .facing, toolID: tool.id)
-            let data = FeedsEngine.compute(tool: tool, material: material, kind: op.kind, machine: machine)
+            let data = wearFeeds(tool: tool, material: material, kind: op.kind)
             let path = OperationToolpath(operationID: op.id, moves: item.moves)
             let posted = GRBLPost.programWithLineMap(
                 header: .init(programName: part?.fileName ?? "Prep", setupName: "Prep: flat on the squaring stop", tool: tool,

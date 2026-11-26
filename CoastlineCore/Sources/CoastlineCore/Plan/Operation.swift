@@ -42,6 +42,11 @@ public struct Operation: Identifiable, Equatable, Sendable, Codable {
     public var roughing: FeedsEngine.RoughingStyle?
     /// Thread milling (kind .thread): which thread, how deep.
     public var thread: ThreadMilling?
+    /// The tuner's "Save tools" goal (K10).
+    public var toolSaver: Bool?
+    /// Wear of the bit that will cut it (set when generating, from the bit's record; not saved
+    /// as a choice). From `WearPolicy.wornMode` the cut runs gentler.
+    public var bitWear: Double?
 
     public enum ReferenceFeature: String, Codable, Sendable { case bores, windows }
 
@@ -79,7 +84,8 @@ public struct Operation: Identifiable, Equatable, Sendable, Codable {
 
     /// Cutting data with the user's overrides applied.
     public func cuttingData(tool: Tool, material: Material, machine: MachineProfile = .standard) -> CuttingData {
-        var data = FeedsEngine.compute(tool: tool, material: material, kind: kind, machine: machine, roughing: roughing ?? .thinned)
+        var data = FeedsEngine.compute(tool: tool, material: material, kind: kind, machine: machine,
+                                       roughing: toolSaver == true && kind == .adaptive ? .deep : roughing ?? .thinned)
         if kind.is3D {
             data.stepover = FeedsEngine.scallopStepover(tool: tool, cusp: scallop)
             data.stepdown = data.stepover
@@ -94,6 +100,8 @@ public struct Operation: Identifiable, Equatable, Sendable, Codable {
             if kind == .adaptive { data.stepover *= feedScale.squareRoot() }
             data.notes.append("Pace \(Int((feedScale * 100).rounded())) %: feeds\(kind == .adaptive ? " and engagement" : "") scaled from the recommended values.")
         }
+        if toolSaver == true { WearAwareFeeds.applySaver(&data, machine: machine) }
+        if let w = bitWear { WearAwareFeeds.applyWorn(&data, wear: w, kind: kind, machine: machine) }
         if let s = stepdownOverride { data.stepdown = s }
         if let s = stepoverOverride { data.stepover = s }
         return data

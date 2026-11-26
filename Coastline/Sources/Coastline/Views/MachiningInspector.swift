@@ -39,6 +39,7 @@ struct MachiningInspector: View {
                 }
                 if !model.operations.isEmpty {
                     TunerSection().id("tuner")
+                    BitForecastSection().id("bits")
                     Section("Operations") {
                         ForEach($model.operations) { $op in
                             OperationRow(operation: $op)

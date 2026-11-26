@@ -32,14 +32,20 @@ public struct Tuning: Codable, Equatable, Sendable {
     /// Two-sided parts: the side nobody sees (the inside, the back) gets 3× coarser 3D
     /// finishing. nil: both sides show.
     public var hiddenSide: Int?
+    /// The "Save tools" goal (K10): lower spindle speed with the chip load kept, deep roughing
+    /// so wear spreads along the flutes. Costs time, buys tool life.
+    public var toolSaver: Bool?
 
+    public var saveTools: Bool { toolSaver == true }
     public var roughingStyle: FeedsEngine.RoughingStyle { roughing ?? .thinned }
 
-    public init(cusp: Double = 0.008, pace: Double = 1.0, roughing: FeedsEngine.RoughingStyle? = nil, hiddenSide: Int? = nil) {
+    public init(cusp: Double = 0.008, pace: Double = 1.0, roughing: FeedsEngine.RoughingStyle? = nil, hiddenSide: Int? = nil,
+                toolSaver: Bool? = nil) {
         self.cusp = cusp
         self.pace = pace
         self.roughing = roughing == .thinned ? nil : roughing
         self.hiddenSide = hiddenSide
+        self.toolSaver = toolSaver == true ? true : nil
     }
 
     /// How much coarser the hidden side's 3D finishing is.
@@ -56,11 +62,11 @@ public struct Tuning: Codable, Equatable, Sendable {
 
     /// The preset this matches, if any (the hidden side is a separate choice).
     public var preset: Preset? {
-        Preset.allCases.first { var p = Tuning.preset($0); p.hiddenSide = hiddenSide; return p == self }
+        Preset.allCases.first { var p = Tuning.preset($0); p.hiddenSide = hiddenSide; p.toolSaver = toolSaver; return p == self }
     }
 
-    /// The same, with a preset's finish, pace and roughing (keeping the hidden side).
-    public func with(_ p: Preset) -> Tuning { var t = Tuning.preset(p); t.hiddenSide = hiddenSide; return t }
+    /// The same, with a preset's finish, pace and roughing (keeping the hidden side and Save tools).
+    public func with(_ p: Preset) -> Tuning { var t = Tuning.preset(p); t.hiddenSide = hiddenSide; t.toolSaver = toolSaver; return t }
 
     /// Roughness from the cusp: Ra ≈ h / 4 for ball-end cusps (µm).
     public var ra: Double { cusp * 1000 / 4 }
@@ -72,6 +78,7 @@ public struct Tuning: Codable, Equatable, Sendable {
             if o.kind.is3D { o.scallop = cusp }
             o.feedScale = pace
             o.roughing = roughing
+            o.toolSaver = toolSaver
             return o
         }
     }
@@ -92,16 +99,18 @@ public enum ToolWear {
         }
     }
 
-    public static func life(tool: Tool, material: Material, pace: Double) -> Double {
+    /// - toolSaver: the "Save tools" goal: the spindle `WearAwareFeeds.saverSpeed` slower.
+    public static func life(tool: Tool, material: Material, pace: Double, toolSaver: Bool = false) -> Double {
         var l = baseLife(material)
         if tool.toolMaterial == .hss { l *= 0.25 }
         if tool.diameter < 1.5 { l *= 0.5 }  // tiny tools wear (and break) sooner
-        return l * pow(max(pace, 0.3), -4)  // Taylor, n ≈ 0.25
+        let speed = toolSaver ? WearAwareFeeds.saverSpeed : 1
+        return l * pow(max(pace * speed, 0.3), -4)  // Taylor, n ≈ 0.25
     }
 
     /// Fraction of the tool's life used by `minutes` of cutting.
-    public static func fraction(tool: Tool, material: Material, minutes: Double, pace: Double) -> Double {
-        minutes / life(tool: tool, material: material, pace: pace)
+    public static func fraction(tool: Tool, material: Material, minutes: Double, pace: Double, toolSaver: Bool = false) -> Double {
+        minutes / life(tool: tool, material: material, pace: pace, toolSaver: toolSaver)
     }
 }
 
@@ -144,9 +153,9 @@ public struct CostModel: Codable, Equatable, Sendable {
     /// - Parameters: minutes: machining minutes; toolMinutes: cutting minutes per tool;
     ///   stockVolume: mm³; setups: how many times it's clamped.
     public func cost(minutes: Double, toolMinutes: [(Tool, Double)], material: Material, pace: Double,
-                     stockVolume: Double, setups: Int) -> Breakdown {
+                     stockVolume: Double, setups: Int, toolSaver: Bool = false) -> Breakdown {
         let tools = toolMinutes.reduce(0) { sum, tm in
-            sum + ToolWear.fraction(tool: tm.0, material: material, minutes: tm.1, pace: pace) * (tm.0.unitCost ?? defaultToolPrice)
+            sum + ToolWear.fraction(tool: tm.0, material: material, minutes: tm.1, pace: pace, toolSaver: toolSaver) * (tm.0.unitCost ?? defaultToolPrice)
         }
         let kg = stockVolume / 1e6 * material.density
         return Breakdown(machine: minutes / 60 * machinePerHour, tools: tools, stock: kg * Self.pricePerKg(material),

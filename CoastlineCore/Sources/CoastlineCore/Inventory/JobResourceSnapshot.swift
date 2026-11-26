@@ -30,6 +30,8 @@ public struct JobResourceSnapshot: Codable, Equatable, Sendable {
                 tool.condition = owned.condition
                 tool.cuttingMinutes = owned.cuttingMinutes
                 tool.cuttingDistance = owned.cuttingDistance
+                tool.units = owned.units
+                tool.loadedUnitID = owned.loadedUnitID
                 result.tools[index] = tool
             } else {
                 tool.quantity = 0

@@ -394,6 +394,26 @@ enum Automation {
                 print("genstate \(model.status) | sides shown \(model.sideResults.map { $0.planned.count }) timeline \(Int(model.timeline.duration)) s playhead \(Int(model.playhead)) playing \(model.isPlaying) | failed \(model.failedOperationCount)")
             case "scrollto": model.inspectorScrollTarget = arg
             case "tuner": if let p = Tuning.Preset(rawValue: arg) { model.tuning = .preset(p) }
+            case "showbit":  // "showbit T-002": the Tools page with that bit's tool in the inspector
+                if let hit = Consumables.find(label: arg, in: inventory.inventory) { model.toolToShow = hit.tool.id; model.page = .tools }
+            case "bitlabels":  // "bitlabels /tmp/l.pdf": every active bit's label, written without opening
+                let bits = inventory.inventory.tools.flatMap { t in Consumables.activeUnits(t).map { (t, $0) } }
+                print("bitlabels \(bits.count) \(BitLabels.write(bits, to: URL(fileURLWithPath: arg)))")
+            case "savetools": model.tuning.toolSaver = arg == "off" ? nil : true  // the tuner's Save tools goal
+            case "bits":  // K10: each program's bit and its wear before → after
+                for f in model.wearForecast(arg == "tuned" ? model.tuning : nil) {
+                    print("bits \(f.program) \(f.tool.name.prefix(18)) \(f.unit?.label ?? "-") \(Int((f.before * 100).rounded()))→\(Int((f.after * 100).rounded())) % \(f.stage.title)\(f.advice.map { " | " + $0 } ?? "")")
+                }
+            case "wearbit":  // "wearbit T-001 0.8": set a bit's wear (tests)
+                let a = arg.split(separator: " ")
+                if a.count == 2, let w = Double(a[1]), let hit = Consumables.find(label: String(a[0]), in: inventory.inventory) {
+                    inventory.update { inv in
+                        if let k = inv.tools.firstIndex(where: { $0.id == hit.tool.id }), let i = inv.tools[k].units?.firstIndex(where: { $0.id == hit.unit.id }) {
+                            inv.tools[k].units![i].load = w
+                        }
+                    }
+                    print("wearbit \(a[0]) \(w)")
+                }
             case "export":
                 let dir = URL(fileURLWithPath: arg)
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

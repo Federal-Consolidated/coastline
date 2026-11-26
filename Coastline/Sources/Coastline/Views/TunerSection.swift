@@ -84,7 +84,7 @@ struct TunerSection: View {
                         GridRow {
                             Text(tm.0.name.components(separatedBy: " · ").first ?? tm.0.name).foregroundStyle(.secondary).lineLimit(1)
                                 .help(tm.0.name)
-                            Text("\(String(format: "%.1f", ToolWear.fraction(tool: tm.0, material: m, minutes: tm.1, pace: model.tuning.pace) * 100)) % of its life")
+                            Text("\(String(format: "%.1f", ToolWear.fraction(tool: tm.0, material: m, minutes: tm.1, pace: model.tuning.pace, toolSaver: model.tuning.saveTools) * 100)) % of its life")
                         }
                     }
                 }

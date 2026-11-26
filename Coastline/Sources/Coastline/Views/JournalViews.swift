@@ -57,6 +57,30 @@ struct RecordJobSheet: View {
                         }
                     }
                 }
+                if entry.programs.contains(where: { $0.unitID != nil }) {
+                    Section {
+                        ForEach(entry.programs.indices, id: \.self) { k in
+                            let p = entry.programs[k]
+                            if let tool = inventory.inventory.tools.first(where: { $0.id == p.toolID }), !Consumables.activeUnits(tool).isEmpty {
+                                Picker(selection: Binding(get: { entry.programs[k].unitID }, set: { id in
+                                    entry.programs[k].unitID = id
+                                    entry.programs[k].unitLabel = Consumables.activeUnits(tool).first { $0.id == id }?.label
+                                })) {
+                                    ForEach(Consumables.activeUnits(tool)) { u in
+                                        Text("\(u.label) · \(Int((Consumables.wear(u, tool: tool, learning: inventory.inventory.lifeLearning) * 100).rounded())) %").tag(Optional(u.id))
+                                    }
+                                } label: {
+                                    Text(p.title).lineLimit(1)
+                                    Text(p.toolName).lineLimit(1)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("Bits")
+                    } footer: {
+                        Text("The bit that cut each program (the ID on its box). Its wear grows with the minutes, the material and the pace.")
+                    }
+                }
                 Section("Stock") {
                     LabeledContent("Used", value: entry.stockDescription)
                     if let left = entry.remnantLength {
@@ -78,7 +102,7 @@ struct RecordJobSheet: View {
                 }
                 Section {
                     LabeledContent("Cutting time", value: AppModel.duration(entry.cuttingMinutes * 60))
-                    Text("Recording adds each tool's cutting time to its wear, takes one piece of the stock out of the inventory\(putBack && entry.remnantLength != nil ? " and puts the offcut back" : "").")
+                    Text("Recording adds each bit's cutting time to its wear, takes one piece of the stock out of the inventory\(putBack && entry.remnantLength != nil ? " and puts the offcut back" : "").")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

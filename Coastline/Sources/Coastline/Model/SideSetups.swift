@@ -55,7 +55,7 @@ extension AppModel {
                let rougher = base.filter({ $0.operation.kind == .adaptive }).max(by: { $0.tool.diameter < $1.tool.diameter })?.tool {
                 let op = Operation(kind: .facing, toolID: rougher.id, faceDepth: endPiece)
                 var p = EngineClient.PlannedOperation(operation: op, tool: rougher,
-                                                      data: FeedsEngine.compute(tool: rougher, material: material, kind: .facing, machine: machine))
+                                                      data: wearFeeds(tool: rougher, material: material, kind: .facing))
                 p.zTop = 0
                 p.zMin = -endPiece
                 facing = [p]
@@ -75,7 +75,7 @@ extension AppModel {
                 for tool in flats.sorted(by: { $0.diameter > $1.diameter }) {
                     var op = Operation(kind: .bore, toolID: tool.id)
                     op.id = Self.sideBoreID(side: side, tool: tool)
-                    var p = EngineClient.PlannedOperation(operation: op, tool: tool, data: FeedsEngine.compute(tool: tool, material: material, kind: .bore, machine: machine))
+                    var p = EngineClient.PlannedOperation(operation: op, tool: tool, data: wearFeeds(tool: tool, material: material, kind: .bore))
                     p.zTop = 0
                     p.zMin = w.zMin
                     p.window = (w.min, w.max)

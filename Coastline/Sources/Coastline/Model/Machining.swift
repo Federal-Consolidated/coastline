@@ -269,6 +269,10 @@ extension AppModel {
         updateKitShift()
         var base: [EngineClient.PlannedOperation] = operations.compactMap { op in
             guard op.enabled, let id = op.toolID, let tool = inventory.tools.first(where: { $0.id == id }) else { return nil }
+            // A dulling bit cuts gentler (K10): its wear from the forecast, else the bit in use.
+            var op = op
+            op.bitWear = bitWearForGeneration(op, tool: tool, inventory: inventory)
+            if (op.bitWear ?? 0) >= WearPolicy.wornMode, op.kind == .contour { op.springPass = true }
             // What the journal learned (chatter → slower) scales the feeds for this tool kind.
             var data = op.cuttingData(tool: tool, material: material, machine: machine)
             let f = learnedFeedFactor(tool: tool, material: material)
@@ -420,7 +424,7 @@ extension AppModel {
                         var p = p
                         if p.operation.kind == .facing {
                             p.operation.kind = .adaptive
-                            p.data = FeedsEngine.compute(tool: p.tool, material: material, kind: .adaptive, machine: machine)
+                            p.data = wearFeeds(tool: p.tool, material: material, kind: .adaptive)
                             p.zMin = materialTop
                             p.band = nutBand
                         } else {
@@ -951,7 +955,8 @@ extension AppModel {
             generatedTuning = Tuning(cusp: operations.first { $0.kind.is3D }?.scallop ?? tuning.cusp,
                                      pace: operations.first?.feedScale ?? 1,
                                      roughing: operations.first { $0.kind == .adaptive }?.roughing,
-                                     hiddenSide: twoSided ? tuning.hiddenSide : nil)
+                                     hiddenSide: twoSided ? tuning.hiddenSide : nil,
+                                     toolSaver: operations.first?.toolSaver)
             tuning = generatedTuning
             var mark = Date()
             func lap(_ what: String) {
@@ -1059,7 +1064,7 @@ extension AppModel {
             referencePlan = plan
             var op = Operation(id: Self.referenceBoresID, kind: .bore, toolID: tool.id)
             op.reference = .bores
-            var p = EngineClient.PlannedOperation(operation: op, tool: tool, data: FeedsEngine.compute(tool: tool, material: material, kind: .bore, machine: machine))
+            var p = EngineClient.PlannedOperation(operation: op, tool: tool, data: wearFeeds(tool: tool, material: material, kind: .bore))
             p.holes = plan.centresA.map { ($0, ReferenceBores.diameter, 0, -plan.depthA) }
             var out = planned
             let at = (out.lastIndex { $0.tool.id == tool.id } ?? out.count - 1) + 1
@@ -1079,7 +1084,7 @@ extension AppModel {
         }
         var op = Operation(id: Self.referenceWindowsID, kind: .bore, toolID: tool.id)
         op.reference = .windows
-        var p = EngineClient.PlannedOperation(operation: op, tool: tool, data: FeedsEngine.compute(tool: tool, material: material, kind: .bore, machine: machine))
+        var p = EngineClient.PlannedOperation(operation: op, tool: tool, data: wearFeeds(tool: tool, material: material, kind: .bore))
         p.holes = plan.centresB.map { ($0, ReferenceBores.windowDiameter, 0, -plan.windowDepth) }
         return [p] + planned
     }

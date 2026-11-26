@@ -21,6 +21,12 @@ struct ToolChangeCard: View {
                 }
             }
             Label("Fit the \(to.name)", systemImage: "wrench.and.screwdriver").font(.headline)
+            if let bit = bitLabel(for: to) {
+                HStack(spacing: 6) {
+                    Text("The bit from the box labelled").font(.callout).foregroundStyle(.secondary)
+                    BitLabelPill(label: bit)
+                }
+            }
             if let note = stop.note {
                 Label(note, systemImage: "exclamationmark.triangle.fill").font(.callout).foregroundStyle(Theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
@@ -56,6 +62,12 @@ struct ToolChangeCard: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 18))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Tool change: fit the \(to.name)")
+    }
+
+    /// The bit Coastline picked for this tool, when every program with it uses the same one.
+    private func bitLabel(for tool: Tool) -> String? {
+        let labels = Set(model.wearForecast().filter { $0.tool.id == tool.id }.compactMap { $0.unit?.label })
+        return labels.count == 1 ? labels.first : nil
     }
 
     private func line(_ text: String) -> some View {

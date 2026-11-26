@@ -23,7 +23,13 @@ public struct JournalEntry: Codable, Identifiable, Equatable, Sendable {
         public var minutes: Double
         /// Cutting distance, mm.
         public var distance: Double
-        public init(title: String, toolID: UUID, toolName: String, minutes: Double, distance: Double) {
+        /// The bit that cut it (K10; nil: the tool's loaded bit).
+        public var unitID: UUID? = nil
+        public var unitLabel: String? = nil
+        public init(title: String, toolID: UUID, toolName: String, minutes: Double, distance: Double,
+                    unitID: UUID? = nil, unitLabel: String? = nil) {
+            self.unitID = unitID
+            self.unitLabel = unitLabel
             self.title = title
             self.toolID = toolID
             self.toolName = toolName
@@ -70,6 +76,9 @@ public struct JournalEntry: Codable, Identifiable, Equatable, Sendable {
     public var photos: [String] = []
     /// Stock left over (put back as an offcut) and whether the bar was used up.
     public var remnantLength: Double?
+    /// The tuner's pace and Save tools as it ran (wear per bit depends on both).
+    public var pace: Double? = nil
+    public var toolSaver: Bool? = nil
 
     public init(partName: String, materialID: String, stockDescription: String, programs: [ProgramRun], measurements: [Measurement]) {
         self.partName = partName
@@ -93,6 +102,29 @@ public enum JobJournal {
             guard let k = inv.tools.firstIndex(where: { $0.id == id }) else { continue }
             inv.tools[k].cuttingMinutes += m
             inv.tools[k].cuttingDistance += d
+        }
+        // Wear per bit, from the material cut and the pace it ran at.
+        let material = e.materialSnapshot ?? inv.material(id: e.materialID) ?? MaterialLibrary.all[0]
+        var worn: [UUID: ToolUnit] = [:]
+        for p in e.programs {
+            if let u = Consumables.addWear(minutes: p.minutes, distance: p.distance, tool: p.toolID, unit: p.unitID, material: material,
+                                           pace: e.pace ?? 1, toolSaver: e.toolSaver == true, date: e.date, in: &inv) {
+                worn[u.id] = u
+                if let t = inv.tools.first(where: { $0.id == p.toolID }) {
+                    var learning = inv.lifeLearning ?? ToolLifeLearning()
+                    learning.learn(finish: e.finish, chatter: e.chatter && (e.chatterToolIDs.isEmpty || e.chatterToolIDs.contains(t.id)),
+                                   tool: t, wear: Consumables.wear(u, tool: t, learning: inv.lifeLearning))
+                    if learning != ToolLifeLearning() || inv.lifeLearning != nil { inv.lifeLearning = learning }
+                }
+            }
+        }
+        for u in worn.values.sorted(by: { $0.label < $1.label }) {
+            guard let t = inv.tools.first(where: { $0.units?.contains { $0.id == u.id } == true }),
+                  let now = t.units?.first(where: { $0.id == u.id }) else { continue }
+            let w = Consumables.wear(now, tool: t, learning: inv.lifeLearning)
+            if w >= WearPolicy.wornMode {
+                notes.append("\(now.label) (\(t.name)) is at \(Consumables.pct(w)) of its life: \(WearStage.of(w).title.lowercased()).")
+            }
         }
         if let sid = e.stockID, let k = inv.stock.firstIndex(where: { $0.id == sid }) {
             let used = inv.stock[k]
@@ -134,20 +166,32 @@ public enum ToolLife {
         public var wornOut: Bool { used >= 1 }
     }
 
-    /// Wear in the material it's mostly used for (aluminium if unknown).
-    public static func status(_ tool: Tool, material: Material) -> Status {
-        let life = ToolWear.life(tool: tool, material: material, pace: 1)
+    /// Wear in the material it's mostly used for (aluminium if unknown). With bits (K10): the
+    /// wear of the one in use, from what each job cut.
+    public static func status(_ tool: Tool, material: Material, learning: ToolLifeLearning? = nil) -> Status {
+        let life = ToolWear.life(tool: tool, material: material, pace: 1) * (learning?.factor(for: tool) ?? 1)
+        if let u = Consumables.loadedUnit(tool, learning: learning) {
+            return Status(used: Consumables.wear(u, tool: tool, learning: learning), minutes: u.minutes, lifeMinutes: life)
+        }
         return Status(used: tool.cuttingMinutes / max(life, 1), minutes: tool.cuttingMinutes, lifeMinutes: life)
+    }
+
+    /// Bits still fresh enough to take over (under `WearPolicy.wornMode`), besides the one in use.
+    static func spares(_ t: Tool, learning: ToolLifeLearning?) -> Int? {
+        guard t.units != nil else { return nil }
+        let loaded = Consumables.loadedUnit(t, learning: learning)?.id
+        return Consumables.activeUnits(t).filter { $0.id != loaded && Consumables.wear($0, tool: t, learning: learning) < WearPolicy.wornMode }.count
     }
 
     /// What to buy: tools near the end of their life with no spare, and worn or broken ones.
     public static func shoppingList(_ inv: Inventory, material: Material) -> [(tool: Tool, why: String)] {
         inv.tools.compactMap { t in
             guard !t.requiresSpecificationReview, ResourceLibraryValidation.issues(for: t).isEmpty else { return nil }
-            let s = status(t, material: material)
+            let s = status(t, material: material, learning: inv.lifeLearning)
+            let noSpare = spares(t, learning: inv.lifeLearning).map { $0 == 0 } ?? (t.quantity <= 1)
             if t.condition == .broken { return (t, "Broken") }
             if t.condition == .worn && t.quantity <= 1 { return (t, "Marked worn, no spare") }
-            if s.replaceSoon && t.quantity <= 1 {
+            if s.replaceSoon && noSpare {
                 return (t, s.wornOut ? "Past its expected life (\(Int(s.minutes)) of ~\(Int(s.lifeMinutes)) min)"
                     : "\(Int((s.used * 100).rounded())) % of its expected life used, no spare")
             }

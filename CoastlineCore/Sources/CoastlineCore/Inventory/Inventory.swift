@@ -23,6 +23,10 @@ public struct Inventory: Equatable, Sendable, Codable {
     /// Optional so inventories written before editable material libraries still decode.
     /// Built-in IDs are reserved; edit a built-in by making a custom copy.
     public var customMaterials: [Material]? = nil
+    /// The next bit label number (T-001, T-002, …), `Consumables.normalize`.
+    public var nextUnitNumber: Int? = nil
+    /// Tool life corrected by what the user reported (`ToolLifeLearning`).
+    public var lifeLearning: ToolLifeLearning? = nil
 
     public init() {}
 
