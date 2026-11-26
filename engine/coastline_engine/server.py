@@ -213,8 +213,16 @@ def _export_clean(params, blobs):
     dump = os.environ.get("COASTLINE_CLEAN_DUMP")
     if dump:  # the heights as received, for working on clean_cad offline
         np.savez(dump, h=h, params=json.dumps(params))
-    r = clean_cad.write_step(str(params["path"]), h, (float(params["x0"]), float(params["y0"])), float(params["cell"]),
-                             float(params["top"]), float(params["bottom"]), str(params.get("name", "Coastline snapshot")))
+    args = (str(params["path"]), h, (float(params["x0"]), float(params["y0"])), float(params["cell"]),
+            float(params["top"]), float(params["bottom"]), str(params.get("name", "Coastline snapshot")))
+    if params.get("format") == "3dm":
+        from . import clean_3dm
+        if not clean_3dm.available():
+            raise RuntimeError("Rhino export needs openNURBS in the engine: run engine/native/get_opennurbs.sh, "
+                               "then engine/native/build_opennurbs.sh")
+        r = clean_cad.write_3dm(*args)
+    else:
+        r = clean_cad.write_step(*args)
     return r, []
 
 

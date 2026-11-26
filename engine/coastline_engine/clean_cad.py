@@ -578,3 +578,16 @@ def write_step(path: str, heights: np.ndarray, origin, cell: float, top: float, 
         raise RuntimeError("OpenCASCADE couldn't write the STEP file")
     kinds = faces_by_type(shape)
     return dict(info, faces=sum(kinds.values()), kinds=kinds, valid=bool(BRepCheck_Analyzer(shape).IsValid()))
+
+
+def write_3dm(path: str, heights: np.ndarray, origin, cell: float, top: float, bottom: float, name: str) -> dict:
+    """The same clean solid as a joined Rhino polysurface (.3dm, openNURBS)."""
+    from OCP.BRepCheck import BRepCheck_Analyzer
+
+    from . import clean_3dm
+
+    shape, info = build(heights, origin, cell, top, bottom)
+    r = clean_3dm.write(path, shape, name)
+    kinds = faces_by_type(shape)
+    return dict(info, faces=sum(kinds.values()), kinds=kinds, valid=bool(BRepCheck_Analyzer(shape).IsValid()) and r["valid3dm"],
+                dropped=r["dropped"], log=r["log"])

@@ -18,7 +18,7 @@ adds. Both workflows run side by side there: a job uses the clamp kit unless it 
 fixture library (`Setup.planFromFixtureLibrary`) or held in a custom fixture. How the two branches
 trade features is in [SYNC.md](SYNC.md).
 
-Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 119 passed.
+Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 121 passed.
 The app builds and generates the Motor Mount example (shoulders + clamp kit) with every program
 passing the safety check.
 
@@ -328,9 +328,30 @@ single points and sections exactly from the toolpath.
     valid solid, in 5 s; the motor mount mid-way through boring its holes (23 raw depths) gives
     226 faces, valid, in 6.2 s. Coplanar faces are merged with their edges when OCCT manages,
     else faces only; engine errors reach the app with their own message.
-    Rhino, Fusion and other CAD programs open it as a NURBS polysurface. Rhino's free file
-    library can't build joined solids, so there is no clean `.3dm`: the STEP opens directly in
-    Rhino. Bull-nose fillets along wall feet are left out (as steps); `COASTLINE_CLEAN_DUMP=path`
+    Rhino, Fusion and other CAD programs open it as a NURBS polysurface.
+  - **Clean CAD, NURBS (.3dm)** (engine, `clean_3dm.py` and the openNURBS module `_opennurbs`):
+    the same solid as one joined Rhino polysurface.
+    - The shape is converted to NURBS throughout. Each face gives its B-spline surface; each edge,
+      numbered once so neighbouring faces share it, gives its 3D curve and vertices; each trim
+      gives its 2D curve, oriented along its loop. openNURBS (`native/src/opennurbs_module.cpp`)
+      builds the `ON_Brep`, sets trim flags and tolerances, checks it with `IsValid`, and writes
+      it in mm on a "Coastline snapshot" layer with the snapshot's name.
+    - Files hold no path: openNURBS writes through a file handle the module opens itself
+      (`ONX_Model::Write(filename)` would store the full path, with the user's folders). The mesh
+      `.3dm` goes through the same writer when `_opennurbs` is built (rhino3dm's `Write` stores
+      the path too; without openNURBS it writes in a neutral temporary folder and moves the file).
+    - Rhino's rules handled: trim ends snapped to meet exactly, a single closed edge on one
+      vertex, single-edge loops the wire walker skips. A hole outline that is closed on the
+      surface but open in 3D (a flaw of a fitted patch) is left out and counted in the result.
+    - Tested from the app and read back by rhino3dm: the signet pendant, 158 faces, a closed
+      valid solid, 5.8 s; the motor mount mid-bore, 226 faces, valid, two such outlines left
+      out, 8.2 s.
+    - **Building it:** openNURBS (McNeel's Rhino file toolkit) isn't in the repo.
+      `engine/native/get_opennurbs.sh` fetches a pinned 8.x commit into
+      `native/third_party/opennurbs` (git-ignored), and `engine/native/build_opennurbs.sh`
+      compiles it, caching its objects in `engine/build/opennurbs` (about 17 s the first time),
+      into `coastline_engine/_opennurbs*.so` (also git-ignored). Without it the menu item explains
+      what to run. Bull-nose fillets along wall feet are left out (as steps); `COASTLINE_CLEAN_DUMP=path`
     saves the heights the engine received, for work on `clean_cad` offline.
   - **3MF** (zip, mm) up to ~3 million triangles.
   - **STL** and **OBJ** (Swift) up to ~3 million triangles.
@@ -348,10 +369,12 @@ single points and sections exactly from the toolpath.
   (measure readout, Exact Section). Script commands `sharpen [x y size]`, `snapshots`,
   `showsnap`, `hidesnap`, `exactprobe x y`, `exactsection x|y offset`, `exportsnap path`,
   `measured`, `exportclean path`. Engine: `coastline_engine/mesh_export.py` (RPC `export_mesh`) and
-  `coastline_engine/clean_cad.py` (RPC `export_clean`).
+  `coastline_engine/clean_cad.py` (RPC `export_clean`, `format` step or 3dm), `clean_3dm.py`,
+  `native/src/opennurbs_module.cpp`, `native/get_opennurbs.sh`, `native/build_opennurbs.sh`.
 - **Tests:** `scripts/selftest.sh SharpSnapshot`, `engine/tests/test_clean_cad.py` (planes and arcs
   for a pocket and step, one NURBS surface for a dish, valid solids within 1 % of the volume, a
-  circle fitted as one circle) and `engine/tests/test_mesh_export.py` (3MF and
+  circle fitted as one circle), `engine/tests/test_clean_3dm.py` (a box with a pocket and the dish as
+  closed, valid Rhino polysurfaces; skipped without openNURBS) and `engine/tests/test_mesh_export.py` (3MF and
   `.3dm` read back with units and counts; a STEP block merges its flat faces into a closed, valid
   solid):
   - ball cusps at their analytic height;

@@ -20,3 +20,8 @@ resources/tools/
 CLAUDE.md
 .vscode/
 .idea/
+
+# openNURBS is fetched by engine/native/get_opennurbs.sh, not committed
+engine/native/third_party/opennurbs/
+engine/build/opennurbs/
+engine/coastline_engine/_opennurbs*.so

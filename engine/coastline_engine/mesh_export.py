@@ -54,7 +54,24 @@ def write_3mf(path: str, vertices: np.ndarray, triangles: np.ndarray, name: str)
 
 
 def write_3dm(path: str, vertices: np.ndarray, triangles: np.ndarray, name: str) -> None:
+    # openNURBS directly when the engine has it: the file then holds no path (rhino3dm's
+    # File3dm.Write records the full path it was written to, with the user's folders).
+    try:
+        from . import _opennurbs
+        if not _opennurbs.write_mesh(path, name, "Coastline snapshot", np.asarray(vertices, np.float32).ravel().tolist(),
+                                     np.asarray(triangles, np.int64).ravel().tolist()):
+            raise RuntimeError("openNURBS couldn't write the .3dm file")
+        return
+    except ImportError:
+        pass
+    import os
+    import shutil
+    import tempfile
+
     import rhino3dm
+    # Without openNURBS: write it under a neutral name in a temporary folder, then move it.
+    final, tmpdir = path, tempfile.mkdtemp()
+    path = os.path.join(tmpdir, "snapshot.3dm")
 
     model = rhino3dm.File3dm()
     model.Settings.ModelUnitSystem = rhino3dm.UnitSystem.Millimeters
@@ -74,6 +91,8 @@ def write_3dm(path: str, vertices: np.ndarray, triangles: np.ndarray, name: str)
     model.Objects.AddMesh(mesh, attrs)
     if not model.Write(path, 7):
         raise RuntimeError("rhino3dm couldn't write the file")
+    shutil.move(path, final)
+    shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def write_step(path: str, vertices: np.ndarray, triangles: np.ndarray, name: str) -> dict:
