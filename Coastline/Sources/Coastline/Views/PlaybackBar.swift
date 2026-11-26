@@ -93,7 +93,7 @@ struct PlaybackBar: View {
             .fixedSize()
             .help("Playback speed: 1× is real time, as long as the cut takes at the machine")
             .accessibilityLabel("Playback speed \(Int(model.playSpeed)) times")
-            SharpenMenu(compact: level >= 2)
+            SharpenMenu(compact: level >= 4)
             if level < 3 {
                 Menu {
                     Section("Colour the toolpath lines by") {

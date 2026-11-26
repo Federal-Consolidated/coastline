@@ -62,9 +62,13 @@ struct SharpenMenu: View {
                     Text("Other setups' snapshots show on their own timelines.")
                 }
             } label: {
-                Label(model.shownSnapshot == nil ? "Sharpen" : "Sharp", systemImage: model.shownSnapshot == nil ? "sparkle.magnifyingglass" : "checkmark.seal.fill")
-                    .font(.callout.weight(.semibold))
-                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
+                let title = model.shownSnapshot == nil ? "Sharpen" : "Sharp"
+                let symbol = model.shownSnapshot == nil ? "sparkle.magnifyingglass" : "checkmark.seal.fill"
+                if compact {
+                    Image(systemName: symbol).font(.callout.weight(.semibold)).accessibilityLabel(title)
+                } else {
+                    Label(title, systemImage: symbol).font(.callout.weight(.semibold))
+                }
             }
             .menuStyle(.button)
             .buttonStyle(.glass)
@@ -166,11 +170,4 @@ extension AppModel {
         let w = inv * SIMD4(p.world, 1)
         return SIMD2(Double(w.x), Double(w.y))
     }
-}
-
-/// A label style chosen at run time.
-struct AnyLabelStyle: LabelStyle {
-    private let make: (Configuration) -> AnyView
-    init<S: LabelStyle>(_ style: S) { make = { AnyView(style.makeBody(configuration: $0)) } }
-    func makeBody(configuration: Configuration) -> some View { make(configuration) }
 }
