@@ -445,8 +445,9 @@ final class AppModel {
     // Sharp snapshots (K12, SharpModel.swift)
     var sharpSnapshots: [SharpSnapshotRecord] = []
     var shownSnapshot: UUID?
-    /// 0…1 while a snapshot is being made.
+    /// 0…1 while a snapshot is being made (−1: a step without a measure of progress).
     var sharpProgress: Double?
+    var sharpPhase = ""
     var exactSection: ExactSection?
     @ObservationIgnored var sharpTask: Task<Void, Never>?
     @ObservationIgnored var sharpCancel: Counter?

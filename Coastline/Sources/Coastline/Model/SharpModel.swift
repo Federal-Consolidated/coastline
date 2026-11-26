@@ -123,13 +123,16 @@ extension AppModel {
         let cell = SharpSim.cell(region: lo, hi, target: target)
         let regionLo = lo, regionHi = hi
         let side = viewSide, time = playhead, index = simIndex, signature = simSignature
-        sharpProgress = 0
+        sharpProgress = -1
+        sharpPhase = "Collecting the moves"
         status = "Sharpening at \((cell * 1000).formatted(.number.precision(.fractionLength(cell < 0.01 ? 1 : 0)))) µm…"
         let started = Date()
         let cancel = Counter()
         sharpTask = Task { [weak self] in
             guard let self else { return }
             let segs = await self.cutSegments()
+            self.sharpPhase = "Sharpening"
+            self.sharpProgress = 0
             let box = ProgressBox()
             let poll = Task { @MainActor [weak self] in
                 while !Task.isCancelled {
@@ -142,8 +145,11 @@ extension AppModel {
                                  cancelled: { cancel.value > 0 })
             }.value
             poll.cancel()
-            self.sharpProgress = nil
-            guard let hm, !Task.isCancelled else { self.status = "Sharpening cancelled."; return }
+            guard let hm, !Task.isCancelled else { self.sharpProgress = nil; self.status = "Sharpening cancelled."; return }
+            // Drawing it takes a moment on the main thread: show that first.
+            self.sharpPhase = "Drawing"
+            self.sharpProgress = -1
+            try? await Task.sleep(for: .milliseconds(60))
             let n = self.sharpSnapshots.filter { $0.side == side }.count + 1
             let rec = SharpSnapshotRecord(name: "\(Self.setupTitle(side: side, twoSided: self.twoSided)) · \(AppModel.clock(time))" + (centre == nil ? "" : " · detail") + (n > 1 ? "" : ""),
                                           side: side, time: time, entryIndex: index, originX: hm.origin.x, originY: hm.origin.y,
@@ -152,8 +158,10 @@ extension AppModel {
             self.sharpSnapshots.append(rec)
             self.sharpCache[rec.id] = hm
             self.projectDirty = true
-            self.status = "Sharp snapshot at \(rec.resolutionText): \(hm.cols) × \(hm.rows) cells in \(String(format: "%.1f", Date().timeIntervalSince(started))) s."
             if self.playhead == time { self.displaySharp(rec, hm) }
+            self.sharpProgress = nil
+            self.status = "Sharp snapshot at \(rec.resolutionText): \(hm.cols) × \(hm.rows) cells in \(String(format: "%.1f", Date().timeIntervalSince(started))) s."
+
         }
         sharpCancel = cancel
     }
@@ -188,14 +196,31 @@ extension AppModel {
     func displaySharp(_ rec: SharpSnapshotRecord, _ hm: Heightmap) {
         guard let origin = simWorkOrigin, let stock else { return }
         renderer.scene.remove(id: "simstock.sharp")
-        let stride = max(Int((Double(hm.cols * hm.rows) / 2_500_000).squareRoot().rounded(.up)), 1)
+        let stride = max(Int((Double(hm.cols * hm.rows) / 1_500_000).squareRoot().rounded(.up)), 1)
         let d = Self.downsample(hm, stride: stride)
         let c = stock.material?.linearSwatch ?? SIMD3(0.5, 0.5, 0.5)
+        // Two-sided and later setups: the back the earlier side left (the playback grid's), so
+        // what was cut through stays open and the other side's work stays visible.
+        var back: [Float]?
+        if let coarseBack = simBack, let coarse = heightmap {
+            var b = [Float](repeating: Float(d.bottom), count: d.cols * d.rows)
+            for r in 0..<d.rows {
+                let y = d.origin.y + Double(r) * d.cell
+                let cr = min(max(Int(((y - coarse.origin.y) / coarse.cell).rounded()), 0), coarse.rows - 1)
+                for col in 0..<d.cols {
+                    let x = d.origin.x + Double(col) * d.cell
+                    let cc = min(max(Int(((x - coarse.origin.x) / coarse.cell).rounded()), 0), coarse.cols - 1)
+                    b[r * d.cols + col] = coarseBack[cr * coarse.cols + cc]
+                }
+            }
+            back = b
+        }
         guard let mesh = SceneMesh.grid(device: renderer.device, id: "simstock.sharp", x0: Float(d.origin.x), y0: Float(d.origin.y),
                                         cell: Float(d.cell), cols: d.cols, rows: d.rows, z: Float(d.top), color: SIMD4(c * 0.85, 1),
-                                        transform: simd_float4x4(translation: SIMD3<Float>(origin)), bottom: Float(d.bottom)) else { return }
+                                        transform: simd_float4x4(translation: SIMD3<Float>(origin)), bottom: Float(d.bottom),
+                                        bottomFace: back == nil) else { return }
         mesh.group = renderer.scene.mesh("simstock")?.group
-        mesh.updateGrid(values: d.heights, top: d.heights, back: nil, cols: d.cols, rows: d.rows, cell: Float(d.cell),
+        mesh.updateGrid(values: d.heights, top: d.heights, back: back, cols: d.cols, rows: d.rows, cell: Float(d.cell),
                         c0: 0, r0: 0, c1: d.cols - 1, r1: d.rows - 1, downward: false, floor: Float(d.bottom))
         renderer.scene.setMesh(mesh)
         // The coarse grid steps aside where the sharp one is.

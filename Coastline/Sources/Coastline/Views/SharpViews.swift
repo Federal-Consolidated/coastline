@@ -7,17 +7,30 @@ import simd
 /// side, and what to do with each.
 struct SharpenMenu: View {
     @Environment(AppModel.self) private var model
+    /// Narrow bars: the icon only.
+    var compact = false
 
     var body: some View {
         if let p = model.sharpProgress {
-            HStack(spacing: 6) {
-                ProgressView(value: p).frame(width: 70)
+            HStack(spacing: 8) {
+                if p < 0 {
+                    ProgressView().controlSize(.small)
+                } else {
+                    ProgressView(value: p).frame(width: compact ? 60 : 110)
+                }
+                Text(compact ? (p < 0 ? "\(model.sharpPhase)…" : "\(Int((p * 100).rounded())) %")
+                             : (p < 0 ? "\(model.sharpPhase)…" : "\(model.sharpPhase) \(Int((p * 100).rounded())) %"))
+                    .font(.callout.monospacedDigit()).foregroundStyle(.secondary).lineLimit(1).fixedSize()
                 Button("Cancel", systemImage: "xmark.circle.fill") { model.cancelSharpen() }
                     .labelStyle(.iconOnly).buttonStyle(.borderless)
                     .help("Stop making the sharp snapshot")
+                    .disabled(model.sharpPhase == "Drawing")
             }
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .glassEffect(.regular, in: .capsule)
+            .help(p < 0 ? "\(model.sharpPhase)…" : "\(model.sharpPhase): \(Int((p * 100).rounded())) %")
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Sharpening, \(Int((p * 100).rounded())) percent")
+            .accessibilityLabel(p < 0 ? "Sharpening: \(model.sharpPhase)" : "Sharpening, \(Int((p * 100).rounded())) percent")
         } else {
             Menu {
                 Section("Make a sharp snapshot here") {
@@ -51,6 +64,7 @@ struct SharpenMenu: View {
             } label: {
                 Label(model.shownSnapshot == nil ? "Sharpen" : "Sharp", systemImage: model.shownSnapshot == nil ? "sparkle.magnifyingglass" : "checkmark.seal.fill")
                     .font(.callout.weight(.semibold))
+                    .labelStyle(compact ? AnyLabelStyle(.iconOnly) : AnyLabelStyle(.titleAndIcon))
             }
             .menuStyle(.button)
             .buttonStyle(.glass)
@@ -152,4 +166,11 @@ extension AppModel {
         let w = inv * SIMD4(p.world, 1)
         return SIMD2(Double(w.x), Double(w.y))
     }
+}
+
+/// A label style chosen at run time.
+struct AnyLabelStyle: LabelStyle {
+    private let make: (Configuration) -> AnyView
+    init<S: LabelStyle>(_ style: S) { make = { AnyView(style.makeBody(configuration: $0)) } }
+    func makeBody(configuration: Configuration) -> some View { make(configuration) }
 }

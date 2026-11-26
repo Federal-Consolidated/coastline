@@ -406,6 +406,7 @@ enum Automation {
                 while model.sharpProgress != nil { try? await Task.sleep(for: .milliseconds(100)) }
                 try? await Task.sleep(for: .milliseconds(300))
                 print("sharpen \(String(format: "%.1f", Date().timeIntervalSince(t0))) s · \(model.status) · shown \(model.shownSnapshot != nil)")
+            case "sharpennowait": model.sharpen()  // starts it and goes on (to capture the progress)
             case "snapshots":
                 for r in model.sharpSnapshots {
                     print("snapshot \(r.name) side \(r.side) t \(Int(r.time)) \(r.resolutionText) \(r.cols)x\(r.rows) \(r.heights.count / 1024) KB current \(model.snapshotIsCurrent(r))")

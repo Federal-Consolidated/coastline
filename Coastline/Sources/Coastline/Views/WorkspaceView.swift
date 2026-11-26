@@ -191,7 +191,7 @@ struct WorkspaceView: View {
                 GlassToggle(title: "Section", systemImage: "square.split.diagonal", isOn: Binding(
                     get: { model.sectionOn }, set: { model.sectionOn = $0; showSection = $0 }))
                     .popover(isPresented: Binding(get: { model.sectionOn && showSection }, set: { showSection = $0 }), arrowEdge: .top) {
-                        SectionControls().padding(16).frame(width: 280)
+                        SectionControls().frame(width: 300).padding(16)
                     }
 
                 // M is the View menu's (it leaves a text field being typed in alone).
@@ -212,7 +212,7 @@ struct SectionControls: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Section").font(.headline)
             Picker("Cut across", selection: $model.sectionAxis) {
-                Text("X (vertical)").tag(AppModel.SectionAxis.x)
+                Text("X (up)").tag(AppModel.SectionAxis.x)
                 Text("Y").tag(AppModel.SectionAxis.y)
                 Text("Z (depth)").tag(AppModel.SectionAxis.z)
             }
@@ -227,8 +227,12 @@ struct SectionControls: View {
             Text("The cut face is drawn hatched, like a drawing's cross-section.")
                 .font(.caption).foregroundStyle(.secondary)
             if model.simulate, model.heightmap != nil {
-                Button("Exact Section…", systemImage: "chart.xyaxis.line") { Task { await model.computeExactSection() } }
-                    .disabled(model.sectionAxis == .z)
+                Button { Task { await model.computeExactSection() } } label: {
+                    Label("Exact Section…", systemImage: "chart.xyaxis.line").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .disabled(model.sectionAxis == .z)
                     .help("The material along this section line, worked out exactly from the toolpath up to the playhead, with the part and the playback grid for comparison.")
             }
         }

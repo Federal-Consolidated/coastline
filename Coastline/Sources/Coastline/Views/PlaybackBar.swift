@@ -28,6 +28,8 @@ struct PlaybackBar: View {
                     transportRow(1)
                     transportRow(2)
                     transportRow(3)
+                    transportRow(4)
+                    transportRow(5)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)  // transport on the left, what's shown on the right
                 Scrubber()
@@ -57,7 +59,7 @@ struct PlaybackBar: View {
                 HStack(spacing: 14) {
             // The same glass buttons as the toggles on the right; Play tinted with the accent.
             HStack(spacing: 6) {
-                transport("backward.end.fill", "Previous Operation", "⌥←") { model.jumpOperation(-1) }
+                if level < 4 { transport("backward.end.fill", "Previous Operation", "⌥←") { model.jumpOperation(-1) } }
                 transport("backward.frame.fill", "Previous Move", "←") { model.step(-1) }
                 // Space is the Playback menu's (it leaves a text field being typed in alone).
                 Button { model.togglePlay() } label: {
@@ -70,9 +72,9 @@ struct PlaybackBar: View {
                 .help(model.isPlaying ? "Pause (Space)" : "Play this step (Space)")
                 .accessibilityLabel(model.isPlaying ? "Pause" : "Play this step")
                 transport("forward.frame.fill", "Next Move", "→") { model.step(1) }
-                transport("forward.end.fill", "Next Operation", "⌥→") { model.jumpOperation(1) }
+                if level < 4 { transport("forward.end.fill", "Next Operation", "⌥→") { model.jumpOperation(1) } }
             }
-            Text("\(AppModel.clock(model.playhead)) / \(AppModel.clock(model.timeline.duration))")
+            Text(level >= 5 ? AppModel.clock(model.playhead) : "\(AppModel.clock(model.playhead)) / \(AppModel.clock(model.timeline.duration))")
                 .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
                 .lineLimit(1).fixedSize()
             // How it plays, next to the transport: real buttons, not faint menus.
@@ -91,7 +93,7 @@ struct PlaybackBar: View {
             .fixedSize()
             .help("Playback speed: 1× is real time, as long as the cut takes at the machine")
             .accessibilityLabel("Playback speed \(Int(model.playSpeed)) times")
-            SharpenMenu()
+            SharpenMenu(compact: level >= 2)
             if level < 3 {
                 Menu {
                     Section("Colour the toolpath lines by") {
@@ -139,7 +141,23 @@ struct PlaybackBar: View {
                 .accessibilityValue(String(format: "X %.3f, Y %.3f, Z %.3f millimetres", q.x, q.y, q.z) + (problem.map { ". \($0)" } ?? ""))
             }
             Spacer(minLength: 8)
-            // What's shown, on the right.
+            // What's shown, on the right (in one menu when the bar is very narrow).
+            if level >= 5 {
+                Menu {
+                    Toggle("Toolpaths", isOn: $model.pathsVisible)
+                    Toggle("Work Area", isOn: $model.showWorkArea)
+                    Toggle("Simulate Cutting", isOn: $model.simulate)
+                    Toggle("Pick a Toolpath", isOn: $model.inspecting)
+                    Toggle("Compare with the CAD", isOn: $model.showDeviation).disabled(!model.simulate)
+                } label: {
+                    BarIconLabel(symbol: "eye")
+                }
+                .menuStyle(.button)
+                .buttonStyle(.glass)
+                .fixedSize()
+                .help("What's shown: toolpaths, work area, the cutting simulation, picking, the comparison with the CAD")
+                .accessibilityLabel("Show")
+            } else {
             HStack(spacing: 6) {
                 BarToggle(title: "Toolpaths", symbol: "point.topleft.down.to.point.bottomright.curvepath", isOn: $model.pathsVisible,
                           help: "Show the toolpath lines. Off: just the stock being cut and the tool.")
@@ -154,6 +172,7 @@ struct PlaybackBar: View {
                               help: "Colour the simulated stock against the part: green within ±20 µm, blue where material is left, red where it would gouge.")
                         .disabled(!model.simulate)
                 }
+            }
             }
         }
         .frame(height: 32)
