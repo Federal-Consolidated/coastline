@@ -30,6 +30,8 @@ for id in $ids; do
   COASTLINE_INVENTORY=$OUT/inv_$id.json \
   COASTLINE_SCRIPT="size 1440x900; example $id; wait 3; twosided ${SIDES[$id]}; wait 2; plans; useplan ${PLAN[$id]}; generate; saveproject $project; quit" \
     "$APP" > $log 2>&1
+  # The part is found next to the project: keep only its file name (no local folders in the repo).
+  [[ -f $project ]] && /usr/bin/python3 -I $ROOT/scripts/support/strip_part_path.py $project
   gen=$(grep -E "^generate status=Toolpaths ready" $log | head -1)
   bad=$(grep -cE "^program .* passed=false" $log)
   plan=$(grep -E "^using plan" $log | head -1)
