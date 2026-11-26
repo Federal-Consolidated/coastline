@@ -407,15 +407,8 @@ struct JobStrip: View {
                 HStack(alignment: .top, spacing: 6) {
                     ForEach(Array(chapters.enumerated()), id: \.element) { n, ch in
                         let group = steps.filter { $0.chapter == ch }
-                        Group {
-                            if ch == open {
-                                openChapter(ch, group, n + 1)
-                                    .transition(reduceMotion ? .opacity : .asymmetric(insertion: .scale(scale: 0.9, anchor: .leading).combined(with: .opacity), removal: .opacity))
-                            } else {
-                                closedChapter(ch, group, n + 1)
-                            }
-                        }
-                        .id(ch.id)
+                        chapterCard(ch, group, n + 1, isOpen: ch == open)
+                            .id(ch.id)
                     }
                     if model.isGenerating {
                         generationTally(chapters.map { ch in steps.filter { $0.chapter == ch } })
@@ -447,10 +440,10 @@ struct JobStrip: View {
         .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: model.currentStep?.id)
     }
 
-    /// A closed chapter: a card as tall as the open one, its number where the open one has it,
-    /// the chapter's first step symbol below. Ready (filled number, a tick while the rest
-    /// generates), generating (a progress ring) or waiting (dashed).
-    private func closedChapter(_ ch: JobChapter, _ group: [JobStep], _ n: Int) -> some View {
+    /// One chapter as an accordion card: the same view open or closed, so its width springs
+    /// between the two (`RevealWidth`) while the contents crossfade, clipped to the card. Opening
+    /// one grows it as the one that was open shrinks back to its number.
+    private func chapterCard(_ ch: JobChapter, _ group: [JobStep], _ n: Int, isOpen: Bool) -> some View {
         let ready = model.chapterReady(group)
         let progress = model.chapterProgress(group)
         let steps = "\(group.count) step\(group.count == 1 ? "" : "s")"
@@ -458,50 +451,73 @@ struct JobStrip: View {
         let help = "Chapter \(n) · \(ch.title) · \(steps)"
             + (ready ? "" : percent.map { " · generating, \($0) % ready" } ?? " · comes when the toolpaths are ready")
         let value = steps + (ready ? "" : percent.map { ", generating, \($0) percent ready" } ?? ", comes when the toolpaths are ready")
-        let generating = !ready && (progress ?? 0) > 0
-        return Button { if let first = group.first { model.go(to: first) } } label: {
-            VStack(spacing: 0) {
-                ZStack {
-                    if ready {
-                        Circle().fill(Theme.accent.opacity(0.22))
-                        Circle().strokeBorder(Theme.accent.opacity(0.7), lineWidth: 1)
-                    } else if generating, let progress {
-                        Circle().stroke(Color.secondary.opacity(0.25), lineWidth: 2)
-                        Circle().trim(from: 0, to: progress).stroke(Theme.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                    } else {
-                        Circle().strokeBorder(Color.secondary.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                    }
-                    // Not ready yet: secondary text at full opacity, so the number stays readable.
-                    Text("\(n)").font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(ready ? Color.primary : Color.secondary)
+        return RevealWidth(progress: isOpen ? 1 : 0, closed: badge) {
+            ZStack(alignment: .topLeading) {
+                if isOpen {
+                    openContent(ch, group, n).transition(.opacity)
+                } else {
+                    closedContent(group, n, ready: ready, progress: progress).transition(.opacity)
                 }
-                .frame(width: badge, height: badge)
-                .overlay(alignment: .bottomTrailing) {
-                    if ready && model.isGenerating {
-                        Image(systemName: "checkmark.circle.fill").font(.system(size: 9, weight: .bold))
-                            .symbolRenderingMode(.palette).foregroundStyle(.white, Theme.ok)
-                            .offset(x: 3, y: 3)
-                            .accessibilityHidden(true)
-                    }
-                }
-                Spacer(minLength: 0)
-                Image(systemName: group.first?.symbol ?? "circle").font(.caption)
-                    .foregroundStyle(ready ? Color.secondary : Color.secondary.opacity(0.5))
-                    .accessibilityHidden(true)
-                Spacer(minLength: 0)
             }
-            .padding(inset)
-            .frame(height: cardHeight)
-            .background(RoundedRectangle(cornerRadius: outer).fill(Color.secondary.opacity(0.08)))
-            .overlay(RoundedRectangle(cornerRadius: outer).strokeBorder(Color.secondary.opacity(0.16), lineWidth: 1))
-            .contentShape(RoundedRectangle(cornerRadius: outer))
         }
-        .buttonStyle(.plain)
-        .disabled(!ready)
-        .help(help)
-        .accessibilityLabel("Chapter \(n), \(ch.title)")
-        .accessibilityValue(value)
+        .clipped()
+        .padding(inset)
+        .frame(height: cardHeight, alignment: .topLeading)
+        // The contents move with the card as one piece (else they animate their own positions in
+        // the strip while the card springs, and drift out of it).
+        .geometryGroup()
+        .background(RoundedRectangle(cornerRadius: outer).fill(isOpen ? Theme.accent.opacity(0.10) : Color.secondary.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: outer).strokeBorder(isOpen ? Theme.accent.opacity(0.55) : Color.secondary.opacity(0.16), lineWidth: 1))
+        .contentShape(RoundedRectangle(cornerRadius: outer))
+        // Closed: the whole card opens the chapter (open: its step buttons take the clicks).
+        .simultaneousGesture(TapGesture().onEnded {
+            if !isOpen, ready, let first = group.first { model.go(to: first) }
+        })
+        .help(isOpen ? "" : help)
+        .accessibilityElement(children: isOpen ? .contain : .ignore)
+        .accessibilityLabel(isOpen ? "" : "Chapter \(n), \(ch.title)")
+        .accessibilityValue(isOpen ? "" : value)
+        .accessibilityAddTraits(isOpen ? [] : .isButton)
+        .accessibilityAction { if !isOpen, ready, let first = group.first { model.go(to: first) } }
+    }
+
+    /// A closed chapter's contents: its number where the open one has it, the first step's symbol
+    /// below. Ready (filled number, a tick while the rest generates), generating (a progress ring)
+    /// or waiting (dashed).
+    private func closedContent(_ group: [JobStep], _ n: Int, ready: Bool, progress: Double?) -> some View {
+        let generating = !ready && (progress ?? 0) > 0
+        return VStack(spacing: 0) {
+            ZStack {
+                if ready {
+                    Circle().fill(Theme.accent.opacity(0.22))
+                    Circle().strokeBorder(Theme.accent.opacity(0.7), lineWidth: 1)
+                } else if generating, let progress {
+                    Circle().stroke(Color.secondary.opacity(0.25), lineWidth: 2)
+                    Circle().trim(from: 0, to: progress).stroke(Theme.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                } else {
+                    Circle().strokeBorder(Color.secondary.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                }
+                // Not ready yet: secondary text at full opacity, so the number stays readable.
+                Text("\(n)").font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(ready ? Color.primary : Color.secondary)
+            }
+            .frame(width: badge, height: badge)
+            .overlay(alignment: .bottomTrailing) {
+                if ready && model.isGenerating {
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: 9, weight: .bold))
+                        .symbolRenderingMode(.palette).foregroundStyle(.white, Theme.ok)
+                        .offset(x: 3, y: 3)
+                        .accessibilityHidden(true)
+                }
+            }
+            Spacer(minLength: 0)
+            Image(systemName: group.first?.symbol ?? "circle").font(.caption)
+                .foregroundStyle(ready ? Color.secondary : Color.secondary.opacity(0.5))
+                .accessibilityHidden(true)
+            Spacer(minLength: 0)
+        }
+        .frame(width: badge, height: cardHeight - 2 * inset)
     }
 
     /// While generating: how many chapters can be opened, with a legend in its help.
@@ -519,7 +535,9 @@ struct JobStrip: View {
         .accessibilityLabel("Generating, \(ready) of \(groups.count) chapters ready")
     }
 
-    private func openChapter(_ ch: JobChapter, _ group: [JobStep], _ n: Int) -> some View {
+    /// An open chapter's contents: its number, title and steps, at their natural width (the card
+    /// reveals them as it grows).
+    private func openContent(_ ch: JobChapter, _ group: [JobStep], _ n: Int) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 Text("\(n)").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.black)
@@ -542,10 +560,7 @@ struct JobStrip: View {
                 }
             }
         }
-        .padding(inset)
-        .frame(height: cardHeight, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: outer).fill(Theme.accent.opacity(0.10)))
-        .overlay(RoundedRectangle(cornerRadius: outer).strokeBorder(Theme.accent.opacity(0.55), lineWidth: 1))
+        .fixedSize()
     }
 
     private func chip(_ step: JobStep, active: Bool, compact: Bool) -> some View {
@@ -573,5 +588,30 @@ struct JobStrip: View {
         )
         .overlay(RoundedRectangle(cornerRadius: outer - inset).strokeBorder(manual ? Color.secondary.opacity(0.6) : .clear, style: StrokeStyle(lineWidth: 0.8, dash: [3, 2])))
         .foregroundStyle(active ? .white : .primary)
+    }
+}
+
+/// Sizes a chapter card between closed (`closed` wide) and its contents' natural width by
+/// `progress` (0 closed, 1 open), animatable, so the card's width springs as a chapter opens or
+/// closes. The contents are laid out at their natural size from the leading edge; the card clips.
+private struct RevealWidth: Layout {
+    var progress: CGFloat
+    var closed: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let ideal = subviews.first?.sizeThatFits(.unspecified) ?? .zero
+        let t = min(max(progress, 0), 1)
+        return CGSize(width: closed + (max(ideal.width, closed) - closed) * t, height: proposal.height ?? ideal.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let s = subviews.first else { return }
+        let ideal = s.sizeThatFits(.unspecified)
+        s.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(width: ideal.width, height: bounds.height))
     }
 }
