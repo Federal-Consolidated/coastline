@@ -7,7 +7,7 @@ NURBS surfaces instead of a voxel mesh.
    cleaned away); what's left is sloped (3D finishing). Small sloped patches snap to a level too.
 3. For each level below the top: the outline of everything cut at least that deep, traced
    along the cell edges, smoothed through the edge midpoints, simplified and fitted with lines
-   and arcs (`cam.arcfit`), and cut out of the stock block as a prism from that level up.
+   and arcs (least-squares arcs, `fit_outline`), and cut out of the stock block as a prism from that level up.
 4. Each sloped patch: a B-spline surface fitted to its heights, swept up to a solid and limited
    to the patch's outline, cut out the same way.
 5. One boolean cut, then coplanar faces merged.
@@ -203,6 +203,16 @@ def fit_outline(dense: np.ndarray, tol: float) -> tuple[np.ndarray, list]:
     [("line", end) | ("arc", end, centre, cw)]. Corners come from Douglas-Peucker; runs of corners
     that sit on one circle (least squares over all the points between) become one arc."""
     n = len(dense)
+    # A whole circle (a round pocket or boss): two halves on one centre.
+    whole = _circle_fit(dense)
+    if whole is not None:
+        c, r = whole
+        if 0.2 <= r <= 500 and np.abs(np.hypot(*(dense - c).T) - r).max() <= tol:
+            ccw = signed_area(dense) > 0
+            a0 = math.atan2(dense[0][1] - c[1], dense[0][0] - c[0])
+            p0 = c + r * np.array([math.cos(a0), math.sin(a0)])
+            p1 = c + r * np.array([math.cos(a0 + math.pi), math.sin(a0 + math.pi)])
+            return p0, [("arc", p1, c, not ccw), ("arc", p0, c, not ccw)]
     # Start at the sharpest turn so no arc is cut in two.
     v_prev = dense - np.roll(dense, 1, axis=0)
     v_next = np.roll(dense, -1, axis=0) - dense
@@ -449,7 +459,6 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
     for comp in patches:
         in_patch[comp[:, 0], comp[:, 1]] = True
     tools = []
-    tool_kind: list[str] = []
     for z in levels:
         if z >= top - 1e-9:
             continue
@@ -460,9 +469,7 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
         loops = [world(smooth_loop(l)) for l in trace_loops(np.pad(mask, 1, mode="edge"))]
         loops = [l - cell for l in loops]
         loops = [l for l in loops if abs(signed_area(l)) >= min_area]  # specks are noise
-        new_tools = _region_prism(loops, z, z_above, fit_tol)
-        tools += new_tools
-        tool_kind += [f"level {z:.3f}"] * len(new_tools)
+        tools += _region_prism(loops, z, z_above, fit_tol)
     for comp in patches:
         rr, cc = comp[:, 0], comp[:, 1]
         fmask = np.zeros_like(sloped)
@@ -483,7 +490,6 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
         cutter = _surface_cutter(eff, fmask, slice(r0, r1), slice(c0, c1), x0, y0, cell, prisms[0])
         if cutter is not None:
             tools.append(cutter)
-            tool_kind.append(f"patch {len(comp)} cells")
 
     box = BRepPrimAPI_MakeBox(gp_Pnt(corner_x, corner_y, bottom),
                               gp_Pnt(corner_x + cols * cell, corner_y + rows * cell, top)).Shape()

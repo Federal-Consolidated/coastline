@@ -18,7 +18,7 @@ adds. Both workflows run side by side there: a job uses the clamp kit unless it 
 fixture library (`Setup.planFromFixtureLibrary`) or held in a custom fixture. How the two branches
 trade features is in [SYNC.md](SYNC.md).
 
-Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 116 passed.
+Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 119 passed.
 The app builds and generates the Motor Mount example (shoulders + clamp kit) with every program
 passing the safety check.
 
@@ -314,11 +314,27 @@ single points and sections exactly from the toolpath.
     areas stay faceted. Up to ~400 000 triangles, so a whole-stock snapshot goes out coarser
     (the motor mount: 206 µm, 7 610 faces, a closed solid, 22 MB, about 1.5 min); a detail
     snapshot keeps its resolution.
+  - **Clean CAD, NURBS (.step)** (engine, `clean_cad.py`, RPC `export_clean`): a B-rep solid, not
+    a mesh. From the snapshot's heights (at most ~1.2 million cells):
+    - the flat levels the cuts left are found;
+    - micron cusps and specks under 0.2 mm² are cleaned away;
+    - each level's outline is traced, and fitted with lines and least-squares arcs (a whole
+      circle becomes one circle);
+    - the outlines are cut out of the stock block as prisms, one cut at a time, each checked;
+    - sloped 3D areas get a light cubic B-spline surface (about 30 × 30 points, extended past
+      the area's edge), and the area's footprint is split by it.
+
+    Tested from the app: the signet pendant gave 277 faces (142 planes, 127 cylinders, 8 NURBS),
+    a valid solid, in 7.7 s; the motor mount gave 270 faces with 17 NURBS, valid, in 5.6 s.
+    Rhino, Fusion and other CAD programs open it as a NURBS polysurface. Rhino's free file
+    library can't build joined solids, so there is no clean `.3dm`: the STEP opens directly in
+    Rhino. Bull-nose fillets along wall feet are left out (as steps); `COASTLINE_CLEAN_DUMP=path`
+    saves the heights the engine received, for work on `clean_cad` offline.
   - **3MF** (zip, mm) up to ~3 million triangles.
   - **STL** and **OBJ** (Swift) up to ~3 million triangles.
 - **Still planned.**
-  - True CAD STEP: an exact 2.5D solid from the engine's cleared regions (true planes and
-    cylinders), with a fine mesh for 3D-finished areas.
+  - Clean CAD straight from the toolpaths (the engine's cleared regions) instead of the
+    simulated heights, for exact walls and fillets.
   - Comparing two snapshots.
   - Automatic snapshots after each program or setup.
   - Multi-setup jobs at fine resolution: side B shows its cuts, but starts from the coarse model
@@ -329,8 +345,11 @@ single points and sections exactly from the toolpath.
   `Deviation`, `ProjectDocument`, `PlaybackBar` (Sharpen, timeline marks), `WorkspaceView`
   (measure readout, Exact Section). Script commands `sharpen [x y size]`, `snapshots`,
   `showsnap`, `hidesnap`, `exactprobe x y`, `exactsection x|y offset`, `exportsnap path`,
-  `measured`. Engine: `coastline_engine/mesh_export.py`, RPC `export_mesh`.
-- **Tests:** `scripts/selftest.sh SharpSnapshot` and `engine/tests/test_mesh_export.py` (3MF and
+  `measured`, `exportclean path`. Engine: `coastline_engine/mesh_export.py` (RPC `export_mesh`) and
+  `coastline_engine/clean_cad.py` (RPC `export_clean`).
+- **Tests:** `scripts/selftest.sh SharpSnapshot`, `engine/tests/test_clean_cad.py` (planes and arcs
+  for a pocket and step, one NURBS surface for a dish, valid solids within 1 % of the volume, a
+  circle fitted as one circle) and `engine/tests/test_mesh_export.py` (3MF and
   `.3dm` read back with units and counts; a STEP block merges its flat faces into a closed, valid
   solid):
   - ball cusps at their analytic height;
