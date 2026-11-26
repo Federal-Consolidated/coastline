@@ -18,7 +18,7 @@ adds. Both workflows run side by side there: a job uses the clamp kit unless it 
 fixture library (`Setup.planFromFixtureLibrary`) or held in a custom fixture. How the two branches
 trade features is in [SYNC.md](SYNC.md).
 
-Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 121 passed.
+Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 122 passed.
 The app builds and generates the Motor Mount example (shoulders + clamp kit) with every program
 passing the safety check.
 
@@ -334,6 +334,23 @@ single points and sections exactly from the toolpath.
     226 faces, valid, in 6.2 s. Coplanar faces are merged with their edges when OCCT manages,
     else faces only; engine errors reach the app with their own message.
     Rhino, Fusion and other CAD programs open it as a NURBS polysurface.
+  - **With the exact part** (`build_with_part`): when the part is an exact B-rep (STEP, IGES,
+    `.3dm`), the clean export is the part itself joined with the material still on it. Cells the
+    cut has reached (within 0.05 mm of the part's top) are lowered to its underside, so only the
+    leftover stock is reconstructed; the union shows the user's own faces, edges and fillets.
+    - The part's top and underside heights come from an OpenCAMLib drop on it (and on it turned
+      over), placed by the setup's transform.
+    - The leftover's outlines take the part's exact circles and wall lines where they run within
+      0.04 mm of them (corners where the snapped neighbours meet), and a whole circle starts at the
+      part circle's seam. Without that, the fitted wall lay a few microns from the CAD wall and
+      left rings of sliver faces round holes and bores, and seams that didn't meet (an invalid
+      `.3dm` edge).
+    - Same-surface faces are merged with tight tolerances (1e-4), repaired if that leaves a face
+      invalid, else kept as fused.
+    - Motor mount, end of the main setup: 164 faces (90 planes, 73 cylinders, the cone), a valid
+      solid and a valid Rhino polysurface (trims within 0.5 µm), 99 % of the surface within 2 µm
+      of the simulation, 0.7 s. The fine lines left on its top face are real: islands 0.1 mm
+      proud of the finished top that the simulated toolpaths leave between the bore and the holes.
   - **Clean CAD, NURBS (.3dm)** (engine, `clean_3dm.py` and the openNURBS module `_opennurbs`):
     the same solid as one joined Rhino polysurface.
     - The shape is converted to NURBS throughout. Each face gives its B-spline surface; each edge,
@@ -378,7 +395,8 @@ single points and sections exactly from the toolpath.
   `native/src/opennurbs_module.cpp`, `native/get_opennurbs.sh`, `native/build_opennurbs.sh`.
 - **Tests:** `scripts/selftest.sh SharpSnapshot`, `engine/tests/test_clean_cad.py` (planes and arcs
   for a pocket and step, one NURBS surface for a dish, valid solids within 1 % of the volume, a
-  circle fitted as one circle), `engine/tests/test_clean_3dm.py` (a box with a pocket and the dish as
+  circle fitted as one circle; the exact part with its leftover: a plate in its slot with the hole
+  drilled on into the bar comes out valid, no face under 0.02 mm wide, a valid `.3dm`), `engine/tests/test_clean_3dm.py` (a box with a pocket and the dish as
   closed, valid Rhino polysurfaces; skipped without openNURBS) and `engine/tests/test_mesh_export.py` (3MF and
   `.3dm` read back with units and counts; a STEP block merges its flat faces into a closed, valid
   solid):

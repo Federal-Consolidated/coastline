@@ -66,6 +66,12 @@ def _surface(s) -> tuple:
             _on_knots(s.VKnots(), s.VMultiplicities()), cvs)
 
 
+def _length(curve) -> float:
+    from OCP.GCPnts import GCPnts_AbscissaPoint
+    from OCP.GeomAdaptor import GeomAdaptor_Curve
+    return GCPnts_AbscissaPoint.Length_s(GeomAdaptor_Curve(curve))
+
+
 def _snap_loop(curves2: list, ids: list[int]) -> None:
     """Each trim ends exactly where the next one starts (openNURBS checks this strictly): both
     ends move to their midpoint. Clamped NURBS start and end on their first and last control points."""
@@ -126,10 +132,12 @@ def describe(shape) -> dict:
         curves3.append(_curve3(bs))
         v0 = vmap.FindIndex(TopExp.FirstVertex_s(e)) - 1
         v1 = vmap.FindIndex(TopExp.LastVertex_s(e)) - 1
-        # A closed edge (both ends on one spot) starts and ends on one vertex in Rhino.
+        # A closed edge (a whole circle: both ends on one spot) starts and ends on one vertex in
+        # Rhino. A tiny edge whose ends are just as close isn't closed: it keeps both.
         if v0 != v1:
             a, b = np.array(vertices[v0][:3]), np.array(vertices[v1][:3])
-            if np.linalg.norm(a - b) <= max(vertices[v0][3], vertices[v1][3], 1e-4) * 2:
+            gap = np.linalg.norm(a - b)
+            if gap <= max(vertices[v0][3], vertices[v1][3], 1e-4) * 2 and _length(bs) > 100 * max(gap, 1e-4):
                 v1 = v0
         edges.append((v0, v1, len(curves3) - 1, max(BRep_Tool.Tolerance_s(e), 1e-5)))
         edge_of[i - 1] = len(edges) - 1

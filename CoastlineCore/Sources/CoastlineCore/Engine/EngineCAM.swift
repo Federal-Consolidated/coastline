@@ -260,9 +260,16 @@ extension EngineClient {
     /// Clean CAD from a snapshot's heights (rows × cols, cell (0,0) centred at origin): a STEP solid
     /// with planes, line/arc walls and B-spline surfaces (`clean_cad`).
     public func exportClean(path: String, name: String, heights: [Float], cols: Int, rows: Int, origin: SIMD2<Double>,
-                            cell: Double, top: Double, bottom: Double, format: String = "step") throws -> CleanExport {
-        let r = try call("export_clean", ["path": path, "name": name, "x0": origin.x, "y0": origin.y, "cell": cell,
-                                          "cols": cols, "rows": rows, "top": top, "bottom": bottom, "format": format],
+                            cell: Double, top: Double, bottom: Double, format: String = "step",
+                            partID: String? = nil, transform: simd_double4x4? = nil) throws -> CleanExport {
+        var params: [String: Any] = ["path": path, "name": name, "x0": origin.x, "y0": origin.y, "cell": cell,
+                                     "cols": cols, "rows": rows, "top": top, "bottom": bottom, "format": format]
+        // With the part: finished surfaces come from its exact B-rep, only leftover stock is rebuilt.
+        if let partID, let transform {
+            params["part_id"] = partID
+            params["transform"] = Self.rowMajor(transform)
+        }
+        let r = try call("export_clean", params,
                          blobs: [heights.withUnsafeBufferPointer { Data(buffer: $0) }])
         return CleanExport(faces: r.result["faces"] as? Int ?? 0, valid: r.result["valid"] as? Bool ?? false,
                            levels: r.result["levels"] as? Int ?? 0, patches: r.result["patches"] as? Int ?? 0,

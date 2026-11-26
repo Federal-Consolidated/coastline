@@ -283,6 +283,149 @@ def smooth_loop(corners: np.ndarray) -> np.ndarray:
     return (corners + np.roll(corners, -1, axis=0)) / 2
 
 
+# MARK: Snapping to the part
+
+# The part's vertical walls in the work frame while a build with the part runs (build_with_part):
+# circles (cx, cy, r, seam angle) and lines (px, py, dx, dy). A fitted outline that runs along one of them
+# takes the part's exact geometry, so the leftover's wall and the part's wall coincide exactly and
+# merge, instead of leaving faces a few microns wide between them.
+_SNAP: dict | None = None
+SNAP_TOL = 0.04
+
+
+def part_walls(shape) -> dict:
+    """The part's vertical cylinders and planes, as circles and lines in plan."""
+    from OCP.BRep import BRep_Tool
+    from OCP.GeomAbs import GeomAbs_Cylinder, GeomAbs_Plane
+    from OCP.GeomAdaptor import GeomAdaptor_Surface
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS
+
+    circles, lines = [], []
+    ex = TopExp_Explorer(shape, TopAbs_FACE)
+    while ex.More():
+        s = GeomAdaptor_Surface(BRep_Tool.Surface_s(TopoDS.Face(ex.Current())))
+        if s.GetType() == GeomAbs_Cylinder:
+            c = s.Cylinder()
+            d, o = c.Axis().Direction(), c.Axis().Location()
+            if abs(abs(d.Z()) - 1) < 1e-6:
+                x = c.Position().XDirection()  # the seam (u = 0)
+                circles.append((o.X(), o.Y(), c.Radius(), math.atan2(x.Y(), x.X())))
+        elif s.GetType() == GeomAbs_Plane:
+            pl = s.Plane()
+            n, o = pl.Axis().Direction(), pl.Location()
+            if abs(n.Z()) < 1e-6:
+                k = math.hypot(n.X(), n.Y())
+                lines.append((o.X(), o.Y(), -n.Y() / k, n.X() / k))
+        ex.Next()
+    return {"circles": np.array(circles).reshape(-1, 4), "lines": np.array(lines).reshape(-1, 4)}
+
+
+def _snap_outline(start: np.ndarray, segs: list) -> tuple[np.ndarray, list]:
+    """Moves arcs onto the part's circles and lines onto its wall lines where they run within
+    SNAP_TOL of them; corners go to where the snapped neighbours meet."""
+    if _SNAP is None or not segs:
+        return start, segs
+    circles, lines = _SNAP["circles"], _SNAP["lines"]
+    pts = [np.asarray(start, float)] + [np.asarray(sg[1], float) for sg in segs]
+    n = len(segs)
+    cons = []  # per segment: ("c", cx, cy, r) | ("l", px, py, dx, dy) | None
+    seam = 0.0
+    for i, sg in enumerate(segs):
+        a, b = pts[i], pts[i + 1]
+        con = None
+        if sg[0] == "arc" and len(circles):
+            c = np.asarray(sg[2], float)
+            r = (np.hypot(*(a - c)) + np.hypot(*(b - c))) / 2
+            dev = np.hypot(circles[:, 0] - c[0], circles[:, 1] - c[1]) + np.abs(circles[:, 2] - r)
+            k = int(np.argmin(dev))
+            if dev[k] <= SNAP_TOL:
+                con = ("c", *circles[k][:3])
+                seam = float(circles[k][3])
+        elif sg[0] == "line" and len(lines) and np.hypot(*(b - a)) > 1e-6:
+            u = (b - a) / np.hypot(*(b - a))
+            par = np.abs(lines[:, 2] * u[1] - lines[:, 3] * u[0]) < 0.02
+            da = np.abs((a[0] - lines[:, 0]) * lines[:, 3] - (a[1] - lines[:, 1]) * lines[:, 2])
+            db = np.abs((b[0] - lines[:, 0]) * lines[:, 3] - (b[1] - lines[:, 1]) * lines[:, 2])
+            ok = par & (da <= SNAP_TOL) & (db <= SNAP_TOL)
+            if ok.any():
+                k = int(np.argmin(np.where(ok, da + db, np.inf)))
+                con = ("l", *lines[k])
+        cons.append(con)
+    if not any(cons):
+        return start, segs
+    # A whole circle on a part circle starts where the part's own circle does, so the two
+    # circles merge into one closed edge (their seams on one spot).
+    if n == 2 and all(sg[0] == "arc" for sg in segs) and cons[0] is not None and cons[0] == cons[1]:
+        c, r = np.array(cons[0][1:3]), cons[0][3]
+        p0 = c + r * np.array([math.cos(seam), math.sin(seam)])
+        p1 = c - (p0 - c)
+        return p0, [("arc", p1, c, segs[0][3]), ("arc", p0, c, segs[1][3])]
+
+    def project(p, c):
+        if c[0] == "c":
+            v = p - c[1:3]
+            return c[1:3] + v * (c[3] / max(np.hypot(*v), 1e-12))
+        o, d = np.array(c[1:3]), np.array(c[3:5])
+        return o + d * np.dot(p - o, d)
+
+    def meet(p, c1, c2):
+        """The point on both that's nearest p, if there is one near."""
+        cand = []
+        if c1[0] == "l" and c2[0] == "l":
+            o1, d1, o2, d2 = np.array(c1[1:3]), np.array(c1[3:5]), np.array(c2[1:3]), np.array(c2[3:5])
+            den = d1[0] * d2[1] - d1[1] * d2[0]
+            if abs(den) > 1e-9:
+                t = ((o2 - o1)[0] * d2[1] - (o2 - o1)[1] * d2[0]) / den
+                cand.append(o1 + t * d1)
+        elif c1[0] == "c" and c2[0] == "c":
+            p1, r1, p2, r2 = np.array(c1[1:3]), c1[3], np.array(c2[1:3]), c2[3]
+            dd = np.hypot(*(p2 - p1))
+            if dd < 1e-9:
+                return project(p, c1) if abs(r1 - r2) < 1e-9 else None
+            a = (r1 * r1 - r2 * r2 + dd * dd) / (2 * dd)
+            hh = r1 * r1 - a * a
+            if hh >= 0:
+                m = p1 + a * (p2 - p1) / dd
+                off = math.sqrt(hh) * np.array([-(p2 - p1)[1], (p2 - p1)[0]]) / dd
+                cand += [m + off, m - off]
+        else:
+            ci, li = (c1, c2) if c1[0] == "c" else (c2, c1)
+            cc, r = np.array(ci[1:3]), ci[3]
+            o, d = np.array(li[1:3]), np.array(li[3:5])
+            t0 = np.dot(cc - o, d)
+            foot = o + t0 * d
+            q = r * r - np.dot(foot - cc, foot - cc)
+            if q >= 0:
+                cand += [foot + math.sqrt(q) * d, foot - math.sqrt(q) * d]
+        if not cand:
+            return None
+        best = min(cand, key=lambda c: np.hypot(*(c - p)))
+        return best if np.hypot(*(best - p)) <= 3 * SNAP_TOL else None
+
+    closed = np.hypot(*(pts[-1] - pts[0])) < 1e-6
+    out = [p.copy() for p in pts]
+    for i in range(n + 1):
+        before = cons[i - 1] if i > 0 else (cons[-1] if closed else None)
+        after = cons[i] if i < n else (cons[0] if closed else None)
+        p = pts[i]
+        if before and after:
+            q = meet(p, before, after)
+            out[i] = q if q is not None else project(p, after if i < n else before)
+        elif before or after:
+            out[i] = project(p, before or after)
+    if closed:
+        out[-1] = out[0]
+    new = []
+    for i, sg in enumerate(segs):
+        if sg[0] == "arc" and cons[i] is not None:
+            new.append(("arc", out[i + 1], np.array(cons[i][1:3]), sg[3]))
+        else:
+            new.append((sg[0], out[i + 1], *sg[2:]))
+    return out[0], new
+
+
 # MARK: Building
 
 def _wire(points_xy: np.ndarray, z: float, tol: float):
@@ -291,7 +434,7 @@ def _wire(points_xy: np.ndarray, z: float, tol: float):
     from OCP.GC import GC_MakeArcOfCircle
     from OCP.gp import gp_Pnt
 
-    start, segs = fit_outline(points_xy, tol)
+    start, segs = _snap_outline(*fit_outline(points_xy, tol))
     pts = np.array([start])
     mk = BRepBuilderAPI_MakeWire()
     cur = pts[0]
@@ -679,3 +822,113 @@ def write_3dm(path: str, heights: np.ndarray, origin, cell: float, top: float, b
     kinds = faces_by_type(shape)
     return dict(info, faces=sum(kinds.values()), kinds=kinds, valid=bool(BRepCheck_Analyzer(shape).IsValid()) and r["valid3dm"],
                 dropped=r["dropped"], log=r["log"])
+
+
+# MARK: Exact part plus what's left on it
+
+def _merge_faces(shape):
+    """Same-surface faces merged (the leftover's walls and the part's, where they coincide): with
+    tight tolerances, repaired if that leaves a face invalid, or the shape as it was."""
+    from OCP.BRepCheck import BRepCheck_Analyzer
+    from OCP.ShapeFix import ShapeFix_Shape
+    from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
+
+    if not BRepCheck_Analyzer(shape).IsValid():
+        return shape
+    for unify_edges in (True, False):
+        try:
+            u = ShapeUpgrade_UnifySameDomain(shape, unify_edges, True, False)
+            u.SetLinearTolerance(1e-4)
+            u.SetAngularTolerance(1e-4)
+            u.Build()
+            out = u.Shape()
+            if BRepCheck_Analyzer(out).IsValid():
+                return out
+            fix = ShapeFix_Shape(out)
+            fix.Perform()
+            if BRepCheck_Analyzer(fix.Shape()).IsValid():
+                return fix.Shape()
+        except Exception:
+            continue
+    return shape
+
+
+def build_with_part(heights: np.ndarray, origin, cell: float, top: float, bottom: float, part_shape,
+                    part_top: np.ndarray, part_bottom: np.ndarray, finish_tol: float = 0.05) -> tuple[object, dict]:
+    """The state as the exact part (the user's own CAD, placed in the work frame) joined with the
+    material still left on it. Where the cut has reached the part (simulated height within
+    `finish_tol` of the part's top), the part's own surfaces are the answer: those cells are lowered
+    to the part's underside, so the reconstruction there sits inside the part and the union shows
+    the exact CAD. Only leftover stock is reconstructed (levels, lines and arcs, surfaces), and its
+    outlines take the part's exact circles and wall lines where they run along them."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+
+    h = np.minimum(np.asarray(heights, float), top)
+    on_part = np.isfinite(part_top) & np.isfinite(part_bottom)
+    finished = on_part & (h <= part_top + finish_tol)
+    lowered = h.copy()
+    # Inside the part: down to its underside (never below what the simulation still has).
+    lowered[finished] = np.maximum(np.minimum(part_bottom[finished], h[finished]), bottom)
+    global _SNAP
+    _SNAP = part_walls(part_shape)
+    try:
+        leftover, info = build(lowered.astype(np.float32), origin, cell, top, bottom)
+    finally:
+        _SNAP = None
+    fuse = BRepAlgoAPI_Fuse(leftover, part_shape)
+    fuse.SetFuzzyValue(1e-4)
+    fuse.SetRunParallel(True)
+    fuse.Build()
+    shape = fuse.Shape() if fuse.IsDone() else leftover
+    shape = _merge_faces(shape)
+    info = dict(info, finished=float(finished.sum()) / max(on_part.sum(), 1), exact_part=True)
+    return shape, info
+
+
+def part_heights(mesh, m: np.ndarray, origin, cell: float, cols: int, rows: int) -> tuple[np.ndarray, np.ndarray]:
+    """The part's top and underside heights (work Z) at every cell centre, NaN off the part."""
+    import opencamlib as ocl
+
+    from .cam import geometry as g
+    from .cam import surface3d as S3
+
+    xs = origin[0] + cell * np.arange(cols)
+    ys = origin[1] + cell * np.arange(rows)
+    X, Y = np.meshgrid(xs, ys)
+    pts = np.c_[X.ravel(), Y.ravel()]
+    geo = g.PartGeometry(mesh.vertices, mesh.indices, m)
+    floor = geo.zmin - 1.0
+    top = S3.Surface(geo, ocl.CylCutter(0.02, 100), floor).drop(pts)
+    top = np.where(top <= floor + 1e-6, np.nan, top).reshape(rows, cols)
+    # The underside: the part turned over about X, dropped onto from above, turned back.
+    turn = np.diag([1.0, -1.0, -1.0, 1.0])
+    flipped = g.PartGeometry(mesh.vertices, mesh.indices, turn @ m)
+    ffloor = flipped.zmin - 1.0
+    under = S3.Surface(flipped, ocl.CylCutter(0.02, 100), ffloor).drop(np.c_[pts[:, 0], -pts[:, 1]])
+    under = np.where(under <= ffloor + 1e-6, np.nan, -under).reshape(rows, cols)
+    return top, under
+
+
+def write_with_part(path: str, heights, origin, cell: float, top: float, bottom: float, name: str, part_shape,
+                    part_top, part_bottom, fmt: str = "step") -> dict:
+    from OCP.BRepCheck import BRepCheck_Analyzer
+
+    shape, info = build_with_part(heights, origin, cell, top, bottom, part_shape, part_top, part_bottom)
+    kinds = faces_by_type(shape)
+    valid = bool(BRepCheck_Analyzer(shape).IsValid())
+    if fmt == "3dm":
+        from . import clean_3dm
+        if not clean_3dm.available():
+            raise RuntimeError("Rhino export needs openNURBS in the engine: run engine/native/get_opennurbs.sh, "
+                               "then engine/native/build_opennurbs.sh")
+        r = clean_3dm.write(path, shape, name)
+        return dict(info, faces=sum(kinds.values()), kinds=kinds, valid=valid and r["valid3dm"], dropped=r["dropped"], log=r["log"])
+    from OCP.Interface import Interface_Static
+    from OCP.STEPControl import STEPControl_AsIs, STEPControl_Writer
+    Interface_Static.SetCVal_s("write.step.unit", "MM")
+    Interface_Static.SetCVal_s("write.step.product.name", name[:60] or "Coastline snapshot")
+    w = STEPControl_Writer()
+    w.Transfer(shape, STEPControl_AsIs)
+    if int(w.Write(path)) != 1:
+        raise RuntimeError("OpenCASCADE couldn't write the STEP file")
+    return dict(info, faces=sum(kinds.values()), kinds=kinds, valid=valid)

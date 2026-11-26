@@ -319,9 +319,15 @@ extension AppModel {
                 // Heights only, at most ~1.2 million cells: levels, outlines and surfaces are fitted.
                 let d = Self.downsample(hm, stride: stride)
                 let engine = try await liveEngine()
+                // The part's exact surfaces where the cut has reached them (not during prep).
+                var partID: String?, transform: simd_double4x4?
+                if rec.side >= 0, let part, part.exact {
+                    partID = part.partID
+                    transform = setupFor(side: twoSided || rec.side >= 2 ? rec.side : 0).partToWork(partMin: part.boundsMin, partMax: part.boundsMax)
+                }
                 let r = try await engine.exportClean(path: url.path, name: name, heights: d.heights, cols: d.cols, rows: d.rows,
                                                      origin: d.origin, cell: d.cell, top: d.top, bottom: d.bottom,
-                                                     format: ext == "clean3dm" ? "3dm" : "step")
+                                                     format: ext == "clean3dm" ? "3dm" : "step", partID: partID, transform: transform)
                 let kinds = r.kinds.sorted { $0.value > $1.value }.map { "\($0.value) \($0.key == "BSplineSurface" ? "NURBS" : $0.key.lowercased())" }.joined(separator: ", ")
                 status = "Exported \(url.lastPathComponent): clean CAD, \(r.faces) faces (\(kinds)), \(r.levels) levels, \(r.patches) curved \(r.patches == 1 ? "area" : "areas")\(r.valid ? (ext == "clean3dm" ? ", a valid Rhino polysurface" : ", a valid solid") : " (check it: not fully valid)")\(r.dropped > 0 ? ", \(r.dropped) impossible hole \(r.dropped == 1 ? "outline" : "outlines") left out" : ""); fitted from \((d.cell * 1000).formatted(.number.precision(.fractionLength(0)))) µm cells."
             case "stl", "obj":

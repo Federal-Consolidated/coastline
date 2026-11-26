@@ -215,6 +215,15 @@ def _export_clean(params, blobs):
         np.savez(dump, h=h, params=json.dumps(params))
     args = (str(params["path"]), h, (float(params["x0"]), float(params["y0"])), float(params["cell"]),
             float(params["top"]), float(params["bottom"]), str(params.get("name", "Coastline snapshot")))
+    # With the part (an exact B-rep) and where it sits: finished surfaces are the part's own.
+    part = PARTS.get(params.get("part_id")) if params.get("part_id") else None
+    if part is not None and part.shape is not None and params.get("transform"):
+        from .cam.features import transformed
+        m = _work_transform(params)
+        top_h, under_h = clean_cad.part_heights(part.mesh, m, args[2], args[3], h.shape[1], h.shape[0])
+        r = clean_cad.write_with_part(args[0], h, args[2], args[3], args[4], args[5], args[6], transformed(part.shape, m),
+                                      top_h, under_h, fmt="3dm" if params.get("format") == "3dm" else "step")
+        return r, []
     if params.get("format") == "3dm":
         from . import clean_3dm
         if not clean_3dm.available():
