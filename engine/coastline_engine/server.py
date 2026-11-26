@@ -191,6 +191,17 @@ def _nest(params, blobs):
     return dict(r, triangles=int(len(tris))), [N.stl_bytes(tris)]
 
 
+def _export_mesh(params, blobs):
+    """params: {format: 3dm|3mf|step, path, name}; blobs: vertices float32 ×3, triangles uint32 ×3
+    → writes the file (K12 snapshot export) and returns what went in."""
+    from . import mesh_export
+
+    v = np.frombuffer(blobs[0], dtype="<f4").reshape(-1, 3).astype(np.float64)
+    t = np.frombuffer(blobs[1], dtype="<u4").reshape(-1, 3).astype(np.int64)
+    r = mesh_export.export(str(params["format"]), str(params["path"]), v, t, str(params.get("name", "Coastline snapshot")))
+    return r, []
+
+
 def _fixture_kit(params, blobs):
     """→ the clamp kit's parts [{kit, name, role, color}] with 3 blobs each, kit-local frames."""
     from .fixture_kit import load
@@ -433,6 +444,7 @@ def _recognise(params, blobs):
 
 HANDLERS = {
     "nest": _nest,
+    "export_mesh": _export_mesh,
     "recognise": _recognise,
     "ping": _ping,
     "import_part": _import_part,

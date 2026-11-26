@@ -227,4 +227,23 @@ extension EngineClient {
                                           "cell": cell, "cols": cols, "rows": rows])
         return r.blobs.first?.littleEndianArray(of: Float.self) ?? []
     }
+
+    public struct MeshExport: Sendable {
+        public var triangles: Int
+        /// STEP: faces after merging the flat areas, and whether it closed into a solid.
+        public var faces: Int?
+        public var solid: Bool?
+    }
+
+    /// Writes a closed mesh as Rhino .3dm, 3MF or STEP (`format`: "3dm", "3mf", "step"), mm.
+    public func exportMesh(format: String, path: String, name: String, vertices: [SIMD3<Float>], triangles: [SIMD3<UInt32>]) throws -> MeshExport {
+        var v = [Float](); v.reserveCapacity(vertices.count * 3)
+        for p in vertices { v += [p.x, p.y, p.z] }
+        var t = [UInt32](); t.reserveCapacity(triangles.count * 3)
+        for q in triangles { t += [q.x, q.y, q.z] }
+        let r = try call("export_mesh", ["format": format, "path": path, "name": name],
+                         blobs: [v.withUnsafeBufferPointer { Data(buffer: $0) }, t.withUnsafeBufferPointer { Data(buffer: $0) }])
+        return MeshExport(triangles: r.result["triangles"] as? Int ?? triangles.count, faces: r.result["faces"] as? Int,
+                          solid: r.result["solid"] as? Bool)
+    }
 }

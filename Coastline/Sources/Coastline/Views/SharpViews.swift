@@ -48,8 +48,7 @@ struct SharpenMenu: View {
                 if let id = model.shownSnapshot {
                     Section("The snapshot shown") {
                         Button("Back to the Playback Grid", systemImage: "arrow.uturn.backward") { model.hideSharp() }
-                        Button("Export STL…", systemImage: "square.and.arrow.up") { model.exportSnapshotWithPanel(id, format: "stl") }
-                        Button("Export OBJ…", systemImage: "square.and.arrow.up") { model.exportSnapshotWithPanel(id, format: "obj") }
+                        ExportMenu(id: id)
                     }
                 }
                 let mine = model.sharpSnapshots.filter { $0.side == model.viewSide }
@@ -59,8 +58,7 @@ struct SharpenMenu: View {
                             Menu {
                                 Button("Show", systemImage: "eye") { model.showSnapshot(rec.id) }
                                     .disabled(!model.snapshotIsCurrent(rec))
-                                Button("Export STL…", systemImage: "square.and.arrow.up") { model.exportSnapshotWithPanel(rec.id, format: "stl") }
-                                Button("Export OBJ…", systemImage: "square.and.arrow.up") { model.exportSnapshotWithPanel(rec.id, format: "obj") }
+                                ExportMenu(id: rec.id)
                                 Divider()
                                 Button("Delete", systemImage: "trash", role: .destructive) { model.deleteSnapshot(rec.id) }
                             } label: {
@@ -184,5 +182,20 @@ extension AppModel {
         let inv = (renderer.scene.groupTransform(renderer.scene.mesh("simstock")?.group) * simd_float4x4(translation: SIMD3<Float>(wo))).inverse
         let w = inv * SIMD4(p.world, 1)
         return SIMD2(Double(w.x), Double(w.y))
+    }
+}
+
+/// Export ▸ the formats, for one snapshot.
+struct ExportMenu: View {
+    @Environment(AppModel.self) private var model
+    let id: UUID
+    var body: some View {
+        Menu {
+            ForEach(AppModel.exportFormats, id: \.ext) { f in
+                Button("\(f.title)…") { model.exportSnapshotWithPanel(id, format: f.ext) }
+            }
+        } label: {
+            Label("Export", systemImage: "square.and.arrow.up")
+        }
     }
 }

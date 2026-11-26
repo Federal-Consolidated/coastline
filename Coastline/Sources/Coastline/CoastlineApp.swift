@@ -430,7 +430,7 @@ enum Automation {
                     print("exactsection \(x.title) points \(x.positions.count) max \(x.exact.max() ?? 0) min \(x.exact.min() ?? 0) left \(x.leftAbovePart.map { "\(Int($0 * 1000)) µm" } ?? "-") into \(x.cutIntoPart.map { "\(Int($0 * 1000)) µm" } ?? "-")")
                 }
             case "exportsnap":  // "exportsnap /tmp/s.stl": the latest snapshot
-                if let r = model.sharpSnapshots.last { print("exportsnap \(model.exportSnapshot(r.id, to: URL(fileURLWithPath: arg))) \(model.status)") }
+                if let r = model.sharpSnapshots.last { let ok = await model.exportSnapshot(r.id, to: URL(fileURLWithPath: arg)); print("exportsnap \(ok) \(model.status)") }
             case "hidesnap": model.hideSharp()
             case "measured":  // the measure points' readouts
                 for p in model.measurePoints { print("measured onSim \(p.onSim) exact \(p.exactHeight.map { String(format: "%.4f", $0) } ?? "-") grid \(p.gridHeight.map { String(format: "%.4f", $0) } ?? "-") leftOnPart \(p.leftOnPart.map { "\(Int(($0 * 1000).rounded())) µm" } ?? "-")") }

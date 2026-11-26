@@ -151,7 +151,8 @@ extension AppModel {
             self.sharpProgress = -1
             try? await Task.sleep(for: .milliseconds(60))
             let n = self.sharpSnapshots.filter { $0.side == side }.count + 1
-            let rec = SharpSnapshotRecord(name: "\(Self.setupTitle(side: side, twoSided: self.twoSided)) · \(AppModel.clock(time))" + (centre == nil ? "" : " · detail") + (n > 1 ? "" : ""),
+            let setupName = side < 0 ? "Prep" : Self.setupTitle(side: side, twoSided: self.twoSided)
+            let rec = SharpSnapshotRecord(name: "\(setupName) · \(AppModel.clock(time))" + (centre == nil ? "" : " · detail") + (n > 1 ? "" : ""),
                                           side: side, time: time, entryIndex: index, originX: hm.origin.x, originY: hm.origin.y,
                                           cell: hm.cell, cols: hm.cols, rows: hm.rows, top: hm.top, bottom: hm.bottom,
                                           region: centre == nil ? .whole : .around, signature: signature, heights: SharpSim.encode(hm))
@@ -288,16 +289,47 @@ extension AppModel {
         sharpCache = [:]
     }
 
+    /// The export formats: file extension, menu title, the most triangles it gets.
+    static let exportFormats: [(ext: String, title: String, budget: Int)] = [
+        ("3dm", "Rhino (.3dm)", 3_000_000), ("step", "STEP (flat areas merged)", 400_000), ("3mf", "3MF", 3_000_000),
+        ("stl", "STL", 3_000_000), ("obj", "OBJ", 3_000_000),
+    ]
+
+    /// Writes a snapshot as a closed mesh in work coordinates (mm). STL and OBJ here; Rhino,
+    /// 3MF and STEP by the engine (STEP: flat areas merged into single faces).
     @discardableResult
-    func exportSnapshot(_ id: UUID, to url: URL) -> Bool {
+    func exportSnapshot(_ id: UUID, to url: URL) async -> Bool {
         guard let rec = sharpSnapshots.first(where: { $0.id == id }), let hm = sharpCache[id] ?? rec.heightmap else { return false }
-        // At most ~3 million triangles (about 150 MB of STL).
-        let stride = max(Int((Double(hm.cols * hm.rows) * 2 / 3_000_000).squareRoot().rounded(.up)), 1)
-        let m = SharpSim.mesh(hm, stride: stride)
-        let data = url.pathExtension.lowercased() == "obj" ? SharpSim.obj(m, name: rec.name) : SharpSim.stl(m, name: rec.name)
-        do { try data.write(to: url, options: .atomic) } catch { errorMessage = "Couldn't export: \(error.localizedDescription)"; return false }
-        status = "Exported \(url.lastPathComponent): \(m.triangles.count.formatted()) triangles\(stride > 1 ? " (every \(stride) cells)" : ""), work coordinates in mm."
-        return true
+        let ext = url.pathExtension.lowercased() == "stp" ? "step" : url.pathExtension.lowercased()
+        let budget = Self.exportFormats.first { $0.ext == ext }?.budget ?? 3_000_000
+        let stride = max(Int((Double(hm.cols * hm.rows) * 2 / Double(budget)).squareRoot().rounded(.up)), 1)
+        let every = stride > 1 ? " (every \(stride) cells, \((hm.cell * Double(stride) * 1000).formatted(.number.precision(.fractionLength(0)))) µm)" : ""
+        sharpPhase = "Exporting"
+        sharpProgress = -1
+        defer { sharpProgress = nil }
+        try? await Task.sleep(for: .milliseconds(30))  // the button shows it first
+        let name = rec.name
+        let m = await Task.detached(priority: .userInitiated) { SharpSim.mesh(hm, stride: stride) }.value
+        do {
+            switch ext {
+            case "stl", "obj":
+                let data = await Task.detached(priority: .userInitiated) { ext == "obj" ? SharpSim.obj(m, name: name) : SharpSim.stl(m, name: name) }.value
+                try data.write(to: url, options: .atomic)
+                status = "Exported \(url.lastPathComponent): \(m.triangles.count.formatted()) triangles\(every), work coordinates in mm."
+            default:
+                let engine = try await liveEngine()
+                let r = try await engine.exportMesh(format: ext, path: url.path, name: name, vertices: m.vertices, triangles: m.triangles)
+                if ext == "step" {
+                    status = "Exported \(url.lastPathComponent): \(r.faces ?? 0) faces from \(r.triangles.formatted()) triangles\(every)\(r.solid == true ? ", a closed solid" : ", as a surface (it didn't close into a solid)"), work coordinates in mm."
+                } else {
+                    status = "Exported \(url.lastPathComponent): \(r.triangles.formatted()) triangles\(every), work coordinates in mm."
+                }
+            }
+            return true
+        } catch {
+            errorMessage = "Couldn't export \(url.lastPathComponent): \(error.localizedDescription)"
+            return false
+        }
     }
 
     func exportSnapshotWithPanel(_ id: UUID, format: String) {
@@ -306,7 +338,7 @@ extension AppModel {
         panel.allowedContentTypes = [UTType(filenameExtension: format) ?? .data]
         panel.nameFieldStringValue = rec.name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-") + "." + format
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        exportSnapshot(id, to: url)
+        Task { await exportSnapshot(id, to: url) }
     }
 
     // MARK: Exact readouts

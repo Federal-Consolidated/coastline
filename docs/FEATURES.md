@@ -18,7 +18,7 @@ adds. Both workflows run side by side there: a job uses the clamp kit unless it 
 fixture library (`Setup.planFromFixtureLibrary`) or held in a custom fixture. How the two branches
 trade features is in [SYNC.md](SYNC.md).
 
-Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 113 passed.
+Checks on line K: planning core 262 passed, machine core (MillCore) 123 passed, engine 116 passed.
 The app builds and generates the Motor Mount example (shoulders + clamp kit) with every program
 passing the safety check.
 
@@ -303,13 +303,22 @@ single points and sections exactly from the toolpath.
   kept within 200 MB per project. A diamond on the step's timeline segment (filled: whole stock,
   outline: detail, grey: out of date) goes to the snapshot and shows it. The Sharpen menu lists
   this side's snapshots: Show, Export, Delete.
-- **Export (mesh built).** STL (binary) or OBJ of a snapshot as a closed, watertight mesh (top,
-  four walls, bottom fan), in work coordinates (mm, origin at the stock face centre, Z down from
-  the face), at most ~3 million triangles. Rhino, Fusion and PreForm open both, so `.3dm` and 3MF
-  writers weren't needed.
+- **Export (built).** A snapshot as a closed, watertight mesh (top, four walls, bottom fan) in
+  work coordinates (mm, origin at the stock face centre, Z down from the face). Snapshot menu ▸
+  Export:
+  - **Rhino `.3dm`** (engine, rhino3dm): units mm, layer "Coastline snapshot", the snapshot's
+    name. Up to ~3 million triangles.
+  - **STEP** (engine, OpenCASCADE, `mesh_export.write_step`): the mesh is welded, built as one
+    shell with shared edges, made a solid (`ShapeFix_Solid`), and coplanar faces are merged
+    (`ShapeUpgrade_UnifySameDomain`). Flat floors, faces and walls become single faces; curved
+    areas stay faceted. Up to ~400 000 triangles, so a whole-stock snapshot goes out coarser
+    (the motor mount: 206 µm, 7 610 faces, a closed solid, 22 MB, about 1.5 min); a detail
+    snapshot keeps its resolution.
+  - **3MF** (zip, mm) up to ~3 million triangles.
+  - **STL** and **OBJ** (Swift) up to ~3 million triangles.
 - **Still planned.**
-  - STEP: an exact 2.5D solid from the engine's cleared regions, with a fine mesh for
-    3D-finished areas.
+  - True CAD STEP: an exact 2.5D solid from the engine's cleared regions (true planes and
+    cylinders), with a fine mesh for 3D-finished areas.
   - Comparing two snapshots.
   - Automatic snapshots after each program or setup.
   - Multi-setup jobs at fine resolution: side B shows its cuts, but starts from the coarse model
@@ -320,8 +329,10 @@ single points and sections exactly from the toolpath.
   `Deviation`, `ProjectDocument`, `PlaybackBar` (Sharpen, timeline marks), `WorkspaceView`
   (measure readout, Exact Section). Script commands `sharpen [x y size]`, `snapshots`,
   `showsnap`, `hidesnap`, `exactprobe x y`, `exactsection x|y offset`, `exportsnap path`,
-  `measured`.
-- **Tests:** `scripts/selftest.sh SharpSnapshot`:
+  `measured`. Engine: `coastline_engine/mesh_export.py`, RPC `export_mesh`.
+- **Tests:** `scripts/selftest.sh SharpSnapshot` and `engine/tests/test_mesh_export.py` (3MF and
+  `.3dm` read back with units and counts; a STEP block merges its flat faces into a closed, valid
+  solid):
   - ball cusps at their analytic height;
   - a culled and a full run agree cell for cell;
   - the exact envelope against brute force on a ramp with a bull nose;
