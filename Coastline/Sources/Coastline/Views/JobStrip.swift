@@ -399,6 +399,10 @@ struct JobStrip: View {
     private let outer: CGFloat = 16, inset: CGFloat = 7, badge: CGFloat = 18, cardHeight: CGFloat = 72
     /// Where the row fades out at its ends while it scrolls.
     private let fade: CGFloat = 18
+    /// Chapters opening and closing (and the row scrolling with them): a calm ease in and out,
+    /// slow enough to follow. Steps inside a chapter: the same curve, a little quicker.
+    static let chapterMotion = Animation.timingCurve(0.42, 0, 0.58, 1, duration: 0.55)
+    static let stepMotion = Animation.timingCurve(0.42, 0, 0.58, 1, duration: 0.4)
     /// The strip's width: a row that fits sits in the middle of it.
     @State private var width: CGFloat = 0
 
@@ -444,13 +448,13 @@ struct JobStrip: View {
             .frame(height: cardHeight)
             .onChange(of: open) { _, ch in
                 guard let ch else { return }
-                withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) { proxy.scrollTo(ch.id, anchor: .center) }
+                withAnimation(reduceMotion ? nil : Self.chapterMotion) { proxy.scrollTo(ch.id, anchor: .center) }
             }
             .onAppear { if let ch = open { proxy.scrollTo(ch.id, anchor: .center) } }
         }
         // Reduce Motion: chapters change in place instead of springing open.
-        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82), value: open)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: model.currentStep?.id)
+        .animation(reduceMotion ? nil : Self.chapterMotion, value: open)
+        .animation(reduceMotion ? nil : Self.stepMotion, value: model.currentStep?.id)
     }
 
     /// One chapter as an accordion card: the same view open or closed, so its width springs
