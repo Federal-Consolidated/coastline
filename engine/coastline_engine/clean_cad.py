@@ -61,6 +61,26 @@ def classify(h: np.ndarray, levels: list[float], flat_tol: float) -> tuple[np.nd
     return eff, ~at
 
 
+def _erode(m: np.ndarray) -> np.ndarray:
+    p = np.pad(m, 1, mode="edge")
+    return p[1:-1, 1:-1] & p[:-2, 1:-1] & p[2:, 1:-1] & p[1:-1, :-2] & p[1:-1, 2:]
+
+
+def _dilate(m: np.ndarray) -> np.ndarray:
+    p = np.pad(m, 1, mode="edge")
+    return p[1:-1, 1:-1] | p[:-2, 1:-1] | p[2:, 1:-1] | p[1:-1, :-2] | p[1:-1, 2:]
+
+
+def open_mask(m: np.ndarray, n: int) -> np.ndarray:
+    """Morphological opening: anything thinner than about 2n cells goes (hairline grooves)."""
+    out = m
+    for _ in range(n):
+        out = _erode(out)
+    for _ in range(n):
+        out = _dilate(out)
+    return out & m | (out & ~m)  # never grows past the original by more than it shrank
+
+
 def components(mask: np.ndarray) -> list[np.ndarray]:
     """4-connected components of a mask, as arrays of (row, col)."""
     seen = np.zeros_like(mask, dtype=bool)
@@ -307,29 +327,50 @@ def _wire(points_xy: np.ndarray, z: float, tol: float):
     return mk.Wire() if mk.IsDone() else None
 
 
-def _region_prism(loops_world: list[np.ndarray], z0: float, z1: float, tol: float):
-    """Prisms from z0 up to z1 over a mask's loops (outer loops with their holes)."""
+def _simple_prism(loop: np.ndarray, z0: float, z1: float, tol: float):
+    """A prism over one loop (taken counter-clockwise), or None."""
     from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+    from OCP.BRepCheck import BRepCheck_Analyzer
     from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
     from OCP.gp import gp_Vec
+
+    if signed_area(loop) < 0:
+        loop = loop[::-1]
+    w = _wire(loop, z0, tol)
+    if w is None:
+        return None
+    mk = BRepBuilderAPI_MakeFace(w, True)
+    if not mk.IsDone():
+        return None
+    p = BRepPrimAPI_MakePrism(mk.Face(), gp_Vec(0, 0, z1 - z0)).Shape()
+    return p if BRepCheck_Analyzer(p).IsValid() else None
+
+
+def _region_prism(loops_world: list[np.ndarray], z0: float, z1: float, tol: float):
+    """Prisms from z0 up to z1 over a mask's loops: each outer loop's prism with the prisms of the
+    holes inside it cut away (one face with holes is fragile where outlines run close)."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
+    from OCP.BRepCheck import BRepCheck_Analyzer
 
     outers = [l for l in loops_world if signed_area(l) > 0]
     holes = [l for l in loops_world if signed_area(l) < 0]
     solids = []
     for o in outers:
-        w = _wire(o, z0, tol)
-        if w is None:
-            continue
-        mk = BRepBuilderAPI_MakeFace(w, True)
-        if not mk.IsDone():
+        prism = _simple_prism(o, z0, z1, tol)
+        if prism is None:
             continue
         for hl in holes:
-            if _inside(hl[0], o):
-                hw = _wire(hl, z0, tol)
-                if hw is not None:
-                    mk.Add(hw)  # traced clockwise: already an inner wire
-        face = mk.Face()
-        solids.append(BRepPrimAPI_MakePrism(face, gp_Vec(0, 0, z1 - z0)).Shape())
+            if not _inside(hl[0], o):
+                continue
+            hp = _simple_prism(hl, z0 - 0.5, z1 + 0.5, tol)  # taller: no coplanar caps
+            if hp is None:
+                continue
+            cut = BRepAlgoAPI_Cut(prism, hp)
+            cut.SetFuzzyValue(1e-4)
+            cut.Build()
+            if cut.IsDone() and BRepCheck_Analyzer(cut.Shape()).IsValid():
+                prism = cut.Shape()
+        solids.append(prism)
     return solids
 
 
@@ -359,28 +400,22 @@ def _extend(sub: np.ndarray, inside: np.ndarray) -> np.ndarray:
     return np.where(np.isnan(out), np.nanmean(out), out)
 
 
-def _surface_cutter(eff: np.ndarray, inside: np.ndarray, rows: slice, cols: slice, x0: float, y0: float, cell: float,
-                    footprint):
-    """The part of the patch's footprint prism above a B-spline surface fitted to its heights."""
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Splitter
-    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
-    from OCP.BRepGProp import BRepGProp
-    from OCP.collections import Array2_gp_Pnt, List_TopoDS_Shape
+def _fit_surface(eff: np.ndarray, inside: np.ndarray, rows: slice, cols: slice, x0: float, y0: float, cell: float):
+    """A light cubic B-spline surface over the patch (its heights extended past its edge), and its
+    worst deviation from the patch's own heights, mm."""
+    from OCP.collections import Array2_gp_Pnt
     from OCP.GeomAbs import GeomAbs_C2
-    from OCP.GeomAPI import GeomAPI_PointsToBSplineSurface, GeomAPI_ProjectPointOnSurf
-    from OCP.GProp import GProp_GProps
+    from OCP.GeomAPI import GeomAPI_PointsToBSplineSurface
     from OCP.gp import gp_Pnt
-    from OCP.TopAbs import TopAbs_SOLID
-    from OCP.TopExp import TopExp_Explorer
 
     sub = _extend(eff[rows, cols], inside[rows, cols])
     nr, nc = sub.shape
-    # A light surface (about 30 × 30 points, cubic): smooth, and fast in the booleans.
-    step = max(1, int(math.ceil(max(nr, nc) / 30)))
+    # About 40 × 40 points, cubic: smooth, and fast in the booleans.
+    step = max(1, int(math.ceil(max(nr, nc) / 40)))
     ri = list(range(0, nr, step)) + ([nr - 1] if (nr - 1) % step else [])
     ci = list(range(0, nc, step)) + ([nc - 1] if (nc - 1) % step else [])
     if len(ri) < 4 or len(ci) < 4:
-        return None
+        return None, math.inf
     arr = Array2_gp_Pnt(1, len(ci), 1, len(ri))
     for a, c in enumerate(ci):
         for b, r in enumerate(ri):
@@ -388,7 +423,34 @@ def _surface_cutter(eff: np.ndarray, inside: np.ndarray, rows: slice, cols: slic
     try:
         surf = GeomAPI_PointsToBSplineSurface(arr, 3, 3, GeomAbs_C2, max(cell * 0.6, 0.01)).Surface()
     except Exception:
-        return None
+        return None, math.inf
+    # The surface is a graph over the grid (u ~ x, v ~ y): compare it with the patch's cells.
+    pr, pc = np.nonzero(inside[rows, cols])
+    pick = np.linspace(0, len(pr) - 1, min(len(pr), 400)).astype(int)
+    u0, u1, v0, v1 = surf.Bounds()
+    err = 0.0
+    for k in pick:
+        r, c = pr[k], pc[k]
+        u = u0 + (u1 - u0) * (c / max(nc - 1, 1))
+        v = v0 + (v1 - v0) * (r / max(nr - 1, 1))
+        err = max(err, abs(surf.Value(u, v).Z() - float(sub[r, c])))
+    return surf, err
+
+
+def _surface_cutter(surf, footprint):
+    """The part of the patch's footprint prism above its surface."""
+    from OCP.BRep import BRep_Builder
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Splitter
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+    from OCP.BRepGProp import BRepGProp
+    from OCP.collections import List_TopoDS_Shape
+    from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
+    from OCP.GProp import GProp_GProps
+    from OCP.gp import gp_Pnt
+    from OCP.TopAbs import TopAbs_SOLID
+    from OCP.TopExp import TopExp_Explorer
+    from OCP.TopoDS import TopoDS_Compound
+
     face = BRepBuilderAPI_MakeFace(surf, 1e-6).Face()
     split = BRepAlgoAPI_Splitter()
     args, tools = List_TopoDS_Shape(), List_TopoDS_Shape()
@@ -399,9 +461,6 @@ def _surface_cutter(eff: np.ndarray, inside: np.ndarray, rows: slice, cols: slic
     split.Build()
     if not split.IsDone():
         return None
-    # Keep the pieces above the surface.
-    from OCP.BRep import BRep_Builder
-    from OCP.TopoDS import TopoDS_Compound
     builder, comp = BRep_Builder(), TopoDS_Compound()
     builder.MakeCompound(comp)
     kept = 0
@@ -419,7 +478,8 @@ def _surface_cutter(eff: np.ndarray, inside: np.ndarray, rows: slice, cols: slic
 
 
 def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: float, bottom: float,
-          flat_tol: float = 0.01, min_area: float = 1.0, gap: float = 0.05) -> tuple[object, dict]:
+          flat_tol: float = 0.01, min_area: float = 1.0, gap: float = 0.05, surface_tol: float = 0.03,
+          min_rise: float = 0.3, fit_share: float = 0.08) -> tuple[object, dict]:
     """The cleaned solid and what went into it. heights[row, col], cell centres at
     origin + (col, row) · cell."""
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
@@ -438,15 +498,37 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
     eff, sloped = classify(h, levels, flat_tol)
     # Small or thin sloped patches snap to their nearest level (clean, simple geometry).
     min_cells = max(min_area / (cell * cell), 9)
-    patches = []
+    patches = []  # (cells, surface)
+    rejected = 0
+    lv = np.array(levels)
+
+    def snap(rr, cc):
+        eff[rr, cc] = lv[np.argmin(abs(h[rr, cc][:, None] - lv[None, :]), axis=1)]
+
     for comp in components(sloped):
         rr, cc = comp[:, 0], comp[:, 1]
         thin = min(rr.max() - rr.min(), cc.max() - cc.min()) < 3
         if len(comp) < min_cells or thin:
-            lv = np.array(levels)
-            eff[rr, cc] = lv[np.argmin(abs(h[rr, cc][:, None] - lv[None, :]), axis=1)]
+            snap(rr, cc)
+            continue
+        # A smooth surface only where one fits (a finished curve): a patch that rises less than
+        # `min_rise`, or that a cubic can't follow within `fit_share` of its rise (a half-bored
+        # spiral ramp), becomes steps at the levels instead.
+        fmask = np.zeros_like(sloped)
+        fmask[rr, cc] = True
+        r0, r1 = max(rr.min() - 6, 0), min(rr.max() + 7, rows)
+        c0, c1 = max(cc.min() - 6, 0), min(cc.max() + 7, cols)
+        rise = float(np.ptp(h[rr, cc]))
+        if rise < min_rise:  # a 0.1 mm transition between nearby levels, not a curve
+            snap(rr, cc)
+            continue
+        surf, err = _fit_surface(eff, fmask, slice(r0, r1), slice(c0, c1), x0, y0, cell)
+        if surf is None or err > max(surface_tol, fit_share * rise):
+            # One flat step at the level nearest its middle height, not a staircase of cells.
+            eff[rr, cc] = lv[int(np.argmin(abs(lv - float(np.median(h[rr, cc])))))]
+            rejected += 1
         else:
-            patches.append(comp)
+            patches.append((comp, surf))
 
     def world(loop_units: np.ndarray) -> np.ndarray:
         return np.c_[corner_x + loop_units[:, 0] * cell, corner_y + loop_units[:, 1] * cell]
@@ -456,13 +538,14 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
     # The sloped patches are cut by their surfaces; the levels' outlines leave them out (no two
     # nearly identical walls meeting as slivers). Each patch's footprint reaches one cell past it.
     in_patch = np.zeros_like(sloped)
-    for comp in patches:
+    for comp, _ in patches:
         in_patch[comp[:, 0], comp[:, 1]] = True
     tools = []
     for z in levels:
         if z >= top - 1e-9:
             continue
         mask = (eff <= z + 1e-6) & ~in_patch
+        mask = open_mask(mask, 2)  # no hairline grooves or slivers
         if not mask.any():
             continue
         # Past the stock's sides: a pocket that reaches the edge cuts clean through it.
@@ -470,7 +553,7 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
         loops = [l - cell for l in loops]
         loops = [l for l in loops if abs(signed_area(l)) >= min_area]  # specks are noise
         tools += _region_prism(loops, z, z_above, fit_tol)
-    for comp in patches:
+    for comp, surf in patches:
         rr, cc = comp[:, 0], comp[:, 1]
         fmask = np.zeros_like(sloped)
         fmask[rr, cc] = True
@@ -480,14 +563,13 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
         grown[:, 1:] |= fmask[:, :-1]
         grown[:, :-1] |= fmask[:, 1:]
         loops = [world(smooth_loop(l)) for l in trace_loops(grown)]
-        prisms = _region_prism(loops, bottom - 1.0, z_above + 1.0, fit_tol)
+        # A curved patch usually meets its level tangentially: its ragged edge is fitted loosely
+        # (a couple of cells), which keeps the footprint to a few lines and arcs.
+        loops = [l for l in loops if abs(signed_area(l)) >= min_area]
+        prisms = _region_prism(loops, bottom - 1.0, z_above + 1.0, max(fit_tol, cell * 2.5))
         if not prisms:
             continue
-        # The surface reaches well past the footprint (heights extended outward), so it splits it
-        # cleanly in two.
-        r0, r1 = max(rr.min() - 6, 0), min(rr.max() + 7, rows)
-        c0, c1 = max(cc.min() - 6, 0), min(cc.max() + 7, cols)
-        cutter = _surface_cutter(eff, fmask, slice(r0, r1), slice(c0, c1), x0, y0, cell, prisms[0])
+        cutter = _surface_cutter(surf, prisms[0])
         if cutter is not None:
             tools.append(cutter)
 
@@ -505,11 +587,13 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
         return g.Mass()
 
     skipped = 0
+    why: list[str] = []
     current = volume(shape)
     for t in tools:
         tv = volume(t)
         if tv < cell * cell * 0.05 or not BRepCheck_Analyzer(t).IsValid():
             skipped += 1
+            why.append(f"tool vol {tv:.2f} valid {BRepCheck_Analyzer(t).IsValid()}")
             continue
         cut = BRepAlgoAPI_Cut(shape, t)
         cut.SetRunParallel(True)
@@ -517,10 +601,12 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
         cut.Build()
         if not cut.IsDone():
             skipped += 1
+            why.append(f"cut failed, tool vol {tv:.2f}")
             continue
         after = volume(cut.Shape())
         if after < 0 or current - after > tv * 1.01 + 1e-6:
             skipped += 1
+            why.append(f"cut removed {current - after:.2f} > tool {tv:.2f}")
             continue
         shape, current = cut.Shape(), after
     if not BRepCheck_Analyzer(shape).IsValid():
@@ -532,8 +618,10 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
         except Exception:
             pass
     import os
+    if os.environ.get("COASTLINE_CLEAN_WHY"):
+        print("skipped:", why)
     if os.environ.get("COASTLINE_CLEAN_RAW"):  # for experiments: the shape before merging
-        return shape, {"levels": len(levels), "patches": len(patches), "tools": len(tools), "skipped": skipped}
+        return shape, {"levels": len(levels), "patches": len(patches), "tools": len(tools), "skipped": skipped, "rough": rejected}
     # Merging coplanar faces can fail on an odd shape (OCCT raises): the solid is kept as it is.
     for unify_edges in (True, False):  # edges too when OCCT manages, else faces only
         try:
@@ -544,7 +632,7 @@ def build(heights: np.ndarray, origin: tuple[float, float], cell: float, top: fl
             break
         except Exception:
             continue
-    return shape, {"levels": len(levels), "patches": len(patches), "tools": len(tools), "skipped": skipped}
+    return shape, {"levels": len(levels), "patches": len(patches), "tools": len(tools), "skipped": skipped, "rough": rejected}
 
 
 def faces_by_type(shape) -> dict[str, int]:

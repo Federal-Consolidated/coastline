@@ -97,7 +97,9 @@ def describe(shape) -> dict:
     from OCP.TopExp import TopExp, TopExp_Explorer
     from OCP.TopoDS import TopoDS
 
+    from OCP.BRepLib import BRepLib
     nurbs = BRepBuilderAPI_NurbsConvert(shape, True).Shape()
+    BRepLib.BuildCurves3d_s(nurbs)  # edges that only had curves on their faces
     vmap, emap = ShapeMap(), ShapeMap()
     TopExp.MapShapes_s(nurbs, TopAbs_VERTEX, vmap)
     TopExp.MapShapes_s(nurbs, TopAbs_EDGE, emap)
@@ -109,9 +111,16 @@ def describe(shape) -> dict:
         vertices.append((p.X(), p.Y(), p.Z(), max(BRep_Tool.Tolerance_s(v), 1e-5)))
 
     curves3, edges = [], []
+    # emap index → Rhino edge index, or a vertex for a zero-length (degenerated) edge: Rhino
+    # makes that a singular trim at the vertex, with no edge.
+    edge_of: dict[int, int] = {}
+    singular_at: dict[int, int] = {}
     for i in range(1, emap.Extent() + 1):
         e = TopoDS.Edge(emap.FindKey(i).Oriented(TopAbs_FORWARD))
         first, last = BRep_Tool.Range_s(e)
+        if BRep_Tool.Degenerated_s(e) or not BRep_Tool.IsGeometric_s(e):
+            singular_at[i - 1] = vmap.FindIndex(TopExp.FirstVertex_s(e)) - 1
+            continue
         c = BRep_Tool.Curve_s(e, first, last)
         bs = GeomConvert.CurveToBSplineCurve_s(Geom_TrimmedCurve(c, first, last))
         curves3.append(_curve3(bs))
@@ -123,6 +132,7 @@ def describe(shape) -> dict:
             if np.linalg.norm(a - b) <= max(vertices[v0][3], vertices[v1][3], 1e-4) * 2:
                 v1 = v0
         edges.append((v0, v1, len(curves3) - 1, max(BRep_Tool.Tolerance_s(e), 1e-5)))
+        edge_of[i - 1] = len(edges) - 1
 
     surfaces, curves2, faces = [], [], []
     dropped_faces = dropped_loops = 0
@@ -158,7 +168,11 @@ def describe(shape) -> dict:
                 if rev:
                     bs2.Reverse()
                 curves2.append(_curve2(bs2))
-                trims.append((emap.FindIndex(e) - 1, rev, len(curves2) - 1))
+                k = emap.FindIndex(e) - 1
+                if k in singular_at:
+                    trims.append((-1, False, len(curves2) - 1, singular_at[k]))
+                else:
+                    trims.append((edge_of[k], rev, len(curves2) - 1, -1))
             _snap_loop(curves2, [t[2] for t in trims])
             loops.append((wire.IsSame(outer), trims))
             wx.Next()
@@ -166,6 +180,8 @@ def describe(shape) -> dict:
         # an inner one is left out (that hole closes), a broken outer one leaves the face out.
         def broken(trims):
             if len(trims) != 1:
+                return False
+            if trims[0][0] < 0:
                 return False
             v0, v1, _, tol = edges[trims[0][0]]
             return v0 != v1
@@ -192,4 +208,4 @@ def write(path: str, shape, name: str, layer: str = "Coastline snapshot") -> dic
         raise RuntimeError("openNURBS couldn't write the .3dm file")
     return {"faces": len(d["faces"]), "edges": len(d["edges"]), "valid3dm": bool(valid),
             "dropped": d["dropped_faces"] + d["dropped_loops"],
-            "log": log[:2000] if not valid else ""}
+            "log": log[:4000]}

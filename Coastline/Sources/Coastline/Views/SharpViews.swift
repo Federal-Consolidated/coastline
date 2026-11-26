@@ -56,12 +56,18 @@ struct SharpenMenu: View {
                       : "Re-simulate the whole stock up to the playhead at high resolution (about 10 µm; the playback grid is \(Length.mm(model.heightmap?.cell ?? 0)) mm).")
                 .accessibilityLabel(shown ? "Sharp snapshot shown, back to the playback grid" : "Sharpen the whole stock")
                 // Everything else: a detail around a point, the snapshots, export.
-                Button { model.sharpPanelOpen.toggle() } label: { BarIconLabel(symbol: "ellipsis") }
+                Button { model.sharpPanelOpen.toggle() } label: {
+                    if compact {
+                        BarIconLabel(symbol: "square.and.arrow.up")
+                    } else {
+                        Label("Export", systemImage: "square.and.arrow.up").font(.callout.weight(.semibold)).frame(height: 18)
+                    }
+                }
                     .buttonStyle(.glass)
                     .tint(model.sharpPanelOpen ? Theme.accent : .clear)
                     .foregroundStyle(model.sharpPanelOpen ? Color.white : Color.primary)
-                    .help("Sharp snapshots: a detail around a measured point, your snapshots, export (Rhino, STEP, clean CAD…)")
-                    .accessibilityLabel("Sharp snapshot options and export")
+                    .help("Export a sharp snapshot (clean CAD for Rhino or STEP, meshes), make a detail around a measured point, manage your snapshots")
+                    .accessibilityLabel("Export and snapshots")
                     .popover(isPresented: Binding(get: { model.sharpPanelOpen }, set: { model.sharpPanelOpen = $0 }), arrowEdge: .top) {
                         SharpPanel { model.sharpPanelOpen = false }
                     }
@@ -174,6 +180,10 @@ struct ExportMenu: View {
         } label: {
             if iconOnly { Image(systemName: "square.and.arrow.up") } else { Label("Export", systemImage: "square.and.arrow.up") }
         }
+        .menuStyle(.button)
+        .buttonStyle(.borderedProminent)
+        .tint(Color(nsColor: .systemBlue))
+        .foregroundStyle(.white)
         .help("Export: clean CAD (NURBS STEP), Rhino mesh, STEP mesh, 3MF, STL, OBJ")
         .accessibilityLabel("Export")
     }
@@ -187,16 +197,18 @@ struct SharpPanel: View {
     var body: some View {
         let mine = model.sharpSnapshots.filter { $0.side == model.viewSide }
         VStack(alignment: .leading, spacing: 12) {
-            Text("Sharp snapshots").font(.headline)
+            Text("Export and snapshots").font(.headline)
             VStack(alignment: .leading, spacing: 6) {
                 Text("Make one at the playhead").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 HStack {
                     Button("Whole Stock", systemImage: "square.grid.3x3.fill") { close(); model.sharpen() }
+                        .buttonStyle(.bordered).foregroundStyle(.primary)
                     Button("Around Point A", systemImage: "scope") {
                         close()
                         if let p = model.measurePoints.first, let w = model.simWorkPoint(p) { model.sharpen(around: w) }
                     }
                     .disabled(model.measurePoints.first.map { !$0.onSim } ?? true)
+                    .buttonStyle(.bordered).foregroundStyle(.primary)
                     .help("A 5 mm square at 2.5 µm around Measure's point A (click the stock with Measure on first).")
                 }
             }
@@ -207,6 +219,7 @@ struct SharpPanel: View {
                     Spacer()
                     ExportMenu(id: id).fixedSize()
                     Button("Back", systemImage: "arrow.uturn.backward") { close(); model.hideSharp() }
+                        .buttonStyle(.bordered).foregroundStyle(.primary)
                         .help("Back to the playback grid")
                 }
             }
@@ -225,9 +238,11 @@ struct SharpPanel: View {
                                 }
                                 Spacer(minLength: 8)
                                 Button { close(); model.showSnapshot(rec.id) } label: { Image(systemName: "eye") }
+                                    .buttonStyle(.bordered).foregroundStyle(.primary)
                                     .disabled(!current).help("Show it").accessibilityLabel("Show \(rec.name)")
                                 ExportMenu(id: rec.id, iconOnly: true).fixedSize()
                                 Button(role: .destructive) { model.deleteSnapshot(rec.id) } label: { Image(systemName: "trash") }
+                                    .buttonStyle(.bordered).foregroundStyle(Color(nsColor: .systemRed))
                                     .help("Delete it").accessibilityLabel("Delete \(rec.name)")
                             }
                         }

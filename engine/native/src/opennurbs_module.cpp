@@ -8,6 +8,7 @@
 #include <pybind11/stl.h>
 #include <string>
 #include <tuple>
+#include <algorithm>
 #include <vector>
 
 namespace py = pybind11;
@@ -20,7 +21,7 @@ using Curve = std::tuple<int, int, int, Knots, CVs>;
 using Surface = std::tuple<int, int, int, int, Knots, Knots, CVs>;
 using Vertex = std::tuple<double, double, double, double>;           // x, y, z, tolerance
 using Edge = std::tuple<int, int, int, double>;                       // v0, v1, curve3d, tolerance
-using Trim = std::tuple<int, bool, int>;                              // edge, reversed vs edge, curve2d
+using Trim = std::tuple<int, bool, int, int>;                         // edge (−1: singular), reversed vs edge, curve2d, vertex
 using Loop = std::tuple<bool, std::vector<Trim>>;                     // outer?, trims
 using Face = std::tuple<int, bool, std::vector<Loop>>;                // surface, reversed, loops
 
@@ -78,7 +79,12 @@ static std::tuple<bool, bool, std::string> write_brep(
         face.m_bRev = rev;
         for (const auto& [outer, trims] : loops) {
             ON_BrepLoop& loop = brep->NewLoop(outer ? ON_BrepLoop::outer : ON_BrepLoop::inner, face);
-            for (const auto& [ei, rev3d, c2] : trims) {
+            for (const auto& [ei, rev3d, c2, vi] : trims) {
+                if (ei < 0) {  // a zero-length edge: a singular trim at the vertex
+                    ON_BrepTrim& t = brep->NewSingularTrim(brep->m_V[vi], loop, ON_Surface::not_iso, c2);
+                    t.m_tolerance[0] = t.m_tolerance[1] = 0;
+                    continue;
+                }
                 ON_BrepTrim& t = brep->NewTrim(brep->m_E[ei], rev3d, loop, c2);
                 t.m_tolerance[0] = t.m_tolerance[1] = brep->m_E[ei].m_tolerance;
             }
@@ -91,6 +97,34 @@ static std::tuple<bool, bool, std::string> write_brep(
     ON_wString log_text;
     ON_TextLog log(log_text);
     bool valid = brep->IsValid(&log);
+    // How far each trim, evaluated on its face's surface, is from its 3D edge (the geometry Rhino
+    // draws must agree with the topology): the worst few go to the log.
+    {
+        std::vector<std::pair<double, int>> worst;
+        for (int ti = 0; ti < brep->m_T.Count(); ti++) {
+            const ON_BrepTrim& t = brep->m_T[ti];
+            const ON_BrepEdge* e = t.Edge();
+            const ON_Surface* srf = t.SurfaceOf();
+            if (!e || !srf) continue;
+            double dmax = 0;
+            ON_Interval td = t.Domain(), ed = e->Domain();
+            for (int k = 0; k <= 16; k++) {
+                double s = k / 16.0;
+                ON_3dPoint uv = t.PointAt(td.ParameterAt(s));
+                ON_3dPoint p = srf->PointAt(uv.x, uv.y);
+                ON_3dPoint q = e->PointAt(ed.ParameterAt(t.m_bRev3d ? 1 - s : s));
+                dmax = std::max(dmax, p.DistanceTo(q));
+            }
+            worst.push_back({dmax, ti});
+        }
+        std::sort(worst.begin(), worst.end(), [](auto& a, auto& b) { return a.first > b.first; });
+        int bad = 0;
+        for (auto& w : worst) if (w.first > 0.01) bad++;
+        log.Print("TRIMCHECK trims=%d over10um=%d worst=", (int)worst.size(), bad);
+        for (int k = 0; k < (int)worst.size() && k < 8; k++)
+            log.Print("%g(face %d) ", worst[k].first, brep->m_T[worst[k].second].Face() ? brep->m_T[worst[k].second].Face()->m_face_index : -1);
+        log.Print("\n");
+    }
 
     ONX_Model model;
     model.m_settings.m_ModelUnitsAndTolerances.m_unit_system = ON_UnitSystem(ON::LengthUnitSystem::Millimeters);
@@ -102,7 +136,8 @@ static std::tuple<bool, bool, std::string> write_brep(
     attrs->SetName(ON_wString(name.c_str()), true);
     model.AddManagedModelGeometryComponent(brep, attrs);
     bool written = write_anonymous(model, path);
-    return {written, valid, std::string(ON_String(log_text).Array() ? ON_String(log_text).Array() : "")};
+    ON_String log8(log_text);
+    return {written, valid, std::string(log8.Array() ? log8.Array() : "")};
 }
 
 /// A triangle mesh (a sharp snapshot) as a Rhino mesh object, written without the file's path.

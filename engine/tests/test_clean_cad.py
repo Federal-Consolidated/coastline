@@ -13,9 +13,9 @@ def heights(dish: bool):
     h = np.zeros_like(X)
     h[np.hypot(X + 6, Y) < 5] = -2.0      # a round pocket
     h[X > 9] = -1.0                       # a step out to the edge
-    if dish:                              # a 3D-finished dish
+    if dish:                              # a 3D-finished bowl, 2.4 mm deep, sides easing out to its rim
         R = np.hypot(X - 3, Y - 2)
-        h = np.where(R < 4, np.minimum(h, -3 + np.sqrt(np.maximum(16 - R ** 2, 0)) * 0.6), h)
+        h = np.where(R < 4, np.minimum(h, -2.4 * (1 - (R / 4) ** 2) ** 2), h)
     h += np.random.default_rng(1).normal(0, 0.002, h.shape) * (h > -0.5)  # micron noise on top
     return h.astype(np.float32), (float(xs[0]), float(ys[0])), cell
 

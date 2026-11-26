@@ -321,8 +321,13 @@ single points and sections exactly from the toolpath.
     - each level's outline is traced, and fitted with lines and least-squares arcs (a whole
       circle becomes one circle);
     - the outlines are cut out of the stock block as prisms, one cut at a time, each checked;
-    - sloped 3D areas get a light cubic B-spline surface (about 30 × 30 points, extended past
-      the area's edge), and the area's footprint is split by it.
+    - sloped 3D areas get a light cubic B-spline surface (about 40 × 40 points, extended past
+      the area's edge), and the area's footprint is split by it — only where one fits: an area
+      that rises less than 0.3 mm, or that the surface misses by more than 8 % of its rise (a
+      half-bored spiral ramp), becomes one flat step at the level nearest its middle instead;
+    - each level's outline loses anything thinner than about four cells (no hairline grooves),
+      and holes are cut out of simple prisms rather than built as faces with holes (those were
+      invalid where outlines ran close, which left whole pockets uncut).
 
     Tested from the app: the signet pendant gives 158 faces (62 planes, 88 cylinders, 8 NURBS), a
     valid solid, in 5 s; the motor mount mid-way through boring its holes (23 raw depths) gives
@@ -340,7 +345,7 @@ single points and sections exactly from the toolpath.
       (`ONX_Model::Write(filename)` would store the full path, with the user's folders). The mesh
       `.3dm` goes through the same writer when `_opennurbs` is built (rhino3dm's `Write` stores
       the path too; without openNURBS it writes in a neutral temporary folder and moves the file).
-    - Rhino's rules handled: trim ends snapped to meet exactly, a single closed edge on one
+    - Rhino's rules handled: zero-length edges as singular trims, trim ends snapped to meet exactly, a single closed edge on one
       vertex, single-edge loops the wire walker skips. A hole outline that is closed on the
       surface but open in 3D (a flaw of a fitted patch) is left out and counted in the result.
     - Tested from the app and read back by rhino3dm: the signet pendant, 158 faces, a closed
