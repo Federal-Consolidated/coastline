@@ -12,6 +12,22 @@ it wants, one feature at a time. This file is the shared record of that: what wa
 was taken, what was left out and why. [FEATURES.md](FEATURES.md) lists every feature with its files
 and tests.
 
+## Not ready to take: work in progress
+
+Much of what `xioaniumi` gained on 2026-11-26 is work in progress: committed so it isn't lost, but
+not working properly yet. **Please don't cherry-pick these until this section says they're ready.**
+
+| Commits | What | State |
+|---|---|---|
+| `39ddcf9`, `acd7ab7` | K10: bit IDs, wear forecast, worn-bit feeds, Save tools | WIP |
+| `c165c36` | K11: Tool Check plan | A plan only, no code |
+| `7fd6e32` … `20221b0` | K12: sharp snapshots, exact readouts, mesh export (.3dm, 3MF, STEP), clean CAD (NURBS STEP and Rhino .3dm), the Sharpen button and its options panel | WIP |
+| `3500987`, `69dc2ea` | Example projects regenerated for these changes | Follow the WIP above |
+| `6d16914`, `557b1fe`, `20221b0` | Job strip: chapters as an accordion, open on the click, eased timing | WIP |
+| `ae95210` | Floor finishing past drop-off edges (no 0.1 mm islands) | WIP |
+
+Commits before 2026-11-26 (up to `047be59`) are unaffected.
+
 ## Rules
 
 1. **Never push to the other branch**, and never rewrite history on your own once it's pushed

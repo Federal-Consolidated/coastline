@@ -1,5 +1,10 @@
 # Feature catalog
 
+> **Work in progress on `xioaniumi`.** Much of what was committed on 2026-11-26 (K10, K11, K12,
+> clean CAD export, the job strip accordion, floor finishing past drop-off edges) isn't working
+> properly yet. Please don't take it until it's marked ready. The commits are listed in
+> [SYNC.md](SYNC.md#not-ready-to-take-work-in-progress).
+
 Every feature in this repository, what it does, where it lives and how to test it. It is written
 so that a person, or a coding assistant working on the other branch, can find one feature
 and carry it over without reading the whole code base.
@@ -145,7 +150,7 @@ the welcome sheet, the start sheet and the app tour.
   `Views/FlowSteps.swift`, `scripts/support/make_examples.py`, `scripts/make-example-projects.sh`,
   `scripts/regression.sh`. Script commands `example <id>`, `coupon pom`, `welcome`, `start`.
 
-### K10. Consumables: bit IDs, wear forecast and wear-aware planning
+### K10. Consumables: bit IDs, wear forecast and wear-aware planning (work in progress: not ready to take)
 Every physical bit gets an ID and its own wear; the job shows each bit's wear before and after,
 recommends which bit to load, explains what wear does to the part, cuts gentler with a worn bit,
 can plan the whole job to save tools, and corrects its life estimates from what the user reports.
@@ -197,7 +202,7 @@ can plan the whole job to save tools, and corrects its life estimates from what 
   `wearbit T-001 0.8`, `showbit T-001`, `bitlabels path.pdf`.
 - **Tests:** `scripts/selftest.sh Consumables`.
 
-### K11. Tool Check: test cuts on a test block (planned, not built)
+### K11. Tool Check: test cuts on a test block (planned, not built: not ready to take)
 A plan, not code yet. It builds on K10 (bit IDs, `ToolUnit.load`, `ToolLifeLearning`), the
 journal's measurements and photos, the clamp kit, and the guided job / built-in runner.
 
@@ -266,7 +271,7 @@ estimate can be corrected per bit and the life model learns from measurements, n
 - Tests to add: cell grid and refacing, pattern safety, baseline comparison, the wear estimate and
   its confidence, learning weights.
 
-### K12. Sharp snapshots, exact readouts and export (phases 1–4 built; STEP, compare and multi-setup planned)
+### K12. Sharp snapshots, exact readouts and export (work in progress: not ready to take)
 The playback simulation (`Sim/Heightmap.swift`, about 250 000 cells: ~0.09 mm on a 50 × 40 mm
 block, ~0.2 mm on a 150 × 80 mm bar) is enough to watch material go but far coarser than an 8 µm
 cusp or the deviation map's ±20 µm band. K12 re-simulates at µm level on demand and answers
